@@ -18,5 +18,7 @@ blob-report/
 .DS_Store
 npm-debug.log*
 pnpm-debug.log*
-# generated voice profiles and personal preference overrides never ship
+# generated voice profiles and personal preference overrides never ship;
+# the vendored generator skill itself (voice-profile) is tracked
 .agents/skills/voice-*/
+!.agents/skills/voice-profile/
