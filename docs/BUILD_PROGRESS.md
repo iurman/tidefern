@@ -86,3 +86,50 @@ Started from the empty repository (commit `32e1123`, README only).
 ### Next action
 
 Stage 0 of `docs/BUILD_PROMPT.md`: intake by the Phase 1 lead, task A1.
+
+## 2026-10-04, same session (adversarial review outcomes)
+
+Six independent critics reviewed the architecture record, build prompt,
+plan and runbook. Accepted findings and what changed:
+
+- Security: Neon console roles join `neon_superuser` and bypass RLS, so
+  the app role is now created by the first migration and the app connects
+  as that role (section 7.2); crypto-shredding was overstated while a
+  weekly dump existed, so Phase 1 has no logical dump and keys live in
+  `subject_keys` (sections 9.2, 19); the CSP now issues a per-request
+  nonce with `strict-dynamic` through `apps/web/src/proxy.ts` and the
+  browser suite asserts it; idempotency never stores response bodies;
+  children have their own keys and grants carry `child_id` (code and
+  tests updated); the inline outbox drain goes through a `defer` callback
+  so the API never imports Next.js (code updated); fresh authentication,
+  recovery, invitation semantics, cross-site checks, HMAC logging, the
+  cron endpoint moved under `/api/internal` and failing closed, retention
+  rules and processor notification on deletion were added.
+- Buildability: the claim protocol now serializes on `origin/main`, open
+  pull requests and remote branches; Stage 3's order matches the plan's
+  `Needs`; the missing root scripts are named in the rows that create
+  them; `pnpm check` runs the same gates as CI; Stage 0 names the
+  Playwright install and the criteria for A2 and A3; preview databases
+  come from Neon's Vercel integration instead of a GitHub Action; the KEK
+  variable has one name; acceptance criteria were added to every product
+  screen row; J7 (restore rehearsal) was added.
+- Mobile portability: the `/api` prefix is permanent (the `basePath`
+  option was removed; the split-out path keeps the paths); controlled
+  vocabularies are closed enums in `packages/schemas`; problem types are
+  URNs with a closed code list including `conflict` and
+  `upgrade_required`; Better Auth derives its base URL on previews and
+  trusts the preview origin pattern; sync readiness now means optional
+  client ids, `version`, content-free tombstones and `updatedSince`; the
+  API client takes an injectable fetch so server components call the
+  mounted app in process; `GET /api/v1/me`, well-known app-link files and
+  the mobile plugins are reserved.
+- Design research: the `/design` reference adopts truth-from-the-running
+  document, role triples, the empty-state formula, a two-easing motion
+  contract, Nord's calendar semantics and a no-vendoring rule for gallery
+  code.
+
+Checks after the changes: `pnpm check` green (25 unit tests), 9 browser
+tests green including the nonce assertion and the audio activation test.
+Remaining critics (operations and cost, design system and brand, product
+and legal) and the research verification pass are recorded below as they
+land.
