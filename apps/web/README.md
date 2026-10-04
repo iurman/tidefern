@@ -9,17 +9,17 @@ monorepo deployed to Vercel.
 
 ## Layout
 
-| Path | What it is |
-| --- | --- |
-| `apps/web` | Next.js app: marketing pages, the authenticated product, the `/design` reference, and the `/api/v1` mount |
-| `packages/api` | The Hono REST API (Zod to OpenAPI 3.1). Framework neutral; mounted by the web app today, deployable on its own later |
-| `packages/core` | Pure domain logic: calendar dates, cycle and pregnancy math, the `can()` access policy |
-| `packages/schemas` | Zod request, response and domain schemas shared by every client |
-| `packages/design-tokens` | Tokens (`tokens.json`), the CSS generator and the brand vectors |
-| `packages/config` | Shared TypeScript and ESLint configuration |
-| `openapi/v1.json` | The committed API contract; CI fails if it drifts from the code |
-| `docs/` | Architecture decisions, the build prompt and plan, progress log, runbook |
-| `.agents/skills/` | Project skills (site-build, humanize-writing, humanize-code, voice-profile) |
+| Path                     | What it is                                                                                                           |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------------- |
+| `apps/web`               | Next.js app: marketing pages, the authenticated product, the `/design` reference, and the `/api/v1` mount            |
+| `packages/api`           | The Hono REST API (Zod to OpenAPI 3.1). Framework neutral; mounted by the web app today, deployable on its own later |
+| `packages/core`          | Pure domain logic: calendar dates, cycle and pregnancy math, the `can()` access policy                               |
+| `packages/schemas`       | Zod request, response and domain schemas shared by every client                                                      |
+| `packages/design-tokens` | Tokens (`tokens.json`), the CSS generator and the brand vectors                                                      |
+| `packages/config`        | Shared TypeScript and ESLint configuration                                                                           |
+| `openapi/v1.json`        | The committed API contract; CI fails if it drifts from the code                                                      |
+| `docs/`                  | Architecture decisions, the build prompt and plan, progress log, runbook                                             |
+| `.agents/skills/`        | Project skills (site-build, humanize-writing, humanize-code, voice-profile)                                          |
 
 ## Run it
 
