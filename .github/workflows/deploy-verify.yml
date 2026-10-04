@@ -1,0 +1,74 @@
+name: Verify deployment
+
+# Vercel's Git integration creates a GitHub deployment for every push and
+# reports its status. When a deployment succeeds, this workflow smoke tests the
+# live URL so a broken deploy is visible on the pull request, not just in the
+# Vercel dashboard. Set VERCEL_AUTOMATION_BYPASS_SECRET in repository secrets
+# if preview deployments use Vercel deployment protection.
+on:
+  deployment_status:
+
+permissions:
+  contents: read
+  deployments: read
+
+env:
+  NEXT_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+
+jobs:
+  smoke:
+    name: Smoke test ${{ github.event.deployment.environment }}
+    if: github.event.deployment_status.state == 'success'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DEPLOY_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: Check out the deployed commit
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.deployment.sha }}
+
+      - name: The home page and the API answer
+        run: |
+          set -euo pipefail
+          echo "Testing ${DEPLOY_URL}"
+          auth=()
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            auth=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+          fi
+          curl --fail-with-body --silent --show-error --location --max-time 30 --retry 3 --retry-all-errors \
+            "${auth[@]}" "${DEPLOY_URL}/" | grep --fixed-strings --quiet "Tidefern"
+          curl --fail-with-body --silent --show-error --location --max-time 30 --retry 3 --retry-all-errors \
+            "${auth[@]}" "${DEPLOY_URL}/api/v1/health" | grep --fixed-strings --quiet '"status":"ok"'
+
+      - name: Set up pnpm from packageManager
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node from .nvmrc
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install from the lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: Install Playwright Chromium
+        run: pnpm --filter web exec playwright install --with-deps chromium
+
+      - name: Browser smoke tests against the deployment
+        env:
+          PLAYWRIGHT_BASE_URL: ${{ env.DEPLOY_URL }}
+          EXPECT_INDEXABLE: ${{ github.event.deployment.environment == 'Production' && 'true' || 'false' }}
+        run: pnpm test:e2e --grep "@smoke"
+
+      - name: Keep the Playwright report when something fails
+        if: failure()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: deployment-smoke-report
+          path: apps/web/playwright-report
+          retention-days: 7

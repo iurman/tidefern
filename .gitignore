@@ -1,0 +1,22 @@
+node_modules/
+.pnpm-store/
+.turbo/
+.next/
+out/
+build/
+dist/
+coverage/
+.vercel/
+.env
+.env.*
+!.env.example
+*.tsbuildinfo
+next-env.d.ts
+playwright-report/
+test-results/
+blob-report/
+.DS_Store
+npm-debug.log*
+pnpm-debug.log*
+# generated voice profiles and personal preference overrides never ship
+.agents/skills/voice-*/

@@ -1,0 +1,21 @@
+# Local Postgres 18 for pnpm dev when a personal Neon branch is not wanted.
+# Matches the major version Neon uses for new projects. The owner role here
+# has CREATEROLE so the first migration can create tidefern_app.
+services:
+  postgres:
+    image: postgres:18.6
+    environment:
+      POSTGRES_USER: tidefern_owner
+      POSTGRES_PASSWORD: tidefern
+      POSTGRES_DB: tidefern
+    ports:
+      - "5432:5432"
+    volumes:
+      - tidefern-postgres:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tidefern_owner -d tidefern"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+volumes:
+  tidefern-postgres:

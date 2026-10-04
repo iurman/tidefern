@@ -1,0 +1,56 @@
+{
+  "$schema": "https://turborepo.dev/schema.json",
+  "globalEnv": [
+    "NODE_ENV",
+    "VERCEL_ENV",
+    "VERCEL_URL",
+    "VERCEL_PROJECT_PRODUCTION_URL",
+    "VERCEL_BRANCH_URL",
+    "SITE_URL",
+    "SITE_INDEXABLE",
+    "CI"
+  ],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "outputs": [".next/**", "!.next/cache/**"],
+      "inputs": ["$TURBO_DEFAULT$", ".env*"],
+      "env": ["NEXT_TELEMETRY_DISABLED"]
+    },
+    "lint": {},
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
+    "test": {
+      "outputs": ["coverage/**"]
+    },
+    "test:e2e": {
+      "dependsOn": ["build"],
+      "cache": false
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    }
+  },
+  "globalPassThroughEnv": [
+    "DATABASE_URL",
+    "DATABASE_URL_UNPOOLED",
+    "BETTER_AUTH_SECRET",
+    "BETTER_AUTH_URL",
+    "BETTER_AUTH_TELEMETRY",
+    "TIDEFERN_KEK_V1",
+    "LOG_HMAC_SECRET",
+    "RESEND_API_KEY",
+    "EMAIL_FROM",
+    "CRON_SECRET",
+    "E2E_MAIL_CAPTURE",
+    "TIDEFERN_FAKE_NOW",
+    "MIGRATE_DESTRUCTIVE",
+    "R2_*",
+    "PLAYWRIGHT_BASE_URL",
+    "PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH",
+    "PLAYWRIGHT_BROWSERS_PATH",
+    "VERCEL_AUTOMATION_BYPASS_SECRET"
+  ]
+}

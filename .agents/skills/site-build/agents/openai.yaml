@@ -1,0 +1,4 @@
+interface:
+  display_name: "Website Build & Refinement"
+  short_description: "Build, redesign, refine, or audit a website"
+  default_prompt: "Use $site-build to complete the requested website work, choosing the relevant build, redesign, refine, motion, design-system or audit workflow."

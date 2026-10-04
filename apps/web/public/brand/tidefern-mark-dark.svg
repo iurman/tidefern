@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
+  <title id="title">Tidefern mark for dark surfaces</title>
+  <g fill="none" stroke="#B7C9B1" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M262 352 C258 272 284 216 310 176 C332 144 326 112 302 106 C280 102 266 122 280 136 C294 148 312 138 306 122"/>
+  </g>
+  <g fill="#8FC1B9">
+    <path transform="translate(284 300) rotate(-34)" d="M0 0 C22 -20 54 -20 76 0 C54 16 22 16 0 0 Z"/>
+    <path transform="translate(298 256) rotate(-40)" d="M0 0 C20 -18 48 -18 66 0 C48 14 20 14 0 0 Z"/>
+    <path transform="translate(312 216) rotate(-46)" d="M0 0 C18 -16 42 -16 58 0 C42 12 18 12 0 0 Z"/>
+    <path transform="translate(322 184) rotate(-54)" d="M0 0 C14 -12 32 -12 44 0 C32 10 14 10 0 0 Z"/>
+  </g>
+  <g fill="#B7C9B1">
+    <path transform="translate(268 318) rotate(214)" d="M0 0 C20 -18 48 -18 66 0 C48 14 20 14 0 0 Z"/>
+    <path transform="translate(280 272) rotate(220)" d="M0 0 C18 -16 42 -16 58 0 C42 12 18 12 0 0 Z"/>
+    <path transform="translate(296 230) rotate(226)" d="M0 0 C14 -12 32 -12 44 0 C32 10 14 10 0 0 Z"/>
+  </g>
+  <path fill="#6EA7A0" d="M32 356 C112 296 200 296 258 336 C318 378 410 378 480 326 L480 428 C446 466 358 484 256 484 C154 484 70 466 32 428 Z"/>
+  <path fill="none" stroke="#F7F5EF" stroke-opacity="0.85" stroke-width="12" stroke-linecap="round" d="M56 382 C128 332 206 332 262 364 C318 396 396 394 456 354"/>
+</svg>
