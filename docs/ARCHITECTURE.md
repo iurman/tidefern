@@ -885,8 +885,7 @@ separately from an application defect.
 | `neon-preview.yml` (Phase 1)       | pull request opened, synchronized, closed                         | Create a Neon branch from `staging` with a 7-day expiry, run migrations and seed against it, pass its URLs to the preview build; delete on close                                                      |
 | Renovate (`.github/renovate.json`) | weekly                                                            | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged                                                                                                 |
 
-Required status checks on `main`: `CI / Lint, types, tests, build, browser`
-and `CodeQL`. Secret scanning with push protection on. Secrets the
+Required status checks on `main`: `verify` (the CI job) and `CodeQL`. Secret scanning with push protection on. Secrets the
 workflows read: `VERCEL_AUTOMATION_BYPASS_SECRET`; Phase 1 adds
 `NEON_API_KEY` (secret) and `NEON_PROJECT_ID` (variable) installed by the
 Neon GitHub integration.

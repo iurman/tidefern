@@ -41,8 +41,15 @@ which only the owner performs.
 
 ### GitHub
 
-1. Branch protection or a ruleset on `main`: require the `CI` and `CodeQL`
-   checks, require a pull request, no force pushes.
+0. Decide repository visibility. `iurman/tidefern` is public today. That
+   makes rulesets, CodeQL default setup and push protection free, but the
+   planning documents and, later, the product source are visible to
+   anyone. A private repository under a personal account needs GitHub Pro
+   for rulesets and loses CodeQL default setup and push protection
+   (gitleaks-action is the free fallback). Choose deliberately before
+   Phase 1 code lands.
+1. Branch protection or a ruleset on `main`: require the `verify` and
+   `CodeQL` checks, require a pull request, no force pushes.
 2. Secret scanning with push protection on; Dependabot alerts on.
 3. Enable Renovate (the GitHub App) so `.github/renovate.json` takes effect.
 

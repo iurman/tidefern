@@ -1,11 +1,15 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": ["config:recommended", ":pinAllExceptPeerDependencies"],
+  "extends": [
+    "config:recommended",
+    ":pinAllExceptPeerDependencies",
+    "helpers:pinGitHubActionDigests",
+    ":maintainLockFilesWeekly"
+  ],
   "schedule": ["before 6am on monday"],
   "timezone": "America/Los_Angeles",
   "labels": ["dependencies"],
   "rangeStrategy": "pin",
-  "lockFileMaintenance": { "enabled": true, "schedule": ["before 6am on monday"] },
   "packageRules": [
     {
       "groupName": "weekly minor and patch updates",
