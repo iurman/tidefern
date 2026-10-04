@@ -7,12 +7,19 @@ const INTERACTIVE =
 
 /**
  * Attaches sound and haptic feedback to every interactive element through
- * event delegation, so no component has to remember to opt in. Hover ticks
- * only fire for mouse pointers; press cues fire for pointer and keyboard.
+ * event delegation, so no component has to opt in. Hover ticks fire for mouse
+ * pointers only; press cues fire for pointer and keyboard activation.
+ *
+ * Browsers grant audio only inside an activation-granting input: mouse
+ * pointerdown, touch pointerup or touchend, keydown other than Escape, and
+ * click. The unlock listens to all of them, so phones work too.
  */
 export function SoundProvider() {
   useEffect(() => {
-    const unlock = () => unlockAudio();
+    const unlock = (event: Event) => {
+      if (event instanceof KeyboardEvent && event.key === "Escape") return;
+      unlockAudio();
+    };
     const onPointerOver = (event: PointerEvent) => {
       if (event.pointerType !== "mouse") return;
       const target = (event.target as Element | null)?.closest(INTERACTIVE);
@@ -22,9 +29,15 @@ export function SoundProvider() {
     const onPointerDown = (event: PointerEvent) => {
       const target = (event.target as Element | null)?.closest(INTERACTIVE);
       if (!target) return;
-      unlockAudio();
+      if (event.pointerType === "mouse") unlockAudio();
       play("press");
-      if (event.pointerType === "touch") haptic(8);
+      if (event.pointerType === "touch") haptic("tap");
+    };
+    const onPointerUp = (event: PointerEvent) => {
+      // Touch activation is granted on pointerup, so the first tap unlocks here and later taps play on pointerdown.
+      if (event.pointerType === "mouse") return;
+      const target = (event.target as Element | null)?.closest(INTERACTIVE);
+      if (target && unlockAudio()?.state !== "running") play("press");
     };
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key !== "Enter" && event.key !== " ") return;
@@ -33,16 +46,18 @@ export function SoundProvider() {
       unlockAudio();
       play("press");
     };
-    document.addEventListener("pointerdown", unlock, { capture: true, once: true });
-    document.addEventListener("keydown", unlock, { capture: true, once: true });
+    const unlockEvents = ["pointerdown", "pointerup", "touchend", "keydown", "click"] as const;
+    for (const name of unlockEvents)
+      document.addEventListener(name, unlock, { capture: true, passive: true });
     document.addEventListener("pointerover", onPointerOver, true);
     document.addEventListener("pointerdown", onPointerDown, true);
+    document.addEventListener("pointerup", onPointerUp, true);
     document.addEventListener("keydown", onKeyDown, true);
     return () => {
-      document.removeEventListener("pointerdown", unlock, true);
-      document.removeEventListener("keydown", unlock, true);
+      for (const name of unlockEvents) document.removeEventListener(name, unlock, true);
       document.removeEventListener("pointerover", onPointerOver, true);
       document.removeEventListener("pointerdown", onPointerDown, true);
+      document.removeEventListener("pointerup", onPointerUp, true);
       document.removeEventListener("keydown", onKeyDown, true);
     };
   }, []);

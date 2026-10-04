@@ -821,38 +821,62 @@ on every route in both themes in CI; manual keyboard passes are recorded in
 ### 14.1 Decisions
 
 - All cues are synthesized with the Web Audio API in
-  `apps/web/src/lib/sound.ts`: no files to license, download or cache.
-- One shared `AudioContext` with `latencyHint: "interactive"` is created and
-  resumed on the first `pointerdown` or `keydown`, which is what browser
-  autoplay policies require. Before that gesture nothing plays, so the first
-  hover is silent by design.
-- A master gain bus at 0.3 with per-cue peaks of 0.05 (hover) and 0.11
-  (press); every envelope uses exponential ramps so nothing clicks.
-- Cues: hover tick (sine, 1760 Hz, 28 ms, mouse pointers only, at most one
-  per 90 ms), press drop (triangle, 523 Hz falling a fourth, 90 ms), toggle
-  (the drop reversed), success (two rising sine notes), error (a low falling
-  triangle). Pitches and levels are tokens in `tokens.json`.
+  `apps/web/src/lib/sound.ts`: no files to license, download or cache, no
+  library. Research on 2026-10-04 confirmed this beats sample decoding for
+  the purpose (verified peaks between -20 and -33 dBFS, zero network
+  requests).
+- One shared `AudioContext` with `latencyHint: "interactive"` is created or
+  resumed inside the first activation-granting input. Per the HTML standard
+  those are mouse `pointerdown`, touch `pointerup` or `touchend`, `keydown`
+  other than Escape, and `click`; a `pointerdown`-only unlock never fires on
+  phones, which is why `SoundProvider` listens to all of them. Safari's
+  `interrupted` state after backgrounding is resumed the same way. Before
+  the context is running nothing plays, so the first hover is silent by
+  design.
+- Envelopes rise from a positive floor with an exponential ramp and decay
+  with `setTargetAtTime`, because the spec forbids exponential ramps to
+  zero. A master gain bus at 0.3 with per-cue peaks of 0.05 (hover) and
+  0.11 (press). Pitch jitters plus or minus three percent per play so
+  repeated cues do not sound mechanical.
+- Cues: hover tick (sine, 1760 Hz, mouse pointers only, at most one per
+  90 ms), press drop (triangle, 523 Hz falling a fourth), toggle (the drop
+  reversed), success (two rising sine notes), error (a low falling
+  triangle). Pitches and levels are tokens in `tokens.json`. Nothing plays
+  on page load, route change, toast arrival or a timer; every cue is a
+  direct response to the person's action and lasts well under a second.
 - `SoundProvider` attaches once at the root and uses event delegation over
   `a, button, summary, input, select, textarea, [role=button|tab|switch]`,
-  so every control responds without opting in. Keyboard activation (Enter
-  and Space) plays the press cue.
-- Haptics: `navigator.vibrate(8)` on touch `pointerdown` where the platform
-  supports it (Android Chrome); iOS Safari has no web vibration API and
-  stays silent.
-- Default on, with a labelled mute in the header and in Settings. The
-  choice is stored locally (`tidefern-sound-v1`) and applied before paint.
+  so every control responds without opting in. Enter and Space play the
+  press cue.
+- Haptics: `navigator.vibrate` with short patterns (tap 8 ms, select 4 ms,
+  success and error patterns) on touch where the platform supports it,
+  which today means Chromium browsers on Android. Safari has no web
+  vibration API; the only iOS web haptic is Safari 17.4's switch control
+  inside a trusted tap, which is an optional post-launch experiment, not a
+  dependency.
+- On iOS, Web Audio plays on the ambient session and the Ring/Silent switch
+  mutes it. That is the behavior Apple's guidelines expect for sound
+  effects; do not set `navigator.audioSession.type` to `playback`.
+- Default on, including hover, because the owner asked for hover feedback
+  explicitly; prior art (Microsoft, Material) ships control sounds off and
+  hover sounds rarely, so Settings offers three levels (all, actions only,
+  off) and the header mute flips between the chosen level and off. The
+  choice is stored on the device (`tidefern-sound-v1`), applied before
+  paint, and disclosed as functional storage ("remembered on this device").
   WCAG 1.4.2 applies to audio longer than three seconds; these cues are far
   shorter, but the mute exists because control matters more than
-  compliance.
+  compliance, and no media query expresses a sound preference.
 - Sound never carries meaning alone. Every success or error cue accompanies
   visible text.
 
 ### 14.2 What the build adds
 
 The `/design/sound` chapter with playable cues, a level meter and the
-mute; a cue for navigation settle; respect for a "quiet hours" setting in
-the product; unit tests for the envelope math and browser tests that the
-mute persists and that no audio node is created before a gesture.
+mute; the three-level setting and quiet hours in Settings; a navigation
+settle cue; a listening pass on a real iPhone and a mid-range Android
+before the master gain is frozen; unit tests for the envelope math; and
+browser tests that the mute persists and that no audio node is created
+before a gesture.
 
 ## 15. Testing
 

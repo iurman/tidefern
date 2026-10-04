@@ -81,3 +81,35 @@ test("the page reflows at 320 pixels without horizontal scrolling", async ({ pag
   );
   expect(overflow).toBeLessThanOrEqual(0);
 });
+
+test("no audio context exists before a gesture and one shared context runs after a click", async ({
+  page,
+}) => {
+  await page.addInitScript(() => {
+    const Original = window.AudioContext;
+    const created: AudioContext[] = [];
+    (window as unknown as { __audioContexts: AudioContext[] }).__audioContexts = created;
+    window.AudioContext = class extends Original {
+      constructor(options?: AudioContextOptions) {
+        super(options);
+        created.push(this);
+      }
+    } as typeof AudioContext;
+  });
+  await page.goto("/");
+  await page.mouse.move(200, 200);
+  await page.mouse.move(640, 300);
+  const before = await page.evaluate(
+    () => (window as unknown as { __audioContexts: AudioContext[] }).__audioContexts.length,
+  );
+  expect(before, "hovering must not create an audio context").toBe(0);
+  await page.getByRole("link", { name: "Explore the design system" }).hover();
+  await page.getByRole("button", { name: "Switch to dark mode" }).click();
+  await page.getByRole("button", { name: "Switch to light mode" }).click();
+  const after = await page.evaluate(() => {
+    const contexts = (window as unknown as { __audioContexts: AudioContext[] }).__audioContexts;
+    return { count: contexts.length, state: contexts[0]?.state };
+  });
+  expect(after.count, "exactly one shared context after gestures").toBe(1);
+  expect(after.state).toBe("running");
+});

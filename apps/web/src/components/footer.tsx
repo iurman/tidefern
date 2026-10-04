@@ -13,7 +13,7 @@ export function Footer() {
           <a href="/api/v1/openapi.json">API contract</a>
         </nav>
         <p className="footer-note">
-          No analytics, no trackers. Your theme and sound choices are kept only in your browser.
+          No analytics, no trackers. Theme and sound choices are remembered on this device only.
         </p>
       </div>
     </footer>
