@@ -1,0 +1,86 @@
+/* Generated from packages/design-tokens/tokens.json. Run pnpm tokens:generate after editing it. */
+:root {
+  --font-serif: "Newsreader", Georgia, "Times New Roman", serif;
+  --font-sans: "Figtree", "Segoe UI", Arial, sans-serif;
+  --type-display: clamp(2.75rem, 6vw, 5rem);
+  --type-heading: clamp(1.75rem, 3.2vw, 2.75rem);
+  --type-subheading: clamp(1.25rem, 2vw, 1.5rem);
+  --type-intro: clamp(1.1rem, 1.6vw, 1.35rem);
+  --type-body: 1.0625rem;
+  --type-small: 0.875rem;
+  --type-caption: 0.8125rem;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --radius-control: 10px;
+  --radius-card: 18px;
+  --radius-sheet: 28px;
+  --radius-round: 999px;
+  --duration-feedback: 180ms;
+  --duration-disclosure: 280ms;
+  --duration-settle: 600ms;
+  --duration-tide: 9s;
+  --ease-interface: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-disclosure: ease;
+  --ease-tide: ease-in-out;
+  --sound-hover-gain: 0.05;
+  --sound-press-gain: 0.11;
+  --sound-master-gain: 0.3;
+  --sound-hover-hz: 1760;
+  --sound-press-hz: 523;
+  --sound-min-gap-ms: 90;
+  --palette-fern: #2F4F46;
+  --palette-sea-glass: #6EA7A0;
+  --palette-sage: #B7C9B1;
+  --palette-sand: #E6D6C3;
+  --palette-stone: #D9D9D4;
+  --palette-mist: #F7F5EF;
+  --palette-clay: #C98B74;
+}
+:root,
+[data-theme="light"] {
+  --page: #F7F5EF;
+  --surface: #FFFFFF;
+  --panel: #EDE9DF;
+  --text: #1F3530;
+  --muted: #56696A;
+  --accent: #3A6B64;
+  --action: #2F4F46;
+  --action-text: #F7F5EF;
+  --border: #6F8680;
+  --soft-border: #DDE3DC;
+  --focus: #3A6B64;
+  --success: #3A6B64;
+  --warning: #8E5141;
+  --danger: #A63E37;
+  --tide: #6EA7A0;
+  --leaf: #B7C9B1;
+  --warmth: #E6D6C3;
+  color-scheme: light;
+}
+[data-theme="dark"] {
+  --page: #0F1A17;
+  --surface: #15221E;
+  --panel: #1B2B26;
+  --text: #EEEBE3;
+  --muted: #9FB0A8;
+  --accent: #8FC1B9;
+  --action: #8FC1B9;
+  --action-text: #0F1A17;
+  --border: #5C756C;
+  --soft-border: #243530;
+  --focus: #A8D2CB;
+  --success: #8FC1B9;
+  --warning: #DDA58E;
+  --danger: #E08A80;
+  --tide: #4F8A82;
+  --leaf: #6F8A7A;
+  --warmth: #3A2F28;
+  color-scheme: dark;
+}

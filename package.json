@@ -1,0 +1,29 @@
+{
+  "name": "tidefern",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@10.34.6",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "dev": "turbo run dev --filter=web",
+    "build": "turbo run build",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "test:e2e": "pnpm --filter web test:e2e",
+    "tokens:generate": "pnpm --filter @tidefern/design-tokens generate",
+    "tokens:check": "pnpm --filter @tidefern/design-tokens check",
+    "openapi:generate": "pnpm --filter @tidefern/api openapi:generate",
+    "openapi:check": "pnpm --filter @tidefern/api openapi:check",
+    "prose:check": "node scripts/check-prose.mjs",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check": "pnpm prose:check && pnpm tokens:check && pnpm openapi:check && turbo run lint typecheck test build"
+  },
+  "devDependencies": {
+    "prettier": "3.9.9",
+    "turbo": "2.11.7"
+  }
+}

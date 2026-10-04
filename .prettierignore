@@ -1,0 +1,12 @@
+node_modules
+.next
+.turbo
+pnpm-lock.yaml
+.agents/skills
+.agents/vendor
+apps/web/src/app/tokens.css
+openapi/v1.json
+apps/web/public/fonts
+playwright-report
+test-results
+docs/design/qa*
