@@ -223,3 +223,33 @@ tests green.
   viewport declares `color-scheme: light dark`; warmth never hosts a form
   control; the two stored preference keys are documented for `/privacy`
   with the UK PECR Schedule A1 basis.
+
+### Verification pass, part 2 (2026-10-04)
+
+- Galleries: Nord is documentation only (proprietary packages), the day
+  picker is pinned explicitly with a range test, `text-wrap: balance` is
+  the heading default, `oklch` needs no fallback, and the Vercel guideline
+  file is never vendored verbatim because it carries em dashes.
+- Fonts: the roman Newsreader file is the optical-size build; the italic's
+  preload cost is accepted knowingly; fontsource builds drop `case`,
+  `sups` and `ordn`; the OFL sidecar is what satisfies the license; the
+  icon master keeps separable layers and no `ImageResponse` route is
+  planned because Satori cannot parse variable fonts.
+- Product domain: contraception software is a device class with at least
+  two authorized products, which the record now cites as the reason for
+  the copy rule; the infant growth tables come from CDC's hosting of the
+  WHO files; clinical and regulatory quotes are vendored with dates since
+  the sources refuse non-browser clients; bottle volumes round at display.
+- Compliance: MHMDA section numbers corrected (050 security, 060
+  processors, 070 sale, 080 geofencing, 090 CPA); consent becomes a
+  per-category lawful basis (necessary or specified-purpose consent) with
+  a child's guardian consenting on the child's behalf; a `disclosures`
+  ledger backs the access right; the appeal and data security duties are
+  named; the breach plan keeps proof of notice and relies on access
+  logging; the processor register lists the subprocessor pages to watch;
+  the build prompt's scope block carries the test guidance and names new
+  third-party recipients as a human-only decision.
+
+Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
+tests green. Remaining: the research completeness critic, then the final
+regeneration of `docs/research/RESEARCH.md`.
