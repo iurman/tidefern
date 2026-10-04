@@ -4,6 +4,14 @@ Paste the block below into a new session that has the `iurman/tidefern`
 repository checked out. It points the agent at the full assignment in
 `docs/BUILD_PROMPT.md`; nothing else needs to be attached.
 
+Before the first session, merge the foundation pull request (branch
+`claude/friendly-johnson-lrt79s` into `main`); the build prompt assumes the
+foundation is on `main` and that CI runs on pull requests, which GitHub
+only does once the workflow files are on the default branch. If the merge
+has not happened yet, add one sentence to the block: "The foundation is on
+the branch claude/friendly-johnson-lrt79s; branch from it and open pull
+requests against it until the owner merges it."
+
 ```text
 You are the lead engineer and designer for Tidefern, in the iurman/tidefern repository.
 

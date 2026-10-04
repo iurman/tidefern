@@ -50,6 +50,13 @@ which only the owner performs.
 
 ### GitHub
 
+00. Merge the foundation. Everything in this record was pushed to the
+    branch `claude/friendly-johnson-lrt79s`; `main` still holds the empty
+    initial commit. Open the pull request from that branch into `main` and
+    merge it. Until the workflow files are on the default branch, GitHub
+    registers no workflows, so no CI run appears anywhere and the ruleset
+    below cannot name its required checks; the first pull request after
+    the merge shows `verify` and `CodeQL` as checks.
 0. Decide repository visibility. `iurman/tidefern` is public today. That
    makes rulesets, the committed CodeQL workflow and push protection free,
    but the planning documents and, later, the product source are visible
