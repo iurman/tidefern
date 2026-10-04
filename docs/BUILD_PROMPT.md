@@ -236,12 +236,14 @@ evidence path | principle | Tidefern adaptation | limits` in
    uncertainty, pregnancy weeks, child timelines, growth charts and partner
    sharing. Record what Tidefern does differently (one app across chapters,
    explicit grants, default deny, no trackers) and what it adopts.
-3. Render Newsreader and Figtree beside Fraunces, Source Serif 4, Albert
-   Sans and Instrument Sans in real specimens (headings, body, navigation,
-   numerals, the wordmark) next to the mark, in both themes. The decision
-   in the architecture record stands unless a specimen shows a legibility
-   problem; record the comparison and any exception in
-   `docs/design/TYPOGRAPHY.md`. Self-host whatever you use with its license.
+3. Typography is decided (architecture 13.5: Newsreader with its optical
+   size axis and Figtree, with the measured reasons the alternates lost).
+   Render the pairing in real specimens (headings, body, navigation,
+   tabular numerals, the outlined wordmark) next to the mark in both
+   themes for `/design/type`, and write `docs/design/TYPOGRAPHY.md` as the
+   decision record that cites the research rather than re-running the
+   comparison. Raise an exception only for a legibility problem you can
+   show in a specimen.
 4. Source growth data: WHO Child Growth Standards for 0 to 24 months and CDC
    growth charts for 2 years and up, as LMS tables with attribution, and
    the CDC "Learn the Signs. Act Early." milestone list (2022). Record

@@ -187,12 +187,23 @@ an hour once production exists, modeled on the owner's Aviune repository.
 
 ## Owner inputs still missing
 
-- Approval of the reconstructed mark, or original vector files.
+- Merge the foundation pull request (`claude/friendly-johnson-lrt79s` into
+  `main`), which is what registers the workflows and lets the build agent
+  open pull requests against `main`.
+- Approval of the reconstructed mark and of the dark-surface variant the
+  sheet does not show, or original vector files.
 - The production domain.
-- Legal facts for the privacy policy, terms and accessibility statement
-  (entity name, contact address, inbox), and attorney review before Phase 2.
-- Vercel Pro upgrade and a cloud KMS before anyone outside the household
-  signs up.
-- Vercel access for this tooling: the connected Vercel token was not
-  authorized for the team scope, so the project must be imported by the
-  owner (steps above) or the connector re-authorized with team scope.
+- Repository visibility (public today; see the GitHub section).
+- Legal facts for both privacy pages, the terms and the accessibility
+  statement (entity name, contact address, the rights and appeal inbox),
+  and attorney review before Phase 2, including the claims register and the
+  incident plan.
+- Vercel: the plan the team is on (Hobby or Pro), the project import
+  (the connected Vercel token had no team scope and listed no teams, so the
+  import must be done by the owner or the connector re-authorized), and the
+  Pro upgrade plus a cloud KMS before anyone outside the household signs up.
+- Resend: confirm whether any AI feature on the account reads email content
+  and disable it before the first email is sent.
+- WHO: a permissions request for the Child Growth Standards tables before
+  any paid tier.
+- New York S9269: watch for delivery to the governor through December 2026.
