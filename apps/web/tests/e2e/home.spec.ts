@@ -98,6 +98,13 @@ test("no audio context exists before a gesture and one shared context runs after
   page,
 }) => {
   await page.addInitScript(() => {
+    // Automation grants sticky activation to a fresh page, which a real first
+    // visit never has, so the mount-time fast path is held back to test the
+    // gesture path the way a person meets it.
+    Object.defineProperty(navigator, "userActivation", {
+      configurable: true,
+      value: { hasBeenActive: false, isActive: false },
+    });
     const Original = window.AudioContext;
     const created: AudioContext[] = [];
     (window as unknown as { __audioContexts: AudioContext[] }).__audioContexts = created;
