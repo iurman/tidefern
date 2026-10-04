@@ -890,12 +890,39 @@ specimens show a legibility problem.
 
 Max width 1200 px; gutters 64 px desktop, 32 px tablet, 24 px phone. Spacing
 scale 4 to 96 px. Radii: 10 px controls, 18 px cards, 28 px sheets, round
-pills. Motion: 180 ms feedback, 280 ms disclosure, 600 ms settle, a 9 s
-decorative tide on the marketing page only, all with named easings;
-`prefers-reduced-motion` yields a complete static result. No scroll
-hijacking, custom cursors, animate-on-scroll reveals, glass panels, blurred
-orbs, gradient text or decorative status dots. Personality comes from the
-serif, the composition, the mark, the quiet tide and the sound.
+pills. No scroll hijacking, custom cursors, animate-on-scroll reveals,
+glass panels, blurred orbs, gradient text or decorative status dots.
+Personality comes from the serif, the composition, the mark, the quiet tide
+and the sound.
+
+Motion contract (task G5 exports it from one `motion-tokens` module that
+both the app and `/design/motion` import):
+
+- Two easings only: an interface curve for small controlled movement and a
+  settle curve for a view arriving after navigation, both already named
+  in `tokens.json`; `transition: all` is forbidden by lint.
+- Durations: 180 ms feedback, 280 ms disclosure, 600 ms settle, a 9 s
+  decorative tide on the marketing page only.
+- One orchestrated entrance per page with named beats, limited to content
+  above the fold; transform and opacity only.
+- `prefers-reduced-motion` degrades to instant, never to hidden: every
+  element reaches its final state immediately and nothing depends on an
+  animation finishing.
+- Demos in `/design/motion` have a replay control that re-reads the
+  constants and show the visitor's reduced-motion state live.
+- CSS features with uneven support (relative color syntax, `corner-shape`
+  squircles, scroll-driven animations) are either gated behind `@supports`
+  with static fallbacks declared first or not used; the build records the
+  Baseline status it relied on.
+
+Calendar and date entry: the month grid and range selection build on
+`react-day-picker` (through the shadcn/ui Calendar) with Nord's range
+semantics (first tap starts, second tap ends, swapped if earlier, hover or
+drag preview) and the WAI-ARIA date picker dialog keyboard model; date of
+birth and due date use a segmented text input, not a picker. Code from
+21st.dev is never vendored (its terms vest marketplace content in the
+operator and require link-backs); it and component.gallery are survey
+indexes only.
 
 ### 13.7 Components
 
@@ -932,6 +959,34 @@ single H1, stable anchors, previous and next links, and a chapter rail:
 A machine-readable catalog (`/design/reference.md` and the JSON export)
 maps patterns to source paths. Sandboxed experiments never change
 production tokens. Design routes are noindex and outside the sitemap.
+
+What the reference borrows from the strongest model found in research
+(Phloom's `/design`, inspected first-hand in both themes and at 390 px on
+2026-10-04), with Tidefern's own identity throughout:
+
+- Truth from the running document: the color chapter enumerates the token
+  manifest, paints each chip with `var(--token)`, reads the browser's
+  resolved value from `getComputedStyle`, prints the measured contrast and
+  links to the source file, so the page cannot disagree with the
+  stylesheet. Tidefern adds what Phloom lacks: copy-as-CSS and the JSON
+  download.
+- Roles as triples: every status and brand role ships as a fill, a
+  foreground measured on that fill, and an "ink" member for text on the
+  page and on tints. Reaching for a fill without its foreground is how
+  amber text lands on amber. The token file grows these members in task
+  G5.
+- Components chapter groups: actions, status and identity, forms,
+  overlays, structure, page patterns, plus Tidefern's own patterns (day
+  cell, cycle ring, week card, milestone row, quick-log sheet), all
+  rendered from the real primitives.
+- Empty-state formula: say what would be here, why it is not, and the one
+  action that changes that. Never just "No results".
+- Capitalisation: page titles in Title Case, everything else in sentence
+  case. This is a deliberate exception to the Vercel Web Interface
+  Guidelines rule file, which prefers Title Case for buttons; record it
+  where that skill is used.
+- Never copied: Phloom's rosette mark, its pink and plum palette, its type
+  pairing and its text.
 
 ### 13.9 Accessibility targets
 
