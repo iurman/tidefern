@@ -5,6 +5,8 @@ import { healthRoute } from "./routes/health";
 
 export const API_VERSION = "0.1.0";
 
+export type Defer = (task: () => Promise<void>) => void;
+
 export interface ApiOptions {
   /**
    * Mount prefix for the whole app. The web app mounts it at /api, so the
@@ -12,6 +14,13 @@ export interface ApiOptions {
    * standalone deployment can mount at "/" and answer at /v1.
    */
   basePath?: string;
+  /**
+   * Runs work after the response is sent, for example draining outbox jobs
+   * the request enqueued. The Next.js host passes `after` from next/server;
+   * a standalone host passes a function that simply starts the task; tests
+   * pass a collector. The API never imports a framework to get this.
+   */
+  defer?: Defer;
 }
 
 /**
@@ -21,7 +30,8 @@ export interface ApiOptions {
  */
 export function createApp(options: ApiOptions = {}) {
   const basePath = options.basePath ?? "/api";
-  const app = new OpenAPIHono({
+  const defer: Defer = options.defer ?? ((task) => void task());
+  const app = new OpenAPIHono<{ Variables: { defer: Defer } }>({
     defaultHook: (result, c) => {
       if (!result.success) {
         return problem(c, 422, "validation_failed", {
@@ -35,6 +45,10 @@ export function createApp(options: ApiOptions = {}) {
     },
   }).basePath(basePath);
 
+  app.use("*", async (c, next) => {
+    c.set("defer", defer);
+    await next();
+  });
   app.use("*", secureHeaders());
   app.use("*", async (c, next) => {
     await next();

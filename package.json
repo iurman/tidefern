@@ -20,7 +20,7 @@
     "prose:check": "node scripts/check-prose.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm prose:check && pnpm tokens:check && pnpm openapi:check && turbo run lint typecheck test build"
+    "check": "pnpm prose:check && pnpm tokens:check && pnpm --filter web brand:check && pnpm openapi:check && pnpm format:check && turbo run lint typecheck test build"
   },
   "devDependencies": {
     "prettier": "3.9.9",

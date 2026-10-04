@@ -4,6 +4,8 @@ import { can, type Actor } from "./policy";
 const her = "11111111-1111-7111-8111-111111111111";
 const partner = "22222222-2222-7222-8222-222222222222";
 const child = "33333333-3333-7333-8333-333333333333";
+const otherChild = "44444444-4444-7444-8444-444444444444";
+const friend = "55555555-5555-7555-8555-555555555555";
 
 const partnerActor: Actor = {
   id: partner,
@@ -81,6 +83,31 @@ describe("can()", () => {
     expect(
       can(partnerActor, "write", { subjectId: her, category: "child", childId: child }),
     ).toEqual({ allowed: true, reason: "guardian" });
+  });
+  it("scopes a child grant to exactly one child", () => {
+    const auntie: Actor = {
+      id: friend,
+      guardianOf: [],
+      grants: [
+        {
+          ownerId: her,
+          granteeId: friend,
+          category: "child",
+          level: "read",
+          childId: child,
+          revokedAt: null,
+        },
+      ],
+    };
+    expect(can(auntie, "read", { subjectId: her, category: "child", childId: child }).allowed).toBe(
+      true,
+    );
+    expect(
+      can(auntie, "read", { subjectId: her, category: "child", childId: otherChild }).allowed,
+    ).toBe(false);
+    expect(
+      can(auntie, "write", { subjectId: her, category: "child", childId: child }).allowed,
+    ).toBe(false);
   });
   it("never lets a grantee share or delete", () => {
     expect(

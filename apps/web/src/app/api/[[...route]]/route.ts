@@ -1,3 +1,4 @@
+import { after } from "next/server";
 import { createApp } from "@tidefern/api";
 
 /**
@@ -9,7 +10,7 @@ import { createApp } from "@tidefern/api";
 // Route handlers are dynamic by default. Keep API work well under the 300 s Hobby ceiling.
 export const maxDuration = 60;
 
-const app = createApp({ basePath: "/api" });
+const app = createApp({ basePath: "/api", defer: (task) => after(task) });
 const handler = (request: Request) => app.fetch(request);
 
 export {

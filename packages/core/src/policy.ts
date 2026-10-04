@@ -22,6 +22,8 @@ export interface Grant {
   granteeId: string;
   category: Category;
   level: Level;
+  /** Required when category is "child": the grant reaches exactly one child. */
+  childId?: string;
   revokedAt: string | null;
 }
 
@@ -73,7 +75,8 @@ export function can(actor: Actor, action: Action, resource: Resource): Decision 
     (candidate) =>
       candidate.revokedAt === null &&
       candidate.ownerId === resource.subjectId &&
-      candidate.category === resource.category,
+      candidate.category === resource.category &&
+      (resource.category !== "child" || candidate.childId === resource.childId),
   );
   if (!grant) return { allowed: false, reason: "denied" };
   if (LEVEL_RANK[grant.level] >= LEVEL_RANK[needed]) return { allowed: true, reason: "grant" };

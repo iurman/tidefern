@@ -51,7 +51,19 @@ test("interface sound can be turned off and the choice persists", async ({ page 
 test("security headers and no indexing on previews", async ({ request }) => {
   const response = await request.get("/");
   const headers = response.headers();
-  expect(headers["content-security-policy"]).toContain("frame-ancestors 'none'");
+  const csp = headers["content-security-policy"] ?? "";
+  expect(csp).toContain("frame-ancestors 'none'");
+  const scriptSrc =
+    csp.split(";").find((directive) => directive.trim().startsWith("script-src")) ?? "";
+  expect(scriptSrc, "scripts run only with the per-request nonce").toMatch(
+    /'nonce-[A-Za-z0-9+/=]+'/,
+  );
+  expect(scriptSrc).toContain("'strict-dynamic'");
+  expect(scriptSrc).not.toContain("unsafe-inline");
+  const second = (await request.get("/")).headers()["content-security-policy"] ?? "";
+  expect(second, "every request gets a fresh nonce").not.toBe(csp);
+  const api = (await request.get("/api/v1/health")).headers()["content-security-policy"] ?? "";
+  expect(api).toContain("default-src 'none'");
   expect(headers["x-content-type-options"]).toBe("nosniff");
   if (process.env.EXPECT_INDEXABLE !== "true") {
     expect(headers["x-robots-tag"]).toContain("noindex");

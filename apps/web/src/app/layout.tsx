@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import localFont from "next/font/local";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
@@ -47,7 +48,9 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default async function RootLayout({ children }: LayoutProps<"/">) {
+  // Set by src/proxy.ts; reading it also makes every page render per request, which the nonce requires.
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
   return (
     <html
       lang="en"
@@ -57,7 +60,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
       className={`${newsreader.variable} ${figtree.variable}`}
     >
       <head>
-        <script dangerouslySetInnerHTML={{ __html: preferenceScript }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: preferenceScript }} />
       </head>
       <body>
         <SoundProvider />
