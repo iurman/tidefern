@@ -12,9 +12,11 @@ which only the owner performs.
 2. Framework preset Next.js. Root Directory `apps/web`. Leave "Include
    source files outside of the Root Directory" on and "Skip deployment"
    (unaffected project skipping) on.
-3. Node.js 24.x is read from `engines.node`; build and install commands stay
-   default. The first build installs with pnpm 10.34.6 from
-   `packageManager`.
+3. Node.js 24.x is read from `engines.node`. Vercel installs pnpm 10 from
+   `packageManager` at the repository root. Record which plan the team is
+   on (Hobby or Pro) in the progress log; Hobby means a once-a-day cron,
+   300 second functions, one-hour log retention and non-commercial use.
+   Set a usage alert in the team's billing settings.
 4. Deployment Protection: keep Vercel Authentication on for previews.
    Create a Protection Bypass for Automation secret and store it in GitHub
    as the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`.
@@ -49,14 +51,18 @@ which only the owner performs.
 ### GitHub
 
 0. Decide repository visibility. `iurman/tidefern` is public today. That
-   makes rulesets, CodeQL default setup and push protection free, but the
-   planning documents and, later, the product source are visible to
-   anyone. A private repository under a personal account needs GitHub Pro
-   for rulesets and loses CodeQL default setup and push protection
-   (gitleaks-action is the free fallback). Choose deliberately before
-   Phase 1 code lands.
-1. Branch protection or a ruleset on `main`: require the `verify` and
-   `CodeQL` checks, require a pull request, no force pushes.
+   makes rulesets, the committed CodeQL workflow and push protection free,
+   but the planning documents and, later, the product source are visible
+   to anyone. A private repository under a personal account needs GitHub
+   Pro for rulesets, loses push protection (gitleaks-action is the free
+   fallback), and meters GitHub Actions at 2,000 minutes a month, which CI,
+   the deployment smoke test, CodeQL and a twice-hourly uptime check would
+   exceed; stay public, or budget minutes and move uptime to an external
+   monitor. Choose deliberately before Phase 1 code lands.
+1. A ruleset on `main`: require the checks named `verify` and `CodeQL`
+   (the job names in `ci.yml` and `codeql.yml`), require a pull request,
+   no force pushes. Do not enable CodeQL default setup; it conflicts with
+   the committed workflow.
 2. Secret scanning with push protection on; Dependabot alerts on.
 3. Enable Renovate (the GitHub App) so `.github/renovate.json` takes effect.
 
@@ -109,8 +115,42 @@ Design routes and the API stay noindex everywhere.
 ## Rollback
 
 Vercel: promote the previous production deployment. Database: migrations
-roll forward only; write a corrective migration. Never rewrite history on
-`main`.
+roll forward only and are written expand-then-contract, so the previous
+code keeps working against the new schema; a problem gets a corrective
+migration. Never rewrite history on `main`.
+
+## Restore (task J7, then quarterly)
+
+1. Rehearsal: in the Neon console create a branch from `production` at a
+   chosen timestamp named `restore-<date>`. A real restore uses Restore on
+   the production branch instead, which keeps a backup branch of the
+   current state; the chosen timestamp is the recovery point.
+2. Run `ALTER ROLE tidefern_app LOGIN PASSWORD '<secret>'` on the branch
+   only if it will serve an app.
+3. Point one preview at it: set `DATABASE_URL` and `DATABASE_URL_UNPOOLED`
+   for a single Git branch in Vercel, redeploy, and run `pnpm test:e2e
+   --grep @smoke` with `PLAYWRIGHT_BASE_URL` set to that deployment.
+4. Record start and end times in the progress log (targets: recovery
+   point under one hour, recovery under four hours).
+5. Delete the rehearsal branch; it holds live wrapped keys and real data.
+
+## Alerts
+
+Set a Neon consumption notification and a Vercel usage alert on day one.
+Failures reach the owner through GitHub workflow emails (CI, deployment
+smoke test, uptime), the daily sweep's dead-queue notice, and the
+owner-only operations panel fed by content-free counters in the database
+(Hobby keeps runtime logs for one hour).
+
+## Secret rotation
+
+| Secret | When | How |
+| --- | --- | --- |
+| `TIDEFERN_KEK_V<n>` | Yearly | Add `V<n+1>`, deploy, run the re-wrap job, retire `V<n>` after every history window that could hold keys under it |
+| `BETTER_AUTH_SECRET` | Yearly or on exposure | Rotate in Vercel; every session signs in again |
+| `CRON_SECRET`, `LOG_HMAC_SECRET` | Yearly or on exposure | Rotate in Vercel and redeploy |
+| Protection bypass secret | On exposure | Regenerate in Vercel, update the GitHub secret |
+| `tidefern_app` password | Yearly or on exposure | `ALTER ROLE ... PASSWORD` on every branch that serves an app, then update each `DATABASE_URL` |
 
 ## Verification after a deployment
 

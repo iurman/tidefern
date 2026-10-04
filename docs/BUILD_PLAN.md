@@ -43,6 +43,11 @@ and `packages/db/src/schema/jobs.ts`; J touches `apps/web/tests/`,
 
 Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 
+Owner tasks: A2, A3, A6, B10 (the Neon side), J7 and anything that needs
+Vercel or Neon access the build agent does not hold. An agent records
+what the owner must do, marks the task `blocked` with that note, and moves
+on; it never sits waiting on them.
+
 ## Phase 0: foundation (done 2026-10-04)
 
 | Id   | Task                                                                    | Status | Owner                            | Evidence                                                         |
@@ -146,13 +151,13 @@ Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 | H7 | `/settings`. Accepts: profile, time zone and units, theme with follow-system, sound level and quiet hours, notification detail with a lock-screen preview, devices, export, account closure with fresh authentication and the undo window | E2, E8, C4, G5 | todo |  |  |
 | H8 | `/activity`. Accepts: sign-ins, devices, grants given and revoked, partner contributions and exports from audit events, cursor paginated, no health content | E8, G5 | todo |  |  |
 | H9  | Public pages: home refresh, `/privacy` (consumer health data policy draft with owner inputs listed), `/terms`, `/accessibility`, `/account/delete`, 404 and error polish | G2             | todo   |       |          |
-| H10 | Reminder emails through the outbox with the three-level detail setting                                                                                                   | I1, C5         | todo   |       |          |
+| H10 | Reminder emails through the outbox as a daily batch at the owner's chosen hour (Hobby delivers within plus or minus 59 minutes), with the three-level detail setting; per-time reminders are a Pro follow-up | I1, C5 | todo |  |  |
 
 ### I. Jobs
 
 | Id  | Task                                                                                                                 | Needs      | Status | Owner | Evidence |
 | --- | -------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | ----- | -------- |
-| I1 | Outbox table, inline drain through the API's `defer` callback, `/api/internal/jobs/run` failing closed without `CRON_SECRET` (tested), `vercel.json` schedule, root `jobs:run` | B7 | todo |  |  |
+| I1 | Outbox table, inline drain through the API's `defer` callback, `/api/internal/jobs/run` failing closed without `CRON_SECRET` (tested), the daily sweep with retention purges and the dead-queue owner notice, `vercel.json` schedule, root `jobs:run` | B7 | todo |  |  |
 | I2 | Account closure state machine: lock and revoke at once, 7-day undo window or delete now, DEK destruction, row and object deletion, co-guardian transfer, processor notification | I1, E8, D2 | todo |  |  |
 
 ### J. Quality and release
@@ -165,4 +170,4 @@ Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 | J4  | `docs/LAUNCH_RUNBOOK.md` completed with precise remaining owner inputs                                                                 | J3       | todo   |       |          |
 | J5  | Uptime workflow for `/` and `/api/v1/health`                                                                                           | A2       | todo   |       |          |
 | J6 | Final handoff: preview link, screenshots, verified results, open items | J1 to J5, J7 | todo |  |  |
-| J7 | Restore rehearsal: restore production to a Neon branch, run the smoke suite against it, record the time taken | A3, J1 | todo |  |  |
+| J7 | Owner with agent: restore rehearsal per the runbook's Restore section (branch from production at a timestamp, point one preview at it, run the smoke suite, record the time, delete the branch) | A3, J1 | todo |  |  |

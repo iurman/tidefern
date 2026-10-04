@@ -62,10 +62,15 @@ before the Phase 2 gate; vendors change faster than this file.
   Linux, so the repository carries `AGENTS.md`, `CLAUDE.md` and portable
   skills, and every check runs from one command.
 - Plan facts that shape Phase 1 (Vercel docs, 2026-10-04): a Hobby team is
-  restricted to non-commercial use, cannot connect a repository owned by a
-  GitHub organization, runs cron at most once a day with hour precision, and
-  caps functions at 300 seconds. Tidefern moves to Pro before it becomes a
-  product or needs sub-daily cron (section 17).
+  restricted to non-commercial use, cannot deploy a private repository
+  owned by a GitHub organization (and for any private repository only the
+  team owner's commits deploy), runs cron at most once a day with a plus or
+  minus 59 minute window, caps functions at 300 seconds, keeps runtime logs
+  for one hour with no drains, and meters 1,000,000 function invocations a
+  month. The plan of the owner's existing Vercel team is not recorded yet;
+  task A2 records it, because every Hobby constraint in sections 10, 17 and
+  19 depends on it. Tidefern moves to Pro before it becomes a product or
+  needs timed reminders (section 18).
 - Writing: no em dashes anywhere, enforced by `pnpm prose:check`. Health
   details never appear in URLs, titles, logs, notifications or email.
 
@@ -79,8 +84,8 @@ Browser / future Expo app
         v  HTTPS, DNS-only Cloudflare record -> Vercel
 +---------------------------------------------------------------+
 | apps/web (Next.js 16, Vercel Fluid compute, iad1)             |
-|   /            marketing and design reference (static)        |
-|   /today ...   authenticated product (dynamic, no-store)      |
+|   /            marketing and design reference (per request)   |
+|   /today ...   authenticated product (per request, no-store)  |
 |   /api/[[...route]]  ->  packages/api (Hono)                  |
 |        /api/auth/*   Better Auth handler                      |
 |        /api/v1/*     versioned OpenAPI contract               |
@@ -226,7 +231,7 @@ Resolved from the registries on 2026-10-04. Exact pins, `save-exact=true`.
 | Vitest         | 5.0.3                                                                                                                                                                                                           | PGlite 0.5.8 (Postgres 18.3 engine) for database tests.                                                                                                                                                                                 |
 | Playwright     | 1.63.0, `@axe-core/playwright` 4.13.0                                                                                                                                                                           | Chromium build 1243; `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` overrides on machines with a preinstalled browser.                                                                                                                           |
 | sharp          | 0.35.5 (Phase 2)                                                                                                                                                                                                | Photo re-encoding.                                                                                                                                                                                                                      |
-| GitHub Actions | `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `github/codeql-action@v4`, `neondatabase/create-branch-action@v6`, `neondatabase/delete-branch-action@v3` | Resolve exact minor versions from each release page when touching a workflow.                                                                                                                                                           |
+| GitHub Actions | `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `github/codeql-action@v4` | Major tags today; Renovate's `helpers:pinGitHubActionDigests` replaces them with verified commit digests on its first run. Note that the `pnpm/action-setup@v6` moving tag pointed at 6.0.10 on 2026-10-04, which predates pnpm 12 support; irrelevant while pnpm 10 is pinned. |
 
 ### 4.3 Generated files and their gates
 
@@ -383,7 +388,8 @@ authenticated route is ever statically rendered or ISR-cached.
 
 ### 7.1 Connections
 
-- Neon project on Postgres 18 (the default for new projects), Launch plan,
+- Neon project on Postgres 18 (the default for new projects), Launch plan
+  (usage billed; the Free plan's 6-hour history window is the reason to pay),
   `history_retention_seconds` raised to 604800 (7 days, the Launch maximum)
   on production. Scale only when a 30-day restore window or more than 10
   branches is needed.
@@ -405,15 +411,22 @@ authenticated route is ever statically rendered or ISR-cached.
   against that environment's direct URL. CI applies the same migrations to
   PGlite in tests; CI never holds a production database credential. `push`
   is for local scratch only. Never `drizzle-kit up` (that is the v1 upgrade
-  path, not this version).
+  path, not this version). Migrations are expand then contract: every
+  migration must run correctly under the previous deployment's code,
+  because "promote the previous deployment" restores code, not schema; a
+  contract step (dropping or renaming) ships in a later release after the
+  code that needed the old shape is gone.
 
 ### 7.2 Row level security from the first migration
 
 Roles created in the Neon console, CLI or API are members of
-`neon_superuser`, which carries `BYPASSRLS`, so a console-created
-application role would silently bypass every policy. The role is therefore
-created by SQL, and the application never connects as a role that can
-bypass RLS:
+`neon_superuser`, which carries `CREATEDB`, `CREATEROLE`, `pg_read_all_data`,
+`pg_write_all_data` and, in projects created after August 2023, `BYPASSRLS`
+(Neon docs, checked 2026-10-04). Postgres never inherits role attributes
+through membership, so a console-created role bypasses policies only after
+`SET ROLE neon_superuser`, but it still holds far more than an app role
+should. The application role is therefore created by SQL, which gets no
+such membership, and the app never connects as a role that can bypass RLS:
 
 - The first migration is hand-written SQL: `CREATE ROLE tidefern_app
   NOLOGIN NOBYPASSRLS NOINHERIT` (guarded by a `DO` block so PGlite and
@@ -430,7 +443,16 @@ bypass RLS:
   query already runs as a role that cannot bypass RLS, whether or not it is
   inside the actor wrapper.
 - Every user-data table is created with `.enableRLS()` and also `ALTER
-  TABLE ... FORCE ROW LEVEL SECURITY`. Policies are split by command:
+  TABLE ... FORCE ROW LEVEL SECURITY`, which binds the table owner to the
+  policies as well. Because of that, every read or write outside a request
+  runs inside `withActor(subjectId, fn)` or `withSystem(fn)`: `withSystem`
+  runs `select set_config('app.system', 'on', true)` and the policy helpers
+  return true for it, but only when `current_user` is not `tidefern_app`,
+  so the app connection can never claim system context. Seeds, the sweep,
+  backfills and the closure job use `withSystem`; jobs that act for one
+  person use `withActor`. PGlite's default role is a superuser and bypasses
+  RLS, so the harness always drops to `tidefern_app` to prove policies and
+  tests `withSystem` from both roles. Policies are split by command:
   `FOR SELECT USING can_read(subject_id, category)`, `FOR INSERT WITH CHECK
   can_write(subject_id, category)`, `FOR UPDATE USING ... WITH CHECK
   can_write(...)`, `FOR DELETE USING subject_id = current_actor()`. The
@@ -489,7 +511,7 @@ ciphertext`; a sibling `kek_version` column records the wrapping key.
 | Pregnancy           | `pregnancies`, `pregnancy_events`                                                                       | Several pregnancies per subject over time; `due_date`, `dating_method` (`lmp`, `ultrasound`, `manual`); events for appointments, milestones, symptoms; an `ended_at` with a reason kept private and handled gently in the UI.                 |
 | Children            | `children`, `child_guardians`, `child_events`, `child_measurements`                                     | Child belongs to a household; guardians many-to-many; measurements typed with units (`g`, `cm`, with imperial display).                                                                                                                       |
 | Notes and media     | `notes`, `photos`, `photo_variants`                                                                     | `subject_id`, `author_id`, category; encrypted body and caption; photos hold object keys, status, dimensions, never original filenames or EXIF.                                                                                               |
-| Platform | `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `push_devices` (Phase 3) | Append-only audit (actor, action, subject, category, time, no content; partner reads deduplicated per actor, subject, category and day; kept one year); outbox jobs with ids-only payloads; idempotency rows (24 hours); export and deletion state machines; `product_events` holds daily aggregate counts only, never a user id, kept 90 days. Better Auth stores IP address and user agent per session; sessions are deleted at expiry. |
+| Platform | `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `push_devices` (Phase 3) | Append-only audit (actor, action, subject, category, time, no content; partner reads deduplicated per actor, subject, category and day; kept one year); outbox jobs with ids-only payloads; idempotency rows (24 hours); export and deletion state machines; `product_events` holds daily aggregate counts only, never a user id, kept 90 days; it also carries the operational counters (sign-in failures, job failures, 5xx per route, sweep outcomes). Better Auth stores IP address and user agent per session; sessions are deleted at expiry. |
 
 Key indexes: `(subject_id, date)` on entries; `(grantee_id, owner_id,
 category, child_id) WHERE revoked_at IS NULL` on grants; `(subject_id, created_at)`
@@ -669,10 +691,15 @@ opt-in "sealed journal" after Phase 2.
 
 ### 9.4 Caching
 
-API responses carry `private, no-store`. Authenticated pages render
-dynamically. Only marketing pages, static assets, the design reference and
-the controlled vocabularies are cacheable. No `use cache`, ISR or `fetch`
-caching on anything personal.
+API responses carry `private, no-store`. Every HTML route renders per
+request because of the nonce policy (section 9.1); only static assets, the
+token and manifest exports, `robots.txt` and the sitemap are served from
+the CDN. No `use cache`, ISR or `fetch` caching on anything personal. If
+function invocations ever matter (Hobby meters a million a month, which a
+household cannot approach), the documented alternative is to narrow the
+proxy matcher to authenticated routes and let public routes go static with
+`script-src 'self' 'unsafe-inline'`; that trade is recorded here so it is
+made deliberately, not by drift.
 
 ### 9.5 Vendors in Phase 1 and what they see
 
@@ -710,15 +737,22 @@ transaction as the change that caused it. Three drains:
 1. Inline: after a request commits, the API calls the `defer` callback it
    was constructed with (`after()` from `next/server` in the Next.js host,
    a plain task starter in a standalone host) to drain the jobs it just
-   enqueued (claim with `SELECT ... FOR UPDATE SKIP LOCKED`). On Hobby this
-   is how reminders and emails go out promptly. The API never imports a
-   framework.
+   enqueued (claim with `SELECT ... FOR UPDATE SKIP LOCKED`). This covers
+   work caused by a request (verification mail, invitation mail, an export
+   step). The API never imports a framework.
 2. Scheduled: a `GET /api/internal/jobs/run` endpoint outside the public
    `/v1` contract and excluded from the OpenAPI document, protected by a
    bearer `CRON_SECRET` compared in constant time, failing closed with 404
    when the secret is unset (previews, local); scheduled in `vercel.json`
    once a day on Hobby and every minute on Pro.
 3. Manual: `pnpm jobs:run` locally.
+
+Scheduled work that no request causes (reminders due tomorrow, retries of
+a failed step, purges) rides on the sweep: once a day on Hobby, every
+minute on Pro. The sweep also runs the retention purges: idempotency rows
+after 24 hours, tombstones after 30 days, `product_events` after 90 days,
+`audit_events` after one year, expired closure windows, and it emails the
+owner a generic notice when any job sits in `dead`.
 
 Every job is idempotent, retried with backoff and moved to `dead` after five
 attempts for inspection without content. Long workflows (export, account
@@ -737,7 +771,11 @@ and tests; CI never sends.
 
 ### 10.3 Notifications
 
-Phase 1 has email reminders only. The notification service decides the text
+Phase 1 has email reminders only, delivered as a daily batch: the sweep is
+scheduled at the owner's chosen hour and Hobby delivers it within plus or
+minus 59 minutes, so a reminder is "today's reminders" rather than "at
+08:00". Reminders at a chosen time, and retries within minutes rather than
+a day, arrive with Pro. The notification service decides the text
 once, from a three-level setting (generic, gentle, detailed) with a preview
 of how a detailed message looks on a lock screen. Partners are never
 notified about her body unless she shared that category at `summary` or
@@ -760,7 +798,8 @@ chosen text; content loads after the app opens.
 
 ### 12.1 Route map
 
-Public (static, indexable only in production with `SITE_INDEXABLE=true`):
+Public (rendered per request like every HTML route, indexable only in
+production with `SITE_INDEXABLE=true`):
 
 | Route                      | Visitor question                          | Action                                                                                                              |
 | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
@@ -1072,7 +1111,7 @@ before a gesture.
 | Contract           | `pnpm openapi:check`, `oasdiff breaking` (Phase 1)                                          | No silent breaking change                                                                                                                                                              |
 | Visual             | `apps/web/scripts/capture.mjs`                                                              | Screenshots of key routes in both themes at desktop and phone widths for human review in `docs/design/QA.md`                                                                           |
 | Performance | Lighthouse 13.x on the production build, mobile throttling | Budgets: 1.5 MB initial transfer, 200 KB compressed first-route JavaScript, LCP 2.5 s, CLS 0.1 as lab proxies; recorded with tool version and conditions |
-| Security, required | Vitest and Playwright | `withActor()` runs as a role with `rolbypassrls = false`; an insert by a `summary` grantee is rejected by RLS; a query for a foreign subject returns zero rows; `script-src` carries a nonce and no `unsafe-inline`; log lines contain no body fields; idempotency replay never reads a stored body; the job runner answers 404 without `CRON_SECRET`; a child grant for one child does not reach another; a child note survives the author's account closure when a co-guardian exists |
+| Security, required | Vitest and Playwright | `withActor()` runs as a role with `rolbypassrls = false`; `withSystem()` is refused for the app role; an insert by a `summary` grantee is rejected by RLS; a query for a foreign subject returns zero rows; `script-src` carries a nonce and no `unsafe-inline`; log lines contain no body fields; idempotency replay never reads a stored body; the job runner answers 404 without `CRON_SECRET`; a child grant for one child does not reach another; a child note survives the author's account closure when a co-guardian exists |
 
 Browser tests sign in against the production build through seeded,
 already-verified users and a mail capture endpoint that exists only when
@@ -1095,7 +1134,10 @@ separately from an application defect.
 | `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` against the base branch's `openapi/v1.json`, failing on breaking changes |
 | Renovate (`.github/renovate.json`) | weekly                                                            | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged                                                                                                 |
 
-Required status checks on `main`: `verify` (the CI job) and `CodeQL`.
+Required status checks on `main`: the checks named `verify` and `CodeQL`,
+which are the job names in `ci.yml` and `codeql.yml` (GitHub matches
+required checks by check-run name; do not enable CodeQL default setup,
+which conflicts with the committed workflow).
 Secret scanning with push protection on. The only secret the workflows
 read is `VERCEL_AUTOMATION_BYPASS_SECRET`; CI never holds a database
 credential. Preview databases are handled by Neon's Vercel integration,
@@ -1130,7 +1172,7 @@ what, why, checks run, evidence, build-plan task ids.
 | `SITE_URL`                              | optional               | Absolute origin for canonical URLs; Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and `VERCEL_URL` are used when unset |
 | `SITE_INDEXABLE`                        | production only        | Must be exactly `true` to index; previews never index                                                             |
 | `DATABASE_URL`                          | all                    | Pooled Neon string for the app                                                                                    |
-| `DATABASE_URL_UNPOOLED`                 | build and CI           | Direct string for migrations only                                                                                 |
+| `DATABASE_URL_UNPOOLED` | Vercel build only (production and preview); never GitHub | Owner role's direct string for migrations and the job runner |
 | `BETTER_AUTH_SECRET` | all | Session signing |
 | `BETTER_AUTH_URL` | production only | Auth base URL; previews derive theirs from `VERCEL_URL` |
 | `TIDEFERN_KEK_V1` | all, sensitive | Phase 1 key encryption key, base64 of 32 random bytes; different per environment; the suffix is the `kek_version` stored in `subject_keys` |
@@ -1181,19 +1223,40 @@ has a case.
   store, key custody and retention here. Restore rehearsal: restore
   production to a branch, run the smoke suite against it, record the time
   (task J7, then quarterly). RPO under 1 hour, RTO under 4 hours.
-- Monitoring in Phase 1: Vercel logs and the deployment smoke workflow; a
-  scheduled uptime check of `/` and `/api/v1/health` (GitHub Actions cron,
-  like the owner's Aviune repository). Phase 2 adds scrubbed error tracking
-  and Vercel Firewall rate limits.
+- Monitoring in Phase 1: Hobby keeps runtime logs for one hour and has no
+  drains, so the durable operational record is the database. Sign-in
+  failures, job failures, 5xx counts per route and sweep outcomes are
+  written as content-free counters to `product_events` (daily aggregates)
+  and `audit_events`, kept 90 days, and shown on an owner-only operations
+  panel. The deployment smoke workflow, a scheduled uptime check of `/`
+  and `/api/v1/health`, GitHub workflow failure emails, Vercel usage
+  alerts and a Neon consumption notification are the alerting path; the
+  daily sweep emails the owner when the dead queue is not empty. Phase 2
+  adds scrubbed error tracking, Pro log retention and Vercel Firewall
+  rate limits.
 - Incident plan, written before Phase 2: contain (revoke credentials,
-  disable the feature), preserve evidence (export Vercel logs at once; Pro
-  keeps them one day), assess whether health data was acquired or
-  disclosed including through a vendor, notify users within 60 days and the
-  FTC at 500 or more people, then review.
-- Cost: Phase 1 on Hobby and Neon Launch is roughly the price of Neon
-  Launch plus the domain. Pro adds Vercel's plan price at the Phase 2 gate.
-  The earlier memo's estimates for 10K to 1M users still hold; they scale
-  with configuration (compute size, read replicas, queues), not a redesign.
+  disable the feature), preserve evidence (the database counters and
+  audit events; on Pro also export Vercel logs within the day), assess
+  whether health data was acquired or disclosed including through a
+  vendor, notify users within 60 days and the FTC at 500 or more people,
+  then review.
+- Cost: Phase 1 on Hobby is free at Vercel; Neon Launch bills usage
+  (compute per CU-hour, storage and retained history per GB-month, ten
+  branches included and a fee per extra branch-month), which at household
+  scale stays under about ten dollars a month, plus the domain. Keep at
+  most seven preview branches open: the Neon Vercel integration deletes a
+  branch when its Git branch is deleted, so delete merged branches. Set a
+  Neon consumption notification and a Vercel usage alert on day one. Pro
+  adds Vercel's per-seat price at the Phase 2 gate. The earlier memo's
+  estimates for 10K to 1M users still hold; they scale with configuration
+  (compute size, read replicas, queues), not a redesign.
+- Secret rotation: `TIDEFERN_KEK_V<n>` yearly by adding the next version,
+  re-wrapping keys in a job and retiring the old version after every
+  history window that could hold keys under it; `BETTER_AUTH_SECRET`,
+  `CRON_SECRET`, `LOG_HMAC_SECRET` and the protection bypass secret yearly
+  or on any suspected exposure; the `tidefern_app` password on every branch
+  that serves an app, because branches copy it. The runbook holds the
+  steps.
 - Supply chain: exact pins, a lockfile CI refuses to change, Renovate,
   CodeQL, secret scanning, 2FA and hardware keys on GitHub, Vercel, Neon,
   Cloudflare and Namecheap.
