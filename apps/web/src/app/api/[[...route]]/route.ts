@@ -6,7 +6,8 @@ import { createApp } from "@tidefern/api";
  * /api/auth. The API never imports from Next.js, so the same app can move to
  * its own Vercel project, Node or Workers by changing only the entry file.
  */
-export const dynamic = "force-dynamic";
+// Route handlers are dynamic by default. Keep API work well under the 300 s Hobby ceiling.
+export const maxDuration = 60;
 
 const app = createApp({ basePath: "/api" });
 const handler = (request: Request) => app.fetch(request);

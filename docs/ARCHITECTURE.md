@@ -1,0 +1,1047 @@
+# Tidefern technical architecture
+
+Decision record, 2026-10-04. Owner: Isaac Urman. Status: accepted for the
+Phase 0 foundation in this repository and for the Phase 1 build described in
+`docs/BUILD_PROMPT.md`.
+
+This document replaces the two earlier architecture memos. It keeps what they
+agreed on, resolves where they differed, and adds the product, design, sound,
+testing, delivery and agent-process decisions they did not cover. Every
+consequential decision names its evidence. Versions were resolved from the
+registries on the date above, not recalled; `docs/research/RESEARCH.md` holds
+the full findings and `docs/research/SOURCE_ANALYSIS.md` the comparison of
+the two source memos.
+
+How to use it: a build agent reads this document first, then
+`docs/BUILD_PROMPT.md`, then claims work in `docs/BUILD_PLAN.md`. A human
+reads sections 1 and 2 to understand the shape, and the rest when a question
+comes up. Decisions marked "re-verify" must be checked against the vendor
+before the Phase 2 gate; vendors change faster than this file.
+
+## 1. The decisions in one place
+
+| Layer                | Decision                                                                                                                                                                                                                                                                | Why, in one line                                                                                                              |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| Product shape        | Web first. One Next.js app serves the marketing site, the authenticated product and the `/design` reference.                                                                                                                                                            | The first users are on the web; the owner is fastest in Next.js; mobile reuses the API, not the UI.                           |
+| Monorepo             | pnpm workspaces + Turborepo. `apps/web` and framework-neutral `packages/*`.                                                                                                                                                                                             | Shared schemas, domain math, policy and tokens without publishing; one checkout for agents.                                   |
+| Web framework        | Next.js 16.3.x App Router, React 19.2.x, Turbopack, TypeScript 6.0.x strict.                                                                                                                                                                                            | Current stable line; `create-next-app` defaults; TypeScript 7 is not yet supported by typescript-eslint.                      |
+| API                  | Hono 4.13.x with `@hono/zod-openapi` 1.6.x and Zod 4, OpenAPI 3.1, versioned under `/api/v1`, RFC 9457 errors.                                                                                                                                                          | Language-neutral contract that generates TypeScript now and Swift or Kotlin later; portable to its own deployment unchanged.  |
+| API placement        | The Hono app lives in `packages/api` with zero Next.js imports and is mounted by one route handler at `apps/web/src/app/api/[[...route]]/route.ts`. One Vercel project.                                                                                                 | One deployment, one origin for cookies, one preview URL per PR. Splitting it out later is an entry-file change (section 3.3). |
+| Hosting              | Vercel, Fluid compute, Node 24, region `iad1`. Cloudflare stays authoritative DNS with DNS-only records.                                                                                                                                                                | The owner's existing pattern; native Next.js runtime; no proxy in front of Vercel.                                            |
+| Database             | Neon Postgres 18 with Drizzle ORM 0.45.x, pooled `pg` driver on Vercel, direct URL for migrations.                                                                                                                                                                      | Relational health data needs transactions, RLS and point-in-time restore; D1 has none of those.                               |
+| Row level security   | Enabled on every user-data table from the first migration, enforced through a dedicated app role and a per-request actor context.                                                                                                                                       | Defense in depth against a forgotten `WHERE`; cheapest when tables are new.                                                   |
+| Authorization        | One policy module, `can(actor, action, resource)` in `packages/core`, subject-owned records, category-and-level grants, default deny, 404 on denial.                                                                                                                    | "Partner" never means "sees everything"; one place to test and audit.                                                         |
+| Identity             | Better Auth 1.7.x self-hosted inside the Hono app at `/api/auth/*`: email and password with required verification, passkeys, TOTP, database-backed rate limiting, session revocation.                                                                                   | Matches the stack; fits Expo later; plugins kept to the minimum surface.                                                      |
+| Encryption           | TLS, provider encryption at rest, and per-user envelope encryption (AES-256-GCM with AAD) for free text. KEK behind a provider interface: environment variable in Phase 1, cloud KMS required at the Phase 2 gate. Deleting a user destroys the DEK (crypto-shredding). | Protects notes against database and backup leaks and satisfies deletion-from-backups obligations.                             |
+| Files                | Private Cloudflare R2 with presigned upload and download, server-side re-encoding to strip metadata. Deferred to Phase 2; the storage interface exists from Phase 1.                                                                                                    | Free egress for a photo journal; private by default; swappable for S3 if a BAA is ever needed.                                |
+| Jobs                 | Postgres outbox table drained inline after each request (`after()`), by a daily Vercel Cron sweep on Hobby and a per-minute cron on Pro. No queue vendor.                                                                                                               | Payloads stay IDs-only in the owner's database; no second platform.                                                           |
+| Email                | Resend with generic subjects and bodies. Console transport locally.                                                                                                                                                                                                     | Already used by the owner; health details never appear in email.                                                              |
+| Analytics and errors | No third-party analytics, pixels, replay or error SDKs in Phase 1. First-party, allowlisted event counters only. Scrubbed Sentry allowed at the Phase 2 gate.                                                                                                           | Flo, Premom and GoodRx enforcement was about SDKs, not hacks; fewer processors while the users are the household.             |
+| Design system        | Tokens in `packages/design-tokens/tokens.json` generate the CSS; light and dark designed independently; system preference by default with a remembered choice; a seven-chapter `/design` reference built from real components.                                          | One source of truth that humans, agents and future clients read.                                                              |
+| Typography           | Newsreader (display, headings, wordmark text) and Figtree (body, controls), self-hosted variable WOFF2, OFL.                                                                                                                                                            | Serif matches the brand sheet's wordmark; a warm geometric sans matches its tagline; both legible at small sizes.             |
+| Sound and touch      | Synthesized Web Audio cues for hover, press, toggle, success and error through one delegated provider; `navigator.vibrate` on touch where supported; on by default with a persistent mute.                                                                              | Every control responds the same way; no audio files; the person stays in control.                                             |
+| Testing              | Vitest for packages, PGlite for database and policy tests, Playwright with axe for the web app against the production build, committed OpenAPI spec with a drift gate, screenshot captures for visual review.                                                           | Tests protect behavior at real boundaries; CI runs exactly what a contributor runs.                                           |
+| CI/CD                | GitHub Actions: one `verify` job (prose gate, generated files, lint, types, unit, build, browser), CodeQL, Renovate, and a `deployment_status` smoke test against every Vercel deployment. Vercel deploys from Git.                                                     | A broken deploy shows up on the pull request, not only in the Vercel dashboard.                                               |
+| Mobile               | Expo later, against the same `/api/v1`, sharing `schemas`, `core`, the generated client and tokens. Native Swift and Kotlin only if earned.                                                                                                                             | Nothing on the server assumes a React client.                                                                                 |
+
+## 2. Context and constraints
+
+- Owner: a solo product engineer in Washington State who already runs
+  Next.js on Vercel with pnpm, Drizzle on Neon, Playwright, Resend and
+  Cloudflare DNS (Namecheap registrar) for other products. The Vercel team
+  already holds `aviune`, `foreset` and `tome-and-quill`; no Tidefern project
+  exists yet.
+- First users: the owner and their fiancée. Then a consumer product. The
+  architecture treats the first two users as the first two of 100,000 but
+  spends money only when a gate requires it.
+- Data: cycle, fertility, pregnancy, mood, journal, child and photo data.
+  Treated as consumer health data under the FTC Health Breach Notification
+  Rule and Washington's My Health My Data Act from day one. HIPAA almost
+  certainly does not apply to a direct-to-consumer app; see section 9.6.
+- Tooling: the owner works across Claude Code, Codex CLI and Cursor on
+  Linux, so the repository carries `AGENTS.md`, `CLAUDE.md` and portable
+  skills, and every check runs from one command.
+- Plan facts that shape Phase 1 (Vercel docs, 2026-10-04): a Hobby team is
+  restricted to non-commercial use, cannot connect a repository owned by a
+  GitHub organization, runs cron at most once a day with hour precision, and
+  caps functions at 300 seconds. Tidefern moves to Pro before it becomes a
+  product or needs sub-daily cron (section 17).
+- Writing: no em dashes anywhere, enforced by `pnpm prose:check`. Health
+  details never appear in URLs, titles, logs, notifications or email.
+
+## 3. Hosting and deployment topology
+
+### 3.1 One Vercel project, one origin
+
+```text
+Browser / future Expo app
+        |
+        v  HTTPS, DNS-only Cloudflare record -> Vercel
++---------------------------------------------------------------+
+| apps/web (Next.js 16, Vercel Fluid compute, iad1)             |
+|   /            marketing and design reference (static)        |
+|   /today ...   authenticated product (dynamic, no-store)      |
+|   /api/[[...route]]  ->  packages/api (Hono)                  |
+|        /api/auth/*   Better Auth handler                      |
+|        /api/v1/*     versioned OpenAPI contract               |
++---------------------------------------------------------------+
+        |                      |                     |
+        v                      v                     v
+  Neon Postgres 18       Resend (email)      Cloudflare R2 (Phase 2)
+  pooled pg for app      generic text only   private, presigned
+  direct URL for
+  migrations
+```
+
+The web app and the API share an origin, so Better Auth cookies are
+first-party, no CORS is configured in Phase 1, and one preview URL per pull
+request exercises both. The route handler is four lines:
+
+```ts
+// apps/web/src/app/api/[[...route]]/route.ts
+import { createApp } from "@tidefern/api";
+export const maxDuration = 60;
+const app = createApp({ basePath: "/api" });
+const handler = (request: Request) => app.fetch(request);
+export {
+  handler as GET,
+  handler as POST,
+  handler as PUT,
+  handler as PATCH,
+  handler as DELETE,
+  handler as HEAD,
+  handler as OPTIONS,
+};
+```
+
+Evidence: Hono's Next.js guide documents exactly this mount
+(`app/api/[[...route]]/route.ts`, `basePath('/api')`, Node runtime). The
+`hono/vercel` adapter is deprecated since Hono 4.13.9 and is literally
+`(app) => (req) => app.fetch(req)`, so calling `app.fetch` directly is the
+same thing without a dependency; `@hono/vercel` 1.0.0 exists if an adapter
+import is preferred. Next.js route handlers are dynamic by default since 15,
+`runtime` defaults to Node and `edge` is deprecated, and `maxDuration` is a
+per-file export. Better Auth's own Next.js handler also just returns
+`auth.handler(request)`, so Set-Cookie headers flow through unchanged.
+
+### 3.2 Why not the alternatives
+
+| Option                                                 | Verdict          | Reason                                                                                                                                                                              |
+| ------------------------------------------------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Next.js route handlers as the API, no Hono             | No               | Backend drifts into Next-only patterns (Server Actions, `cookies()`); mobile would need a second API. The Hono package with ESLint import boundaries makes the separation physical. |
+| Separate Hono project on Vercel at `api.` from day one | Later, if needed | Two projects, CORS, cross-subdomain cookies and two preview URLs for a solo developer with two users. The package is already shaped for it.                                         |
+| Vercel Services (Beta)                                 | Watch            | One project, two services, top-level rewrites. Beta today; the right move if the route handler ever needs a different runtime or duration than the web app.                         |
+| Cloudflare Workers + D1                                | No               | D1 is SQLite with a 10 GB cap and no interactive transactions or RLS; Next.js on Workers runs through an adapter; a BAA needs Enterprise.                                           |
+| Proxying Vercel through Cloudflare                     | No               | Vercel documents that a reverse proxy breaks its firewall visibility and cache purging and hides client IPs; it also puts a second vendor in the path of health traffic.            |
+
+### 3.3 Splitting the API out later
+
+Add `apps/api/src/index.ts` containing `import { createApp } from
+"@tidefern/api"; export default createApp({ basePath: "/" });`, create a
+second Vercel project with Root Directory `apps/api`, point `api.` at it,
+turn on CORS for the web origin in the Hono app and set
+`trustedOrigins` in Better Auth. Nothing inside `packages/api` changes.
+Vercel deploys a default-exported Hono app from `src/index.ts` with zero
+configuration.
+
+### 3.4 Vercel project settings
+
+| Setting                                 | Value                                                                                                                                                         |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Framework preset                        | Next.js                                                                                                                                                       |
+| Root Directory                          | `apps/web` (Include source files outside of the Root Directory stays on, which is the default)                                                                |
+| Build command                           | default (`next build`); install at the repository root from `pnpm-lock.yaml`                                                                                  |
+| Node.js version                         | 24.x (from `engines.node` at the root)                                                                                                                        |
+| Skip deployment for unaffected projects | On (default for GitHub-connected pnpm workspaces)                                                                                                             |
+| Deployment protection                   | Vercel Authentication on for previews; a Protection Bypass for Automation secret stored as `VERCEL_AUTOMATION_BYPASS_SECRET` in GitHub for the smoke workflow |
+| Functions region                        | `iad1`, declared in `apps/web/vercel.json`, next to Neon `us-east-1`                                                                                          |
+| Environment variables                   | Section 16; sensitive values marked sensitive; previews never receive production secrets                                                                      |
+
+### 3.5 DNS
+
+Namecheap stays the registrar. Cloudflare stays the authoritative zone.
+Records for Vercel are DNS-only (grey cloud): `@` and `www` for the site,
+and later `api` if the API is split out. Enable DNSSEC in Cloudflare and
+publish the DS record at Namecheap. Add a CAA record limiting issuance to
+the authorities Vercel lists. Email authentication records (SPF, DKIM,
+DMARC) for Resend live in the same zone. Deployment and DNS steps are in
+`docs/LAUNCH_RUNBOOK.md`.
+
+## 4. Repository and toolchain
+
+### 4.1 Layout
+
+```text
+tidefern/
+  apps/web/                    Next.js app (marketing, product, /design, /api mount)
+  packages/api/                Hono app: routes, OpenAPI document, error shape, auth mount
+  packages/core/               Pure domain logic: dates, cycle, pregnancy, growth, can()
+  packages/schemas/            Zod request, response and domain schemas
+  packages/design-tokens/      tokens.json, CSS generator, brand vectors, brand constants
+  packages/config/             Shared tsconfig presets and the library ESLint config
+  packages/db/                 (Phase 1) Drizzle schema, migrations, RLS policies, client, actor helper
+  packages/auth/               (Phase 1) Better Auth server config and the React client factory
+  packages/crypto/             (Phase 1) Envelope encryption, KeyProvider interface, field helpers
+  packages/api-client/         (Phase 1) Types generated from openapi/v1.json plus a thin fetch wrapper
+  openapi/v1.json              Committed contract; CI fails on drift
+  docs/                        This file, build prompt, plan, progress, runbook, research, design records
+  .agents/skills/              Canonical project skills; .claude/skills links to them
+  .github/workflows/           ci.yml, deploy-verify.yml, codeql.yml (+ neon-preview.yml in Phase 1)
+```
+
+Dependency direction, enforced by ESLint `no-restricted-imports` in every
+package and reviewed in pull requests:
+
+- `apps/web` may import `api` (only to mount it), `api-client`, `schemas`,
+  `core`, `design-tokens`. Never `db`, `auth` server code or `crypto`.
+- `packages/api` is the only package that imports `db`, `auth` and `crypto`.
+  It never imports `next`, `react` or `react-dom`.
+- `core` and `schemas` have no I/O dependencies; `core` runs identically in
+  the browser, React Native and Node.
+- Workspace packages are Just-in-Time packages: `exports` point at
+  TypeScript source, Turbopack transpiles them, there is no build step and
+  no `paths` aliasing between packages. Relative imports inside packages
+  carry no extension (Turbopack does not resolve `.js` to `.ts` here).
+
+### 4.2 Pinned toolchain
+
+Resolved from the registries on 2026-10-04. Exact pins, `save-exact=true`.
+
+| Tool           | Pin                                                                                                                                                                                                             | Note                                                                                                                                                                                                                                    |
+| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Node           | 24.x (`engines`, `.nvmrc` 24.21.0)                                                                                                                                                                              | Active LTS until Node 26 is promoted on 2026-10-28; Vercel default runtime.                                                                                                                                                             |
+| pnpm           | 10.34.6 via `packageManager`                                                                                                                                                                                    | pnpm 12.9.1 is current but Vercel's documentation lists pnpm 6 to 10; pnpm 10 is what the owner's other projects deploy with. Revisit after a successful pnpm 12 build on a branch. Do not depend on corepack; it leaves Node at 25+.   |
+| Turborepo      | 2.11.7                                                                                                                                                                                                          | Pinned so Vercel never falls back to a global version.                                                                                                                                                                                  |
+| Next.js        | 16.3.8                                                                                                                                                                                                          | React 19.2.8, the pair `create-next-app` installs today.                                                                                                                                                                                |
+| TypeScript     | 6.0.3                                                                                                                                                                                                           | TypeScript 7.0.2 is npm `latest` but ships no JavaScript API; typescript-eslint 8.71 pins `<6.1.0`. Every tsconfig is already 7-clean (no `baseUrl`, bundler resolution, explicit `types`).                                             |
+| ESLint         | 10.12.0 in packages, 9.39.5 in `apps/web`                                                                                                                                                                       | npm marks 9 unsupported, but `eslint-config-next` 16.3.8 pulls `eslint-plugin-react`, which crashes under 10 (`getFilename is not a function`, reproduced in this repository). Re-verify when `eslint-config-next` updates its plugins. |
+| Tailwind CSS   | 4.3.3                                                                                                                                                                                                           | Used for utilities; the shell is semantic CSS on tokens.                                                                                                                                                                                |
+| Hono           | 4.13.13, `@hono/zod-openapi` 1.6.3, Zod 4.6.5                                                                                                                                                                   | zod-openapi peer `zod ^4`, `hono >=4.10`.                                                                                                                                                                                               |
+| Drizzle        | drizzle-orm 0.45.3, drizzle-kit 0.31.11                                                                                                                                                                         | Pin exactly. The Drizzle docs site now shows the v1 release-candidate API and migration layout; do not install `@rc`, do not run `drizzle-kit up`, and check snippets against the 0.45.3 types.                                         |
+| pg             | 8.23.1                                                                                                                                                                                                          | Module-scope Pool, registered with `attachDatabasePool` from `@vercel/functions`.                                                                                                                                                       |
+| Better Auth    | 1.7.7, `@better-auth/passkey` 1.7.7                                                                                                                                                                             | CLI is `npx auth@latest` (`@better-auth/cli` is deprecated).                                                                                                                                                                            |
+| Vitest         | 5.0.3                                                                                                                                                                                                           | PGlite 0.5.8 (Postgres 18.3 engine) for database tests.                                                                                                                                                                                 |
+| Playwright     | 1.63.0, `@axe-core/playwright` 4.13.0                                                                                                                                                                           | Chromium build 1243; `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` overrides on machines with a preinstalled browser.                                                                                                                           |
+| sharp          | 0.35.5 (Phase 2)                                                                                                                                                                                                | Photo re-encoding.                                                                                                                                                                                                                      |
+| GitHub Actions | `actions/checkout@v7`, `actions/setup-node@v7`, `pnpm/action-setup@v6`, `actions/upload-artifact@v7`, `github/codeql-action@v4`, `neondatabase/create-branch-action@v6`, `neondatabase/delete-branch-action@v3` | Resolve exact minor versions from each release page when touching a workflow.                                                                                                                                                           |
+
+### 4.3 Generated files and their gates
+
+| Generated file                               | Source                                       | Command                        | Gate                                         |
+| -------------------------------------------- | -------------------------------------------- | ------------------------------ | -------------------------------------------- |
+| `apps/web/src/app/tokens.css`                | `packages/design-tokens/tokens.json`         | `pnpm tokens:generate`         | `pnpm tokens:check`                          |
+| `apps/web/public/brand/*.svg`                | `packages/design-tokens/brand/*.svg`         | `pnpm --filter web brand:sync` | `pnpm --filter web brand:check`              |
+| `openapi/v1.json`                            | `packages/api` routes and `packages/schemas` | `pnpm openapi:generate`        | `pnpm openapi:check`                         |
+| `packages/api-client/src/types.ts` (Phase 1) | `openapi/v1.json`                            | `pnpm client:generate`         | `pnpm client:check`                          |
+| `packages/db/drizzle/*.sql` (Phase 1)        | `packages/db/src/schema`                     | `pnpm db:generate`             | review in PR; CI applies to a fresh database |
+| `packages/db/src/auth-schema.ts` (Phase 1)   | Better Auth config                           | `npx auth@latest generate`     | review in PR                                 |
+
+`pnpm check` runs the prose gate, every freshness gate, lint, types, unit
+tests and the production build. CI runs the same plus the browser suite.
+
+## 5. API contract
+
+### 5.1 Shape
+
+- Everything under `/api/v1`. Additive changes only inside `v1`; a breaking
+  change means `/api/v2` with an overlap period, because installed mobile
+  builds run for months.
+- Routes are defined with `createRoute` from `@hono/zod-openapi` using the
+  Zod schemas in `packages/schemas`, so the OpenAPI document is generated
+  from the same objects that validate requests. `app.doc("/v1/openapi.json")`
+  serves it; `pnpm openapi:generate` writes `openapi/v1.json`, and CI fails
+  when the committed file differs from the code.
+- Opaque string ids (UUIDv7 generated server-side), ISO 8601 calendar dates
+  as `YYYY-MM-DD`, explicit enums, cursor pagination, `Idempotency-Key` on
+  every create.
+- Health data travels only in request and response bodies. `GET
+/api/v1/entries?from=2026-09-01` is fine; `GET /api/v1/symptoms/nausea` is
+  not. Vercel runtime logs record paths and query strings.
+- Every response from the API carries `Cache-Control: private, no-store`
+  (middleware in `packages/api`, repeated as a Next.js header rule for
+  `/api/:path*`). Nothing personal is ever cached by a shared cache or by
+  Next.js data caching.
+- One error shape: RFC 9457 problem details with `application/problem+json`,
+  a stable machine `code` (`validation_failed`, `unauthenticated`,
+  `forbidden`, `not_found`, `rate_limited`, `internal`), and field errors
+  for 422. Error messages never echo health data. Denied access returns 404,
+  not 403, so existence is not revealed.
+- Validation failures go through the `defaultHook` so the 422 shape is
+  identical for every route.
+
+### 5.2 Clients
+
+- Web: `packages/api-client` wraps `openapi-fetch` 0.17 with types from
+  `openapi-typescript` 7.x generated from `openapi/v1.json`, `credentials:
+"include"` and the idempotency header helper. Server components call the
+  same client with forwarded cookies; nothing in `apps/web` touches the
+  database.
+- Expo (Phase 3): the same package.
+- Swift and Kotlin (Phase 4, only if earned): `swift-openapi-generator` and
+  OpenAPI Generator from the same file.
+- Contract drift gate: `pnpm openapi:check` today; add `oasdiff breaking`
+  against the base branch in CI when the first real resource ships, so a
+  removed or retyped field fails the pull request.
+
+### 5.3 Idempotency
+
+`POST` creates accept an `Idempotency-Key` header (UUID). The API stores
+`(actor_id, key) -> response status, body hash, created_at` in an
+`idempotency_keys` table with a 24-hour expiry, returns the stored response
+on replay, and rejects a replay with a different body hash with 409. Mobile
+retries on flaky networks never double-log a symptom.
+
+## 6. Identity and sessions
+
+### 6.1 Better Auth configuration
+
+Self-hosted in `packages/auth`, mounted in the Hono app before the `/v1`
+routes:
+
+```ts
+app.all("/auth/*", (c) => auth.handler(c.req.raw));
+```
+
+| Option                 | Value                                                                                                                                                                                                     | Why                                                                                                                                                                                                                       |
+| ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Adapter                | `drizzleAdapter(db, { provider: "pg", schema })`; schema generated with `npx auth@latest generate --config packages/auth/src/auth.ts --output packages/db/src/auth-schema.ts` and migrated by drizzle-kit | One migration tool. The CLI package is named `auth`; `@better-auth/cli` is deprecated.                                                                                                                                    |
+| `baseURL` / `basePath` | site origin, `/api/auth`                                                                                                                                                                                  | Same origin as the app. Secure cookies and the `__Secure-` prefix turn on automatically when the URL is https or `NODE_ENV` is production.                                                                                |
+| `emailAndPassword`     | `enabled`, `requireEmailVerification: true`, `revokeSessionsOnPasswordReset: true` (off by default), reset and verification mail through Resend with generic text                                         | Verification also prevents account enumeration on sign-up.                                                                                                                                                                |
+| Passkeys               | `@better-auth/passkey` with `rpID`, `rpName`, `origin`                                                                                                                                                    | Encouraged primary method on the web. Native passkey ceremonies on Expo are unverified; prototype before relying on them.                                                                                                 |
+| TOTP                   | `twoFactor()` from `better-auth/plugins` with backup codes                                                                                                                                                | Optional for everyone, prompted for anyone who grants partner access. Keep `session.cookieCache` off until the 2FA interaction with it is re-verified (an April 2026 advisory, fixed in 1.4.9, involved cached sessions). |
+| Social sign-in         | Not in Phase 1                                                                                                                                                                                            | Apple and Google arrive with the mobile app; Apple is required by App Store guideline 4.8 once Google exists.                                                                                                             |
+| Rate limiting          | `rateLimit: { enabled: true, storage: "database" }`                                                                                                                                                       | Memory storage is per instance and useless on serverless. Vercel Firewall rules on auth, invite and upload paths once on Pro.                                                                                             |
+| Sessions               | 7-day expiry, 1-day `updateAge`; "Devices" screen backed by `listSessions`, `revokeSession`, `revokeOtherSessions`                                                                                        | Short enough for health data; revocation is a Phase 1 feature.                                                                                                                                                            |
+| Plugins not enabled    | organization, SSO, OIDC provider, MCP, device authorization, anonymous, admin, SCIM                                                                                                                       | Not needed; several carried 2026 advisories. Smaller surface, fewer advisories that apply.                                                                                                                                |
+| Bot protection         | Cloudflare Turnstile on sign-up, reset and invite acceptance at the Phase 2 gate                                                                                                                          | Works without proxying traffic.                                                                                                                                                                                           |
+
+Pin the version, read release notes, update deliberately; Renovate groups
+Better Auth separately and never automerges it.
+
+### 6.2 Session transport per client
+
+| Client           | Transport                                                  | Storage                                                                                                                                        |
+| ---------------- | ---------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| Web              | `HttpOnly; Secure; SameSite=Lax` cookie on the app origin  | Browser cookie jar. Never `localStorage`.                                                                                                      |
+| Expo (Phase 3)   | Better Auth cookie sent as a header by `@better-auth/expo` | `expo-secure-store`; clear stale sessions on first launch after reinstall (iOS Keychain survives uninstall); exclude from Android Auto Backup. |
+| Native (Phase 4) | `Authorization: Bearer` via the bearer plugin              | iOS Keychain (`WhenUnlockedThisDeviceOnly`), Android Keystore-backed storage.                                                                  |
+
+Server components read the session with `auth.api.getSession({ headers:
+await headers() })` and render authenticated pages dynamically; no
+authenticated route is ever statically rendered or ISR-cached.
+
+## 7. Data: Neon Postgres with Drizzle
+
+### 7.1 Connections
+
+- Neon project on Postgres 18 (the default for new projects), Launch plan,
+  `history_retention_seconds` raised to 604800 (7 days, the Launch maximum)
+  on production. Scale only when a 30-day restore window or more than 10
+  branches is needed.
+- `DATABASE_URL` is the pooled `-pooler` string (PgBouncer, transaction
+  mode) used by the app. `DATABASE_URL_UNPOOLED` is the direct string used
+  only by migrations and the migration runner. Transaction mode forbids
+  session-level `SET`, `LISTEN/NOTIFY`, SQL `PREPARE` and session advisory
+  locks; transaction-scoped `set_config(..., true)` and `SET LOCAL` are what
+  the actor context uses.
+- Driver on Vercel Fluid compute: a module-scope `pg` Pool (`max` 2 to 5,
+  `idleTimeoutMillis` 5000) wrapped by `drizzle-orm/node-postgres` and
+  registered with `attachDatabasePool` from `@vercel/functions`. Neon and
+  Vercel both document this as the right choice over the Neon serverless
+  driver for Node runtimes. Fluid compute shares one process across
+  invocations, which is what makes the module-scope pool correct.
+- Migrations: `drizzle-kit generate` locally (SQL and journal committed),
+  `drizzle-kit migrate` in CI and on deploy against the direct URL, plus a
+  `packages/db/scripts/migrate.ts` runner for Neon preview branches. `push`
+  is for local scratch only. Never `drizzle-kit up` (that is the v1 upgrade
+  path, not this version).
+
+### 7.2 Row level security from the first migration
+
+- A dedicated login role `tidefern_app` owns no tables. Every user-data
+  table is created with `.enableRLS()` and `pgPolicy` statements that read
+  `current_setting('app.actor_id', true)`. Migrations run as the owner role;
+  the app connects as the owner too but drops privileges per request.
+- `withActor(actorId, fn)` in `packages/db` opens a transaction, runs
+  `select set_config('app.actor_id', $1, true)` and `SET LOCAL ROLE
+tidefern_app`, runs `fn`, and commits; the role and setting reset with the
+  transaction. Verified on PGlite (Postgres 18.3 engine) during research;
+  re-verify once through Neon's pooler on the first branch (open question in
+  `docs/research/RESEARCH.md`).
+- Policies encode ownership and active grants through a `SECURITY DEFINER`
+  helper `can_read(subject_id, category)`, mirroring `can()` in `core`.
+  Application code remains the primary control; RLS is the backstop.
+- Background jobs run as the owner role with an explicit actor context when
+  they act for a user. Better Auth tables and `rate_limit` are not
+  user-scoped and stay outside RLS.
+- Cost: every request is a transaction, and policies need indexes on the
+  columns they check (section 7.4). Acceptable at this scale.
+
+### 7.3 Conventions
+
+- Calendar facts (`period_start`, `due_date`, `entry_date`) are `date`
+  columns with an IANA time zone on the profile. "Today" is computed in the
+  subject's zone (`todayIn()` in `core`), never from the server clock.
+- UUIDv7 primary keys generated in the API (`crypto.randomUUID` is v4; use
+  a v7 generator) for index locality; never sequential ids in URLs.
+- `created_at`, `updated_at` as `timestamptz`; `updated_at` and
+  client-generated entry ids exist from day one so an offline queue on
+  mobile can sync later without a schema change.
+- Hard delete by default. Soft delete only where a grace period is a
+  product requirement (account closure has a short undo window before the
+  DEK is destroyed).
+- Encrypted columns are `bytea` holding `version || iv || tag ||
+ciphertext`; a sibling `kek_version` column records the wrapping key.
+
+### 7.4 Schema overview
+
+| Area                | Tables                                                                                                  | Notes                                                                                                                                                                                                                                         |
+| ------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Identity            | `user`, `session`, `account`, `verification`, `two_factor`, `passkey`, `rate_limit`                     | Generated by Better Auth.                                                                                                                                                                                                                     |
+| Profile             | `profiles`                                                                                              | `user_id`, display name, `time_zone`, `stage` (`cycle`, `pregnancy`, `postpartum`), `week_start`, units, notification detail level, `wrapped_dek`, `kek_provider`, `kek_version`.                                                             |
+| Relationships       | `households`, `household_members`, `invitations`                                                        | Role (`owner`, `partner`, `guardian`), status; invitations hold a hashed single-use token, 72-hour expiry, inviter. Membership grants nothing by itself.                                                                                      |
+| Consent and sharing | `grants`, `consents`                                                                                    | `grants`: owner, grantee, category, level, created, revoked. `consents`: user, purpose (`collection`, `sharing`, `notifications`), policy version, granted, withdrawn. Separate consents for collection and sharing are an MHMDA requirement. |
+| Cycle               | `cycle_entries`, `entry_symptoms`, `cycle_predictions`                                                  | Entries keyed by `(subject_id, date)`; symptoms and moods from a controlled vocabulary; predictions are derived rows regenerated on write.                                                                                                    |
+| Pregnancy           | `pregnancies`, `pregnancy_events`                                                                       | Several pregnancies per subject over time; `due_date`, `dating_method` (`lmp`, `ultrasound`, `manual`); events for appointments, milestones, symptoms; an `ended_at` with a reason kept private and handled gently in the UI.                 |
+| Children            | `children`, `child_guardians`, `child_events`, `child_measurements`                                     | Child belongs to a household; guardians many-to-many; measurements typed with units (`g`, `cm`, with imperial display).                                                                                                                       |
+| Notes and media     | `notes`, `photos`, `photo_variants`                                                                     | `subject_id`, `author_id`, category; encrypted body and caption; photos hold object keys, status, dimensions, never original filenames or EXIF.                                                                                               |
+| Platform            | `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `push_devices` (Phase 3) | Append-only audit (actor, action, subject, category, time, no content); outbox jobs with ids-only payloads; export and deletion state machines; allowlisted first-party counters.                                                             |
+
+Key indexes: `(subject_id, date)` on entries; `(grantee_id, owner_id,
+category) WHERE revoked_at IS NULL` on grants; `(subject_id, created_at)`
+on audit events; `(status, run_after)` on jobs; `(actor_id, key)` on
+idempotency keys.
+
+### 7.5 Environments and branches
+
+| Environment      | Database                                                                                                                                                                             | Secrets                                             | Data                                   |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | -------------------------------------- |
+| Local            | PGlite in tests; a personal Neon branch or local Postgres 18 for `pnpm dev`                                                                                                          | `.env.local`, never real keys                       | Seeded synthetic data (`pnpm db:seed`) |
+| Preview (per PR) | Neon branch created by `neondatabase/create-branch-action@v6` from the `staging` branch, never from production, `expires_at` 7 days; deleted on close with `delete-branch-action@v3` | Preview-scoped Vercel variables, a preview KEK      | Seeded synthetic data                  |
+| Staging          | Separate Neon branch (or project at Scale)                                                                                                                                           | Staging credentials and KEK                         | Seeded synthetic data                  |
+| Production       | Neon production branch, pooled connections, 7-day history                                                                                                                            | Production credentials and KEK, R2 bucket (Phase 2) | Real users                             |
+
+Preview deployments stay behind Vercel Authentication. Production data never
+leaves production; "reset from parent" refreshes the shared dev branch.
+
+## 8. Domain model and authorization
+
+### 8.1 Principles
+
+- Subject, not author. Every health record has a `subject_id` (whose body
+  or child it is about). A partner's note about her pregnancy has
+  `author_id = partner` and `subject_id = her`; she owns it and it
+  disappears for the partner when access is revoked.
+- Default deny. A new partner sees nothing until categories are turned on.
+  The sharing screen shows exactly what each category reveals.
+- Category and level grants: `(owner, grantee, category, level)` with level
+  `summary`, `read` or `contribute`. `journal.private` can never be granted.
+- Children are co-owned. A child belongs to a household with one or more
+  guardians, each with full rights; a non-guardian partner reaches a child
+  only through a `child` grant.
+- One decision point. `can(actor, action, resource)` in `packages/core` is
+  the only code that decides access. Route handlers never compare ids.
+
+### 8.2 Categories and defaults
+
+| Category             | Contents                                                        | New partner default          |
+| -------------------- | --------------------------------------------------------------- | ---------------------------- |
+| `cycle.status`       | "Period day 2", "fertile window", a mood card she chose to post | Off                          |
+| `cycle.history`      | Past periods, cycle lengths, predictions                        | Off                          |
+| `cycle.symptoms`     | Logged symptoms and moods                                       | Off                          |
+| `journal.private`    | Her private notes                                               | Never shareable              |
+| `pregnancy.overview` | Week, due date, milestones, appointments                        | Off                          |
+| `pregnancy.photos`   | Bump photos and journal entries                                 | Off                          |
+| `child` (per child)  | Milestones, measurements, feeds, sleep, photos                  | Guardians: full. Others: off |
+
+`summary` is a product feature as much as a security level: "show my
+partner how I'm doing" can be a status card, not raw logs.
+
+### 8.3 Request flow
+
+1. Authenticate (Better Auth session) and load the actor with their
+   guardianships and active grants.
+2. Resolve the target resource and its `subject_id` on the server. Never
+   trust a subject or owner id sent by the client.
+3. `can(actor, action, resource)`: owner allows; guardian of the child
+   allows; an active grant covering the category at a sufficient level
+   allows; otherwise 404.
+4. For list endpoints the policy module returns the allowed subject ids and
+   categories, and the data layer applies them.
+5. Run the query inside `withActor()` so RLS enforces the same rule
+   underneath.
+6. Write an audit event for every partner read of a shared category
+   (summarized per day), every partner write, and every grant change.
+
+The scaffold already ships `can()` with tests for owner, guardian, summary
+versus read, revoked grants, the private journal and the no-share rule.
+
+### 8.4 Edge cases designed now, built when needed
+
+A partner who is also a guardian; a breakup (revoke the partner while the
+child stays co-owned); pregnancy loss (a gentle exit from pregnancy mode,
+no stale reminders, hiding rather than deleting); an owner closing her
+account while a co-guardian keeps the child's records (transfer, not
+delete); a household with two cycle-tracking members (each is a subject;
+grants are symmetric and separate).
+
+## 9. Privacy and encryption
+
+### 9.1 Hard rules
+
+- No advertising SDKs, pixels, session replay or third-party analytics
+  anywhere, including the marketing site and sign-up path. A strict CSP
+  (`script-src 'self'`) makes a future dependency unable to add one
+  silently.
+- No third-party scripts on authenticated pages, ever.
+- No health data in URLs, query strings, page titles, push text, email
+  subjects, cache keys, job names or log lines. Route names are neutral:
+  `/today`, `/calendar`, `/journal`, `/family`, `/settings`. Even "visited
+  `/pregnancy`" is consumer health data under MHMDA's "derived" clause.
+- Allowlist logging: a structured logger that emits only route template,
+  status, latency, request id and a hashed user id. Never bodies.
+- Every SDK and vendor is a processor. `docs/LAUNCH_RUNBOOK.md` keeps the
+  list of vendors, what each receives and the terms that cover it.
+
+### 9.2 Envelope encryption of free text
+
+What is encrypted: note bodies, journal entries, photo captions, free-text
+symptom descriptions, appointment details, partner-authored notes. What
+stays plaintext but access-controlled: dates, controlled-vocabulary codes,
+stage, ids, because predictions, calendars and filtering query them.
+
+Design (verified against Node 24 `crypto` docs and the AWS KMS data-key
+pattern during research):
+
+1. Each user gets a random 32-byte data encryption key (DEK) at sign-up,
+   stored only wrapped.
+2. A key encryption key (KEK) wraps DEKs. `KeyProvider` is an interface:
+   `EnvKeyProvider` reads `TIDEFERN_KEK_V1` (32 random bytes, base64, a
+   sensitive Vercel variable) in Phase 1; `AwsKmsKeyProvider`
+   (`GenerateDataKey` and `Decrypt` with an encryption context) replaces it
+   at the Phase 2 gate by re-wrapping DEKs in a background job. `profiles`
+   records `kek_provider` and `kek_version` per user.
+3. Fields are encrypted with AES-256-GCM, a fresh random 12-byte IV per
+   value, a 16-byte tag, and additional authenticated data of `table:column:
+row_id` so ciphertext cannot be moved between rows. Stored as
+   `version || iv || tag || ciphertext`.
+4. The API unwraps a user's DEK on request and caches it in memory for the
+   request only. Shared data is decrypted with the owner's DEK after `can()`
+   approves, so grants never share keys.
+5. Account deletion destroys the wrapped DEK first; encrypted fields in the
+   live database and in every backup become unreadable immediately
+   (crypto-shredding). The row deletion job follows.
+6. KEK rotation yearly (new version, re-wrap DEKs); per-user DEK rotation
+   only after a suspected compromise.
+
+Not end-to-end encryption, deliberately: E2EE conflicts with partner
+sharing, server-side predictions and account recovery. Revisit only for an
+opt-in "sealed journal" after Phase 2.
+
+### 9.3 Threats and mitigations
+
+| Threat                                       | Mitigation                                                                                    |
+| -------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| Network interception                         | TLS everywhere, HSTS, no plaintext endpoints                                                  |
+| Stolen disk or provider media                | Neon and R2 encryption at rest                                                                |
+| Leaked database dump, branch or credentials  | Field-level encryption of free text; structured data still protected by authorization and RLS |
+| Backup read after a user deleted her account | Crypto-shredding of the DEK                                                                   |
+| Over-broad developer or support access       | Encrypted fields unreadable without the KEK; KMS access audited after Phase 2                 |
+| Compromised API at runtime                   | Not solved by encryption; least privilege, short-lived credentials, monitoring                |
+
+### 9.4 Caching
+
+API responses carry `private, no-store`. Authenticated pages render
+dynamically. Only marketing pages, static assets, the design reference and
+the controlled vocabularies are cacheable. No `use cache`, ISR or `fetch`
+caching on anything personal.
+
+### 9.5 Vendors in Phase 1 and what they see
+
+| Vendor     | Receives                                                          | Terms                  |
+| ---------- | ----------------------------------------------------------------- | ---------------------- |
+| Vercel     | Request paths (opaque), logs (allowlisted), environment variables | Vercel DPA, self-serve |
+| Neon       | The database (free text encrypted)                                | Neon DPA, self-serve   |
+| GitHub     | Source code, CI logs (no secrets, no data)                        | GitHub terms           |
+| Resend     | Email addresses, generic subjects and bodies                      | Resend DPA, self-serve |
+| Cloudflare | DNS queries only (Phase 1); R2 objects (Phase 2)                  | Cloudflare terms       |
+
+### 9.6 Regulation, in architectural terms
+
+| Rule                                      | Applies                                                 | Built in                                                                                                                                                                                                                                            |
+| ----------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| HIPAA                                     | Generally no (consumer-selected app, no covered entity) | Nothing now; if a clinic or insurer ever integrates, sign BAAs (Vercel Pro add-on, Neon Scale) and swap R2 for S3                                                                                                                                   |
+| FTC Health Breach Notification Rule       | Yes; covers fertility and symptom tracking              | A disclosure to an SDK is a breach; hence no SDKs. Incident plan with 60-day user notice and FTC notice at 500+ people                                                                                                                              |
+| FTC Act Section 5                         | Yes                                                     | Privacy promises match behavior; the privacy policy is generated from the vendor table, not written aspirationally                                                                                                                                  |
+| Washington MHMDA                          | Yes (home state)                                        | Separate consent records for collection and sharing; deletion within 45 days including backups (crypto-shredding plus Neon's history window); homepage link to the consumer health data privacy policy; no sale; no geofencing; processor contracts |
+| Other states (NV, CT, CA, VA, CO, TX, MD) | Mostly yes                                              | Building to MHMDA covers them; California's CMIA needs counsel review before public launch                                                                                                                                                          |
+| COPPA                                     | No as designed                                          | Adults only; never give children logins; child data is still health data                                                                                                                                                                            |
+| Apple and Google (Phase 3)                | Yes                                                     | In-app and web account deletion, privacy labels and Data safety matching real behavior, no iCloud storage of health data                                                                                                                            |
+
+Attorney review of consent flows, the privacy policy and vendor terms is a
+Phase 2 gate, before anyone outside the household signs up.
+
+## 10. Jobs, email and notifications
+
+### 10.1 Outbox
+
+A `jobs` table (`id`, `type`, `payload_json` with ids only, `run_after`,
+`attempts`, `status`, `locked_at`, `last_error`) written in the same
+transaction as the change that caused it. Three drains:
+
+1. Inline: after a request commits, `after()` from `next/server` tries to
+   drain the jobs it just enqueued (claim with `SELECT ... FOR UPDATE SKIP
+LOCKED`). On Hobby this is how reminders and emails go out promptly.
+2. Scheduled: a `GET /api/v1/internal/jobs/run` endpoint protected by
+   `CRON_SECRET`, scheduled in `vercel.json` once a day on Hobby and every
+   minute on Pro.
+3. Manual: `pnpm jobs:run` locally.
+
+Every job is idempotent, retried with backoff and moved to `dead` after five
+attempts for inspection without content. Long workflows (export, account
+deletion) are state machines in `data_requests` advanced one step per run,
+so they survive function timeouts. Job types are neutral (`reminder.send`,
+`photo.process`, `account.delete`).
+
+### 10.2 Email
+
+Resend, one sender domain authenticated in Cloudflare DNS. Subjects and
+bodies are generic ("Your Tidefern reminder", "Confirm your email"), never
+health content. A console transport renders mail to stdout in development
+and tests; CI never sends.
+
+### 10.3 Notifications
+
+Phase 1 has email reminders only. The notification service decides the text
+once, from a three-level setting (generic, gentle, detailed) with a preview
+of how a detailed message looks on a lock screen. Partners are never
+notified about her body unless she shared that category at `summary` or
+above. Push (Phase 3) goes directly to APNs and FCM with an id and the
+chosen text; content loads after the app opens.
+
+## 11. Data rights, built in Phase 1
+
+| Right                  | Mechanism                                                                                                                                                                                                                                                                 |
+| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Export                 | `data_requests` job builds a ZIP (JSON per area, processed photos later), stores it privately, emails a generic "your export is ready" link to a signed-in page; expires in 7 days                                                                                        |
+| Revoke a partner       | `revoked_at` on grants takes effect on the next request; partner-authored notes about her stay hers; audit event written                                                                                                                                                  |
+| Remove a partner       | Revoke all grants and end membership; child co-guardianship handled explicitly                                                                                                                                                                                            |
+| Delete a note or photo | Hard delete, variants removed in the same job                                                                                                                                                                                                                             |
+| Devices                | Session list and revocation through Better Auth                                                                                                                                                                                                                           |
+| Activity               | Read view over `audit_events`: sign-ins, devices, grants given and revoked, partner contributions, exports                                                                                                                                                                |
+| Close account          | Re-authenticate; revoke sessions; partners lose access; destroy the DEK; delete rows and objects; transfer co-owned children; keep a minimal tombstone only if needed to honor the request; a public web page offers the same entry point (required by Google Play later) |
+
+## 12. Product surface for the first web release
+
+### 12.1 Route map
+
+Public (static, indexable only in production with `SITE_INDEXABLE=true`):
+
+| Route                      | Visitor question                          | Action                                                                                                              |
+| -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `/`                        | What is Tidefern and is it for me?        | Sign in or create an account (Phase 1), explore the design system                                                   |
+| `/privacy`                 | What happens to my data?                  | Read the consumer health data privacy policy (homepage link required by MHMDA); owner-reviewed before public launch |
+| `/terms`, `/accessibility` | What are the terms, how accessible is it? | Drafts marked as such until reviewed                                                                                |
+| `/account/delete`          | How do I delete my account?               | Signed-in deletion entry point reachable from a public page                                                         |
+| `/design` and six chapters | How is Tidefern built?                    | For people and agents; noindex                                                                                      |
+
+Authenticated (dynamic, `no-store`, neutral names):
+
+| Route               | Purpose                                                                                                                      |
+| ------------------- | ---------------------------------------------------------------------------------------------------------------------------- |
+| `/welcome`          | Onboarding: time zone, stage, first period date or due date, consent to collection (separate from sharing), optional passkey |
+| `/today`            | The home screen: cycle day or pregnancy week, prediction with uncertainty, quick log, what a partner can see right now       |
+| `/calendar`         | Month and list views, logged days, predicted period and fertile window, tap to log                                           |
+| `/log/[date]`       | Day sheet: flow, symptoms, mood, note (encrypted)                                                                            |
+| `/journey`          | Pregnancy week-by-week view, appointments and milestones; postpartum view after birth                                        |
+| `/family`           | Children, guardians, feeds, sleep, growth, milestones                                                                        |
+| `/family/[childId]` | One child's timeline and measurements with percentiles                                                                       |
+| `/sharing`          | Grants per person and category with plain descriptions of what each reveals; invite a partner                                |
+| `/settings`         | Profile, time zone and units, theme, sound, notification detail level, devices, export, delete                               |
+| `/activity`         | Account activity from audit events                                                                                           |
+
+### 12.2 States and rules for every screen
+
+Loading, empty, error and offline states are designed, not implied. Every
+list has an honest empty state with the next action. Every mutation shows
+pending and failure states and never pretends success. Essential content
+renders on the server; client components exist only where interaction
+requires them. Predictions always show their uncertainty and a line that
+they are estimates, not medical advice. Loss, irregular cycles and missed
+days are handled without judgment, with a quiet path out of pregnancy mode.
+
+## 13. Design system
+
+### 13.1 Source of truth
+
+`packages/design-tokens/tokens.json` holds the palette, semantic colors
+(light and dark), type scale, spacing, radius, motion and sound tokens.
+`pnpm tokens:generate` writes `apps/web/src/app/tokens.css`; CI fails when
+it is stale. The same JSON is served at `/design/tokens.json`, the CSS at
+`/design/tokens.css`, and a future React Native theme and Swift or Kotlin
+constants compile from it.
+
+### 13.2 Brand
+
+From the brand sheet (`assets/brand/reference/tidefern-brand-sheet.webp`):
+
+| Name      | Hex       | Meaning   | Role in the system                                                                                    |
+| --------- | --------- | --------- | ----------------------------------------------------------------------------------------------------- |
+| Fern      | `#2F4F46` | Grounding | Light text and action fill; wordmark color                                                            |
+| Sea Glass | `#6EA7A0` | Balance   | Decorative water; darkened to `#3A6B64` for light-mode text, lifted to `#8FC1B9` for dark-mode accent |
+| Sage      | `#B7C9B1` | Growth    | Decorative leaf fills, dark-mode mark                                                                 |
+| Sand      | `#E6D6C3` | Warmth    | Warm surface accent (highlighted day)                                                                 |
+| Stone     | `#D9D9D4` | Clarity   | Neutral separators                                                                                    |
+| Mist      | `#F7F5EF` | Breathe   | Light page; dark-mode text                                                                            |
+| Clay      | `#C98B74` | Nurture   | Warning family; darkened to `#8E5141` for light text                                                  |
+
+Wordmark: "Tidefern" in Newsreader weight 500. Tagline: "Life flows
+together" in Figtree uppercase, 0.18em tracking, Sea Glass accent. Closing
+line: "Healthy tomorrows, together". The mark is a fern frond unrolling from
+a wave with a mist highlight. Only a raster sheet exists, so
+`packages/design-tokens/brand/` holds a hand-authored vector reconstruction
+(light, dark and app-icon variants) marked as pending the owner's approval.
+If original vectors arrive, they replace the files in place. The mark is
+never recreated with a font, an image generator or a raster trace.
+
+### 13.3 Color roles and measured contrast
+
+Light and dark are designed independently; nothing is inverted. Every
+pairing below was measured with the WCAG 2.2 formula on 2026-10-04.
+
+| Role                 | Light                 | Dark                  | Measured                                              |
+| -------------------- | --------------------- | --------------------- | ----------------------------------------------------- |
+| page                 | `#F7F5EF`             | `#0F1A17`             | canvas                                                |
+| surface              | `#FFFFFF`             | `#15221E`             | cards and inputs                                      |
+| panel                | `#EDE9DF`             | `#1B2B26`             | grouped regions                                       |
+| text                 | `#1F3530`             | `#EEEBE3`             | 11.9:1 light, 14.9:1 dark on page                     |
+| muted                | `#56696A`             | `#9FB0A8`             | 5.3:1 light, 7.8:1 dark on page; 4.8:1 on light panel |
+| accent               | `#3A6B64`             | `#8FC1B9`             | 5.6:1 light, 8.9:1 dark on page                       |
+| action / action-text | `#2F4F46` / `#F7F5EF` | `#8FC1B9` / `#0F1A17` | 8.3:1 light, 8.9:1 dark                               |
+| border               | `#6F8680`             | `#5C756C`             | at least 3:1 non-text on page                         |
+| focus                | `#3A6B64`             | `#A8D2CB`             | 2 px outline, 4 px offset                             |
+| warning              | `#8E5141`             | `#DDA58E`             | 5.4:1 light, 8.3:1 dark                               |
+| danger               | `#A63E37`             | `#E08A80`             | 5.7:1 light, 6.9:1 dark                               |
+| tide, leaf, warmth   | decorative            | decorative            | never text                                            |
+
+Raw brand colors Sea Glass, Sage, Sand, Stone and Clay fail 4.5:1 as text
+on Mist and are decoration-only in light mode; the darkened variants above
+carry text.
+
+### 13.4 Theme behavior
+
+First visit follows the system preference (`prefers-color-scheme`); a
+pre-paint script reads one stored key (`tidefern-theme-v1`) and sets
+`data-theme` and `data-theme-source` on `<html>` so there is no flash and
+no hydration mismatch. The toggle stores an explicit choice; Settings
+offers "follow system" to clear it. `color-scheme` is set per theme so form
+controls and scrollbars match, and `theme-color` is declared for both
+schemes. Images never invert; the mark swaps to its dark variant.
+
+Why system default rather than dark-first (the site-build skill's usual
+default): the brand sheet is light, the marketing page should look like the
+sheet, and a health app used at night should respect the device's night
+setting without a click. Both themes are finished before either ships.
+
+### 13.5 Typography
+
+| Role                             | Family                                      | Why                                                                                                                    |
+| -------------------------------- | ------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------- |
+| Display, headings, wordmark text | Newsreader (variable, OFL, Production Type) | An old-style serif with the contrast and warmth of the sheet's wordmark; optical-size axis available for display sizes |
+| Body, controls, labels, numerals | Figtree (variable, OFL, Erik Kennedy)       | Warm geometric sans that matches the tracked tagline, reads well at 14 to 16 px, has tabular-friendly numerals         |
+
+Self-hosted Latin subsets from fontsource 5.3.0 with license files beside
+them; `next/font/local` with `display: swap` and metric fallbacks. The scale
+is in `tokens.json` (`type-display` through `type-caption`). Body 17 px on
+desktop, 16 px on phones, line height 1.6; reading passages 45 to 68
+characters wide. The build compares two alternates in rendered specimens
+(Fraunces and Source Serif 4 for the serif; Albert Sans and Instrument Sans
+for the sans) beside the mark and records the comparison in
+`docs/design/TYPOGRAPHY.md`; the pairing above is the decision unless the
+specimens show a legibility problem.
+
+### 13.6 Layout, spacing, radius, motion
+
+Max width 1200 px; gutters 64 px desktop, 32 px tablet, 24 px phone. Spacing
+scale 4 to 96 px. Radii: 10 px controls, 18 px cards, 28 px sheets, round
+pills. Motion: 180 ms feedback, 280 ms disclosure, 600 ms settle, a 9 s
+decorative tide on the marketing page only, all with named easings;
+`prefers-reduced-motion` yields a complete static result. No scroll
+hijacking, custom cursors, animate-on-scroll reveals, glass panels, blurred
+orbs, gradient text or decorative status dots. Personality comes from the
+serif, the composition, the mark, the quiet tide and the sound.
+
+### 13.7 Components
+
+The build produces real, shared components and documents each with its
+states (default, hover, focus-visible, active, disabled, loading, error,
+empty) in `/design/components`:
+
+Logo and mark, header with primary navigation and controls, mobile menu
+(native disclosure, Escape closes and returns focus), footer, text link and
+button (primary, secondary, quiet, destructive), inline and toast feedback,
+form fields with validation, segmented control, chip group for symptoms,
+calendar month grid and list, day sheet, cycle ring (today's position,
+prediction and uncertainty), pregnancy week card, timeline, measurement
+chart with percentile band, person and grant cards, disclosure, dialog
+(native `<dialog>`), skeleton and empty states, theme and sound toggles,
+copy-code and token swatches for the reference.
+
+### 13.8 The `/design` reference
+
+Seven chapters, each server-rendered, readable without JavaScript, with a
+single H1, stable anchors, previous and next links, and a chapter rail:
+
+| Route                 | Contents                                                                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
+| `/design`             | Overview, chapter cards, exports (JSON, CSS, Markdown reference, OpenAPI link)                                                  |
+| `/design/brand`       | Mark variants and downloads, clear space, minimum sizes, dark and light rules, wordmark and tagline typography, approval status |
+| `/design/color`       | Both themes, every role with measured contrast, a sandboxed pairing checker, copyable variables                                 |
+| `/design/type`        | Editable specimens, weights, the scale, reading widths, font provenance                                                         |
+| `/design/components`  | Real components with controls for theme and width, keyboard notes, copyable usage                                               |
+| `/design/motion`      | Replayable timing and easing demos, reduced-motion behavior, the tide                                                           |
+| `/design/sound`       | Playable cues with their levels, the unlock rule, the mute, haptic support notes                                                |
+| `/design/foundations` | Layout, accessibility, copy rules, privacy rules and the development checklist                                                  |
+
+A machine-readable catalog (`/design/reference.md` and the JSON export)
+maps patterns to source paths. Sandboxed experiments never change
+production tokens. Design routes are noindex and outside the sitemap.
+
+### 13.9 Accessibility targets
+
+WCAG 2.2 AA throughout: landmarks, one H1, skip link, visible unobscured
+focus, 24 by 24 px minimum targets (44 px where practical), no drag-only
+interactions, 200 percent zoom and 320 px reflow, 4.5:1 text and 3:1
+non-text contrast in both themes, named controls, reduced motion. Axe runs
+on every route in both themes in CI; manual keyboard passes are recorded in
+`docs/design/QA.md`.
+
+## 14. Interface sound and touch
+
+### 14.1 Decisions
+
+- All cues are synthesized with the Web Audio API in
+  `apps/web/src/lib/sound.ts`: no files to license, download or cache.
+- One shared `AudioContext` with `latencyHint: "interactive"` is created and
+  resumed on the first `pointerdown` or `keydown`, which is what browser
+  autoplay policies require. Before that gesture nothing plays, so the first
+  hover is silent by design.
+- A master gain bus at 0.3 with per-cue peaks of 0.05 (hover) and 0.11
+  (press); every envelope uses exponential ramps so nothing clicks.
+- Cues: hover tick (sine, 1760 Hz, 28 ms, mouse pointers only, at most one
+  per 90 ms), press drop (triangle, 523 Hz falling a fourth, 90 ms), toggle
+  (the drop reversed), success (two rising sine notes), error (a low falling
+  triangle). Pitches and levels are tokens in `tokens.json`.
+- `SoundProvider` attaches once at the root and uses event delegation over
+  `a, button, summary, input, select, textarea, [role=button|tab|switch]`,
+  so every control responds without opting in. Keyboard activation (Enter
+  and Space) plays the press cue.
+- Haptics: `navigator.vibrate(8)` on touch `pointerdown` where the platform
+  supports it (Android Chrome); iOS Safari has no web vibration API and
+  stays silent.
+- Default on, with a labelled mute in the header and in Settings. The
+  choice is stored locally (`tidefern-sound-v1`) and applied before paint.
+  WCAG 1.4.2 applies to audio longer than three seconds; these cues are far
+  shorter, but the mute exists because control matters more than
+  compliance.
+- Sound never carries meaning alone. Every success or error cue accompanies
+  visible text.
+
+### 14.2 What the build adds
+
+The `/design/sound` chapter with playable cues, a level meter and the
+mute; a cue for navigation settle; respect for a "quiet hours" setting in
+the product; unit tests for the envelope math and browser tests that the
+mute persists and that no audio node is created before a gesture.
+
+## 15. Testing
+
+| Layer              | Tool                                                                                        | What it protects                                                                                                                                                                       |
+| ------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `packages/core`    | Vitest                                                                                      | Date math across zones and boundaries, cycle and pregnancy predictions with worked vectors, `can()` for every rule                                                                     |
+| `packages/schemas` | Vitest                                                                                      | Parsing of every request shape and rejection of health data in the wrong place                                                                                                         |
+| `packages/db`      | Vitest + PGlite 0.5.8 (one instance per file, migrations applied with the Drizzle migrator) | RLS policies: the actor sees only their rows, revoked grants hide rows, the private journal never leaks, `SET LOCAL ROLE` resets                                                       |
+| `packages/crypto`  | Vitest                                                                                      | Round trips, AAD mismatch and tamper detection, provider swap, crypto-shred makes ciphertext unreadable                                                                                |
+| `packages/api`     | Vitest with `app.request()`                                                                 | Each route against the committed spec, problem details, idempotency replay, `no-store` headers, denial returns 404                                                                     |
+| `apps/web`         | Playwright + axe against the production build                                               | Navigation, theme and sound persistence, forms and their failure states, keyboard paths, 320 px reflow, both themes, security headers, no indexing on previews, design-reference tools |
+| Contract           | `pnpm openapi:check`, `oasdiff breaking` (Phase 1)                                          | No silent breaking change                                                                                                                                                              |
+| Visual             | `apps/web/scripts/capture.mjs`                                                              | Screenshots of key routes in both themes at desktop and phone widths for human review in `docs/design/QA.md`                                                                           |
+| Performance        | Lighthouse 13.x on the production build, mobile throttling                                  | Budgets: 1.5 MB initial transfer, 200 KB compressed first-route JavaScript, LCP 2.5 s, CLS 0.1 as lab proxies; recorded with tool version and conditions                               |
+
+Rules: tests protect behavior at real boundaries; no giant snapshots, no
+constant-matching assertions, no fake successful integrations. A failing
+test is never weakened to pass. An environment failure is reported
+separately from an application defect.
+
+## 16. CI/CD and delivery
+
+### 16.1 GitHub Actions
+
+| Workflow                           | Trigger                                                           | Does                                                                                                                                                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ci.yml`                           | push to `main`, pull requests                                     | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
+| `deploy-verify.yml`                | `deployment_status` success (sent by Vercel for every deployment) | curl the deployed home page and `/api/v1/health` with the protection bypass header, then the `@smoke` Playwright subset against the deployment URL; failure shows on the pull request                 |
+| `codeql.yml`                       | push, pull requests, weekly                                       | CodeQL security-and-quality for JavaScript and TypeScript                                                                                                                                             |
+| `neon-preview.yml` (Phase 1)       | pull request opened, synchronized, closed                         | Create a Neon branch from `staging` with a 7-day expiry, run migrations and seed against it, pass its URLs to the preview build; delete on close                                                      |
+| Renovate (`.github/renovate.json`) | weekly                                                            | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged                                                                                                 |
+
+Required status checks on `main`: `CI / Lint, types, tests, build, browser`
+and `CodeQL`. Secret scanning with push protection on. Secrets the
+workflows read: `VERCEL_AUTOMATION_BYPASS_SECRET`; Phase 1 adds
+`NEON_API_KEY` (secret) and `NEON_PROJECT_ID` (variable) installed by the
+Neon GitHub integration.
+
+### 16.2 Deployment flow
+
+1. An agent or a person pushes a branch and opens a pull request.
+2. CI runs. Vercel builds a preview from the same commit and reports a
+   GitHub deployment; `deploy-verify.yml` smoke tests it.
+3. A reviewer (or the owner) merges. Vercel builds production from `main`,
+   migrations run as a build step against the direct database URL before
+   `next build` (Phase 1), and the smoke workflow verifies production.
+4. Rollback is "promote the previous deployment" in Vercel; a migration
+   that cannot be rolled forward gets a corrective migration, never a
+   history rewrite.
+
+### 16.3 Branch and commit conventions
+
+`main` is protected and always deployable. Work happens on short-lived
+branches named `claude/<topic>` for agents and `<name>/<topic>` for people.
+Commits use plain imperative subjects, explain why in the body, carry no
+model identifiers and no em dashes. Pull requests fill the template:
+what, why, checks run, evidence, build-plan task ids.
+
+## 17. Environments, secrets and local development
+
+### 17.1 Variables
+
+| Variable                                | Scope                  | Purpose                                                                                                           |
+| --------------------------------------- | ---------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `SITE_URL`                              | optional               | Absolute origin for canonical URLs; Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and `VERCEL_URL` are used when unset |
+| `SITE_INDEXABLE`                        | production only        | Must be exactly `true` to index; previews never index                                                             |
+| `DATABASE_URL`                          | all                    | Pooled Neon string for the app                                                                                    |
+| `DATABASE_URL_UNPOOLED`                 | build and CI           | Direct string for migrations only                                                                                 |
+| `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | all                    | Session signing and the auth base URL                                                                             |
+| `TIDEFERN_KEK_V1`                       | all, sensitive         | Phase 1 key encryption key; different per environment                                                             |
+| `RESEND_API_KEY`, `EMAIL_FROM`          | preview and production | Transactional email; local uses the console transport                                                             |
+| `CRON_SECRET`                           | production             | Authorizes the scheduled job runner                                                                               |
+| `R2_*`                                  | Phase 2                | Private bucket credentials scoped to one bucket                                                                   |
+| `VERCEL_AUTOMATION_BYPASS_SECRET`       | GitHub only            | Lets the smoke workflow reach protected previews                                                                  |
+
+Production secrets exist only in Vercel's production scope. Previews use
+preview-scoped values and seeded data. `.env.example` lists every variable
+with a comment; `.env.local` is ignored.
+
+### 17.2 Local development
+
+```sh
+nvm use                        # Node 24
+npm install -g pnpm@10.34.6    # any pnpm 10; it honors packageManager
+pnpm install --frozen-lockfile
+cp .env.example .env.local     # fill DATABASE_URL with a personal Neon branch or local Postgres 18
+pnpm db:migrate && pnpm db:seed   # Phase 1
+pnpm dev                       # http://localhost:3000
+pnpm check && pnpm test:e2e    # before every push
+```
+
+Email prints to the console. The KEK is any 32 random bytes. Seeds create
+two households of synthetic people with cycles, a pregnancy, a child and
+grants in every state, so every screen has data and every policy branch
+has a case.
+
+## 18. Phases and gates
+
+| Phase                                 | Scope                                                                                                                                                                                                                                                                                                                                                                  | Gate to leave it                                                                                                                                                |
+| ------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 0, foundation (this repository, done) | Monorepo, web shell in both themes, tokens and brand, API mount with health and OpenAPI, core math and `can()`, sound system, CI, deployment smoke test, docs and skills                                                                                                                                                                                               | `pnpm check` and `pnpm test:e2e` green; Vercel project connected; first preview verified by the smoke workflow                                                  |
+| 1, household                          | Accounts (email, passkey, TOTP, devices), onboarding, profile and consent, cycle logging and predictions, calendar, journal with encryption, pregnancy journey, children and growth, sharing with grants and invitations, audit and activity, export and deletion, email reminders through the outbox, the seven-chapter design reference, full test coverage, runbook | All of section 15 green; both themes reviewed on desktop and phone; QA log closed; a restore from a Neon branch rehearsed; the owner and partner using it daily |
+| 2, public                             | Attorney review of consents, privacy policy and vendor terms; KEK moved to a cloud KMS; Vercel Pro (commercial use, per-minute cron, firewall rate limits); Turnstile; scrubbed Sentry; R2 photos with re-encoding; Neon Scale if a 30-day window is wanted; incident plan rehearsed; `SITE_INDEXABLE=true`                                                            | No one outside the household signs up before every item is done                                                                                                 |
+| 3, mobile                             | Expo app on the same contract, SecureStore sessions, direct APNs and FCM, app-lock, store listings with accurate privacy labels and Data safety, Health apps declaration                                                                                                                                                                                               | Store review passed; account deletion in-app and on the web                                                                                                     |
+| 4, native (optional)                  | Swift and Kotlin clients generated from the spec                                                                                                                                                                                                                                                                                                                       | Only if retention and revenue justify native polish                                                                                                             |
+
+## 19. Operations
+
+- Backups: Neon point-in-time restore (7 days on Launch, 30 on Scale) plus
+  a weekly encrypted `pg_dump` to a locked-down bucket with 30-day
+  retention so deletions still propagate. Restore drill every quarter: RPO
+  under 1 hour, RTO under 4 hours.
+- Monitoring in Phase 1: Vercel logs and the deployment smoke workflow; a
+  scheduled uptime check of `/` and `/api/v1/health` (GitHub Actions cron,
+  like the owner's Aviune repository). Phase 2 adds scrubbed error tracking
+  and Vercel Firewall rate limits.
+- Incident plan, written before Phase 2: contain (revoke credentials,
+  disable the feature), preserve evidence (export Vercel logs at once; Pro
+  keeps them one day), assess whether health data was acquired or
+  disclosed including through a vendor, notify users within 60 days and the
+  FTC at 500 or more people, then review.
+- Cost: Phase 1 on Hobby and Neon Launch is roughly the price of Neon
+  Launch plus the domain. Pro adds Vercel's plan price at the Phase 2 gate.
+  The earlier memo's estimates for 10K to 1M users still hold; they scale
+  with configuration (compute size, read replicas, queues), not a redesign.
+- Supply chain: exact pins, a lockfile CI refuses to change, Renovate,
+  CodeQL, secret scanning, 2FA and hardware keys on GitHub, Vercel, Neon,
+  Cloudflare and Namecheap.
+
+## 20. How agents work in this repository
+
+- `AGENTS.md` is the entry point for every harness; `CLAUDE.md` imports it.
+  Project skills live in `.agents/skills/` with links in `.claude/skills/`:
+  `site-build` for any page, component, motion, design-system or audit
+  work; `humanize-writing` and `humanize-code` for copy and code;
+  `humanize.md` holds the explicit writing preferences.
+- `docs/BUILD_PROMPT.md` is the complete assignment. `docs/BUILD_PLAN.md`
+  is the tracked task list with ids, owners, status and evidence; an agent
+  claims a task before starting and closes it with evidence.
+  `docs/BUILD_PROGRESS.md` is the append-only log with commands, results,
+  decisions and the next action, updated after every milestone and before
+  a turn ends.
+- One lead owns visual direction, shared components and integration.
+  Subagents take bounded, non-overlapping work (a package, a chapter, a
+  test suite, a review) and hand back written results; nobody redesigns
+  shared UI in parallel.
+- Every change goes through a branch, `pnpm check`, `pnpm test:e2e`, a
+  pull request and the deployment smoke test. Nothing is reported done
+  without the command output that proves it.
+- Never from memory: versions, API shapes, legal facts. Resolve, cite, pin.
+
+## 21. Open questions and re-verification list
+
+| Question                                                                                                                     | Owner                 | When                                   |
+| ---------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------- |
+| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected (verified on PGlite only)?                     | build agent           | first Neon branch in Phase 1           |
+| Does the first Vercel build succeed with pnpm 10 from `packageManager` and the monorepo root install?                        | owner and build agent | first preview                          |
+| Exact `deployment.environment` strings Vercel sends (`Preview`, `Production`) for the smoke workflow filter                  | build agent           | first pull request; log the event once |
+| When `eslint-config-next` supports ESLint 10 so the web app can leave 9                                                      | Renovate              | monthly                                |
+| When typescript-eslint supports TypeScript 7.1's API                                                                         | Renovate              | monthly                                |
+| Whether pnpm 12 builds cleanly on Vercel                                                                                     | build agent           | a throwaway branch in Phase 1          |
+| Owner approval of the reconstructed mark, or delivery of original vectors                                                    | owner                 | before the brand chapter is final      |
+| Attorney review of consent flows, privacy policy, vendor terms; California CMIA scope; New York's health privacy bill status | owner                 | Phase 2 gate                           |
+| Better Auth passkeys on Expo end to end                                                                                      | build agent           | Phase 3                                |
+
+## 22. Sources
+
+Vendor documentation and registries consulted on 2026-10-04 (the research
+file holds quotes and the full list):
+
+- Hono: Next.js guide, `@hono/vercel` on npm, `@hono/zod-openapi` README.
+- Next.js 16.3.8: route handlers, `transpilePackages`, `useTypeScriptCli`,
+  installation and `create-next-app` defaults.
+- Vercel: Hono on Vercel, monorepos, Vercel for GitHub, Fluid compute,
+  Node.js versions, cron usage and pricing, deployment protection bypass,
+  Git plan restrictions, Services (Beta), reverse proxy guidance.
+- Turborepo: internal packages, `turbo-ignore` deprecation.
+- Neon: CLI projects (Postgres 18 default), history window, connection
+  pooling, Vercel connection methods, GitHub integration, reset from
+  parent, RLS with Drizzle.
+- Drizzle: migrate, v1 upgrade notes (to know what not to follow).
+- Better Auth: Hono and Next.js integrations, CLI, passkey, 2FA, rate
+  limit, session management, email and password; OSV advisories.
+- PGlite 0.5.8 (`select version()` run locally), Node 24 `crypto`, AWS KMS
+  `GenerateDataKey`, NIST SP 800-38D.
+- TypeScript 7.0 announcement, typescript-eslint dependency versions,
+  ESLint 10 migration guide, pnpm 12 release notes, corepack README.
+- npm registry: every version in section 4.2, resolved with `npm view`.
+- Regulation: FTC Health Breach Notification Rule and guidance, FTC orders
+  on Flo and Premom, RCW 19.373 (MHMDA), HHS health app scenarios, Apple
+  review guidelines and account deletion, Google Play health policies.
+- The two source memos, analyzed in `docs/research/SOURCE_ANALYSIS.md`.
