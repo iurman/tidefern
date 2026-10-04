@@ -1210,16 +1210,32 @@ both the app and `/design/motion` import):
 - CSS features with uneven support (relative color syntax, `corner-shape`
   squircles, scroll-driven animations) are either gated behind `@supports`
   with static fallbacks declared first or not used; the build records the
-  Baseline status it relied on.
+  Baseline status it relied on (web-features 3.40.1 on 2026-10-04: `oklch`
+  itself is Baseline high since 2025-11-09 and needs no hex fallback;
+  `text-wrap: balance` is Baseline and is the heading default, while
+  `text-wrap: pretty` is not Baseline and is not used; `light-dark()` and
+  view transitions are Baseline low; relative color and `corner-shape` are
+  the two that need `@supports`).
 
 Calendar and date entry: the month grid and range selection build on
-`react-day-picker` (through the shadcn/ui Calendar) with Nord's range
-semantics (first tap starts, second tap ends, swapped if earlier, hover or
-drag preview) and the WAI-ARIA date picker dialog keyboard model; date of
-birth and due date use a segmented text input, not a picker. Code from
-21st.dev is never vendored (its terms vest marketplace content in the
-operator and require link-backs); it and component.gallery are survey
-indexes only.
+the shadcn/ui Calendar over `react-day-picker`, pinned to an explicit
+version the build agent chooses after reading the v10 upgrade guide (the
+registry item floats on `@latest`; 10.0.2 is current and the line is being
+renamed `@daypicker/react`), with the copied `classNames` keys verified
+against that version and a unit test for range selection. The range rules
+are written in Tidefern's own words (first tap starts, second tap ends,
+swapped if earlier, hover or drag preview) and the keyboard model is the
+WAI-ARIA Authoring Practices Date Picker Dialog pattern at its current
+URL. Nord's calendar documentation was read for behavior only: Nord's
+packages are proprietary (their license limits use to Nordhealth's own
+staff), so no `@nordhealth/*` package is ever installed and no Nord CSS,
+markup or code is copied. Date of birth and due date use a segmented text
+input, not a picker. Code from 21st.dev is never vendored (its terms make
+content the joint property of its authors and 21st Labs, usable only
+through the platform, with link-backs on redistribution); it and
+component.gallery are survey indexes only; nothing from details.so's paid
+vault enters the repository without its source and plan recorded, and
+nothing from it is republished.
 
 ### 13.7 Components
 
@@ -1299,7 +1315,8 @@ What the reference borrows from the strongest model found in research
   Guidelines rule file, which prefers Title Case for buttons; record it
   where that skill is used.
 - Never copied: Phloom's rosette mark, its pink and plum palette, its type
-  pairing and its text.
+  pairing, and its documentation prose, which carries no license and is
+  paraphrased in Tidefern's own voice wherever a principle is reused.
 
 ### 13.9 Accessibility targets
 
