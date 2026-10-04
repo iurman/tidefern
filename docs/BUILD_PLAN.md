@@ -66,8 +66,8 @@ on; it never sits waiting on them.
 | Id  | Task                                                                                                                                                                                       | Needs  | Status | Owner | Evidence |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------ | ----- | -------- |
 | A1  | Repository intake: read the documents, run `pnpm check` and `pnpm test:e2e`, record versions and results in the progress log                                                               |        | todo   |       |          |
-| A2  | Confirm the Vercel project (`apps/web` root, Node 24, `iad1`) is connected and that `deploy-verify.yml` passed on a preview; log the `deployment` event payload once                       |        | todo   |       |          |
-| A3  | Neon project on Postgres 18 with `production`, `staging` and `dev` branches; `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in Vercel and `.env.local`; history retention 7 days on production | A2     | todo   |       |          |
+| A2 | Owner: connect the Vercel project (`apps/web` root, Node 24, `iad1`), record which plan the team is on (Hobby or Pro), set a usage alert, and confirm `deploy-verify.yml` passed on a preview; agent logs the `deployment` event payload once |  | todo |  |  |
+| A3 | Owner: Neon project on Postgres 18 with `production`, `staging` and `dev` branches, history retention 7 days on production, a consumption notification set; `DATABASE_URL` (the `tidefern_app` role, after the first migration) and `DATABASE_URL_UNPOOLED` in Vercel and `.env.local` | A2 | todo |  |  |
 | A4 | Neon's Vercel integration installed on the project: a branch per preview deployment from `staging` with injected `DATABASE_URL` and `DATABASE_URL_UNPOOLED`; Vercel build command set to `pnpm db:migrate && next build` | A3, B1 | todo |  |  |
 | A5  | GitHub repository settings: required checks, secret scanning with push protection, `VERCEL_AUTOMATION_BYPASS_SECRET`                                                                       | A2     | todo   |       |          |
 
@@ -75,7 +75,7 @@ on; it never sits waiting on them.
 
 | Id  | Task                                                                                                                                       | Needs    | Status | Owner | Evidence |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------ | ----- | -------- |
-| B1 | Package skeleton: drizzle config, pooled client with `attachDatabasePool`, migration runner, root `db:generate`, `db:migrate`, `db:seed` scripts, the hand-written first migration creating `tidefern_app` with its grants, `withActor()` helper, PGlite test harness. Accepts: `pnpm db:migrate` applies the committed journal to PGlite in the harness | A1 | todo |  |  |
+| B1 | Package skeleton: drizzle config, pooled client with `attachDatabasePool`, migration runner, root `db:generate`, `db:migrate`, `db:seed` scripts, the hand-written first migration creating `tidefern_app` with its grants, `withActor()` and `withSystem()` helpers, PGlite test harness. Accepts: `pnpm db:migrate` applies the committed journal to PGlite in the harness | A1 | todo |  |  |
 | B2 | Identity and profile schema: generated Better Auth tables, `profiles` with time zone, stage and units, `subject_keys` | B1, C1 | todo |  |  |
 | B3 | Relationship schema: `households`, `household_members`, `invitations`, `grants` with `child_id`, `consents` | B1 | todo |  |  |
 | B4  | Cycle schema: `cycle_entries`, `entry_symptoms`, `cycle_predictions`, vocabulary seed                                                      | B1       | todo   |       |          |
