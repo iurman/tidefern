@@ -1143,10 +1143,21 @@ EB Garamond and Plus Jakarta Sans.
 
 Files: the roman Newsreader file is the optical-size build (both axes, 132
 KB) so browsers serve the sturdier cut at 16 px and the higher-contrast cut
-at display sizes with no CSS; the Newsreader italic is the weight-only
-build because the product uses one italic; Figtree ships roman and italic.
+at display sizes with no CSS. The Newsreader italic is the weight-only
+build (64 KB; the optical-size italic is 147 KB) and it is kept knowingly:
+`next/font/local` preloads every file in a `src` array on every route,
+and the estimate sentence that uses it is a signature element on most
+authenticated screens. The roman file comes first in `src` so the Times
+New Roman fallback metrics are computed from it. Figtree ships roman and
+italic (21 KB). Two facts about the fontsource builds from verification:
+their weight-only Newsreader file is a fixed opsz 16 instance, and they
+drop the `case`, `sups` and `ordn` features the upstream TTFs carry; the
+product needs none of them, and if a tracked uppercase label ever needs
+case-sensitive punctuation the build subsets the google/fonts TTF with
+`pyftsubset --layout-features+=case,tnum,pnum --name-IDs+=13,14` instead.
 Self-hosted Latin subsets from fontsource 5.3.0 with the OFL text beside
-them (the license requires it for distributed copies) and both copyright
+them (the WOFF2 files carry only the license URL, not the license text,
+so the sidecar file is what satisfies the OFL) and both copyright
 lines on the credits page; `next/font/local` with `display: swap`, weight
 ranges, and `adjustFontFallback` set to Times New Roman for the serif and
 Arial for the sans. The wordmark is outlined SVG geometry from Newsreader
