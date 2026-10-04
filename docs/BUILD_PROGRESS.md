@@ -130,6 +130,37 @@ plan and runbook. Accepted findings and what changed:
 
 Checks after the changes: `pnpm check` green (25 unit tests), 9 browser
 tests green including the nonce assertion and the audio activation test.
-Remaining critics (operations and cost, design system and brand, product
-and legal) and the research verification pass are recorded below as they
-land.
+Remaining critics and the research verification pass are recorded below as
+they land.
+
+### Review outcomes, part 2 (2026-10-04)
+
+- Design system and brand critic: tokens now carry a kind and the surfaces
+  they sit on; `pnpm tokens:contrast` measures all 96 pairings and gates
+  `pnpm check` and CI; light accent, success and danger were darkened to
+  pass; the stylesheet emits a `prefers-color-scheme` block and the `html`
+  element no longer hard-codes a theme, so the system theme renders
+  without JavaScript (browser test added, which caught the hard-coded
+  attribute); sound preference is tri-state with token-driven cues and
+  haptics; the tide animation is finite; mono and small brand variants
+  exist; architecture 13.1 to 13.10 and 14.1 record the rules.
+- Product and legal critic: consent is modelled as the Act defines it
+  (own step, unchecked, categories, purposes, processors, withdrawal
+  sentence, `text_hash`); free text left the day entry (`NoteInput` with a
+  `journal.private` default, storage map in 8.2, serializer projection
+  rule in 8.3); the pregnancy-ending rules, due-date history, postpartum
+  content, pointing-to-care sentence, age attestation and child-data
+  questions are written in 8.4; the HBNR and MHMDA rows cite the actual
+  mechanics; an FDA general-wellness row and a claims register (J8) were
+  added; `/health-privacy` is a separate page linked from every public
+  page by its required label, shipped now as a marked draft with a smoke
+  test; notifications stay generic by email in Phase 1 and partner
+  notifications are a per-person switch; the homepage's three overstated
+  promises were rewritten; `packages/core` cycle math now uses the six-day
+  window ending on ovulation, ignores logging gaps in the irregularity
+  check, declines to predict without a plausible cycle, scales
+  uncertainty, and supports `since` for the post-pregnancy reset (23 unit
+  tests).
+
+Checks after the changes: `pnpm check` green (28 unit tests), 12 browser
+tests green.

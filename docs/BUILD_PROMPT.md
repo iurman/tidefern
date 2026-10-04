@@ -20,9 +20,10 @@ Tidefern: "Life flows together." One app for every chapter, from cycles to
 pregnancy to childhood, for a person and the people who grow with her.
 Calm, warm, trustworthy, and private by construction. Partner access is an
 explicit, revocable grant per category, never a side effect of being in the
-same household. Nothing watches the user: no analytics, no trackers, no
-third-party scripts. Free text is encrypted with a per-user key. Deleting
-an account deletes the data, including from backups.
+same household. Nothing watches the user: no third-party analytics, no
+trackers, no third-party scripts. Free text is encrypted with a per-subject
+key. Deleting an account deletes the data, including from database history,
+within the window the health privacy page states.
 
 The architecture is decided. Read `docs/ARCHITECTURE.md` completely before
 changing anything; it records every decision and its evidence, and the
@@ -123,6 +124,18 @@ Never claim a test you did not run or a browser you did not open.
 - Follow `humanize.md`. Product copy is warm, plain and calm. Predictions
   are estimates and say so. Never diagnose or alarm. Handle loss, irregular
   cycles and missed days without judgment.
+- Tidefern is a general wellness product. Never describe predictions, the
+  fertile window or cycle data as a way to prevent pregnancy, as birth
+  control, as safe days, or as a way to conceive, diagnose infertility or
+  detect pregnancy. Every fertile-window element carries the line "An
+  estimate from your logged dates. Not a form of contraception." Copy that
+  names a disease, a condition or a treatment goes to the owner before it
+  ships, and lands in `docs/CLAIMS.md`.
+- Pointing to care uses one sentence everywhere: "This is worth mentioning
+  to your doctor or midwife." It never names a condition and never shows
+  on a partner's view (architecture 8.4).
+- Every privacy claim on a public page traces to a row in architecture
+  sections 9 to 11. A claim that cannot be traced is removed, not softened.
 - Never write a version number from memory. Resolve from the registry and
   respect the pins in `pnpm-lock.yaml`. The Drizzle docs site shows the v1
   release-candidate API; this repository pins 0.45.x. The Better Auth CLI
@@ -310,8 +323,11 @@ Build each route from `docs/ARCHITECTURE.md` section 12 against the real
 API through `packages/api-client`, with loading, empty, error and pending
 states designed. Server components render the data; client components
 exist only for interaction. Every mutation shows its outcome honestly.
-Onboarding records the collection consent separately from any sharing
-consent and sets the time zone before anything else is logged. `/today`
+Onboarding records the collection consent as its own step with one
+unchecked control, separate from any terms acceptance, showing the
+categories collected, the purposes and specific uses, the processors by
+name and the withdrawal sentence (architecture 7.4 and 12.1), and sets the
+time zone before anything else is logged. `/today`
 shows the cycle day or pregnancy week, the prediction with its uncertainty
 and the sentence that it is an estimate, the quick log, and exactly what a
 partner can see right now. `/sharing` describes each category in plain
@@ -320,11 +336,15 @@ the sound mute, the notification detail level with a lock-screen preview,
 devices, export and account deletion with re-authentication.
 
 Public pages: refresh the home to present the product truthfully (in
-development, household release), draft `/privacy` as a consumer health data
-privacy policy generated from the vendor table in the architecture record
-with every owner input listed and the draft clearly marked, `/terms` and
-`/accessibility` as drafts, and `/account/delete` as the public entry
-point. Drafts stay out of the sitemap and carry noindex until the owner
+development, household release), complete the two draft policy pages the
+scaffold ships: `/privacy` (account data, device storage, email) and
+`/health-privacy` (the Consumer Health Data Privacy Policy, containing only
+the five RCW 19.373.020 items and the request and appeal path, generated
+from the vendor table and the retention schedule in the architecture
+record, every owner input marked `[OWNER]`), keep the footer link labelled
+exactly "Consumer Health Data Privacy Policy" on every public page, add
+`/terms` and `/accessibility` as drafts, and `/account/delete` as the
+public entry point. Drafts stay out of the sitemap and carry noindex until the owner
 approves them. Never invent a company address, inbox, refund term or
 operative legal promise.
 

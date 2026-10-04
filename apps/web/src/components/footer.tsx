@@ -7,13 +7,20 @@ export function Footer() {
       <div className="footer-grid">
         <p className="footer-line">{brand.closing}.</p>
         <nav aria-label="Footer">
+          <Link href="/privacy" prefetch={false}>
+            Privacy
+          </Link>
+          <Link href="/health-privacy" prefetch={false}>
+            Consumer Health Data Privacy Policy
+          </Link>
           <Link href="/design" prefetch={false}>
             Design system
           </Link>
           <a href="/api/v1/openapi.json">API contract</a>
         </nav>
         <p className="footer-note">
-          No analytics, no trackers. Theme and sound choices are remembered on this device only.
+          No third-party analytics, no trackers. Theme and sound choices are remembered on this
+          device only.
         </p>
       </div>
     </footer>

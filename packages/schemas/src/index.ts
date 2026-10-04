@@ -63,7 +63,12 @@ export type ShareCategory = z.infer<typeof ShareCategory>;
 export const ShareLevel = z.enum(["summary", "read", "contribute"]);
 export type ShareLevel = z.infer<typeof ShareLevel>;
 
-export const Stage = z.enum(["cycle", "pregnancy", "postpartum"]);
+/**
+ * A body stage, or `none` for a household member who tracks nothing about
+ * her own body (a partner, a guardian). Nobody is asked to pick a stage that
+ * is not theirs.
+ */
+export const Stage = z.enum(["none", "cycle", "pregnancy", "postpartum"]);
 export type Stage = z.infer<typeof Stage>;
 
 /**
@@ -101,12 +106,29 @@ export type SymptomCode = z.infer<typeof SymptomCode>;
 export const MoodCode = z.enum(["low", "steady", "bright"]);
 export type MoodCode = z.infer<typeof MoodCode>;
 
+/**
+ * A day entry holds only vocabulary values. Free text never rides on it: the
+ * day sheet's note is a separate `NoteInput`, stored encrypted in its own row
+ * under `journal.private` unless the author files it elsewhere, so a grant to
+ * symptoms can never carry a private note along.
+ */
 export const CycleEntryInput = z.object({
   id: z.uuid().optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
   date: CalendarDate,
   flow: FlowLevel.optional(),
   symptoms: z.array(SymptomCode).max(30).default([]),
   mood: MoodCode.optional(),
-  note: z.string().max(4000).optional().describe("Encrypted at rest with the subject's data key"),
 });
 export type CycleEntryInput = z.infer<typeof CycleEntryInput>;
+
+/** Where a note is filed decides who can ever read it. Private is the default. */
+export const NoteCategory = z.enum(["journal.private", "cycle.symptoms", "pregnancy.overview"]);
+export type NoteCategory = z.infer<typeof NoteCategory>;
+
+export const NoteInput = z.object({
+  id: z.uuid().optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
+  date: CalendarDate,
+  category: NoteCategory.default("journal.private"),
+  body: z.string().min(1).max(4000).describe("Encrypted at rest with the subject's data key"),
+});
+export type NoteInput = z.infer<typeof NoteInput>;

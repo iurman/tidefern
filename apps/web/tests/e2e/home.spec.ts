@@ -148,3 +148,26 @@ test("nothing animates forever", async ({ page }) => {
   );
   expect(infinite).toBe(0);
 });
+
+test("every public page links the health privacy policy by its required name @smoke", async ({
+  page,
+  request,
+}) => {
+  await page.goto("/");
+  const footer = page.getByRole("contentinfo");
+  await expect(
+    footer.getByRole("link", { name: "Consumer Health Data Privacy Policy" }),
+  ).toBeVisible();
+  await expect(footer.getByRole("link", { name: "Privacy", exact: true })).toBeVisible();
+  for (const path of ["/privacy", "/health-privacy"]) {
+    const response = await request.get(path);
+    expect(response.status(), path).toBe(200);
+    const html = await response.text();
+    expect(html, `${path} stays out of search while a draft`).toMatch(/noindex/);
+  }
+  await page.goto("/health-privacy");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+    "Consumer Health Data Privacy Policy",
+  );
+  await expect(page.getByText("Draft, not yet reviewed")).toBeVisible();
+});

@@ -27,15 +27,15 @@ const principles = [
   },
   {
     title: "Nothing watching",
-    text: "No analytics, advertising or session recording anywhere in the product.",
+    text: "No third-party analytics, advertising or session recording. We keep daily counts of how the product is used, never a record of who.",
   },
   {
     title: "Private notes stay private",
-    text: "Free text is encrypted with a key that belongs to you alone.",
+    text: "Notes are encrypted on our servers with a key made for you. Only you, and the people you grant, can read them.",
   },
   {
     title: "Delete means delete",
-    text: "Closing your account removes your data, including from backups.",
+    text: "Closing your account deletes your data within 14 days, including from our database history. You can undo for 7 days.",
   },
 ];
 
