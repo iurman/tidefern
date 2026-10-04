@@ -29,15 +29,22 @@ which only the owner performs.
 1. Create the project on Postgres 18 in `us-east-1` (next to Vercel `iad1`).
 2. Branches: `production` (default), `staging` (from production, before any
    real data exists), `dev`. Set production history retention to 7 days.
-3. Create the application login role `tidefern_app` in the console (the
-   build marks it `.existing()` in Drizzle) and record its password as a
-   sensitive variable.
-4. Install the Neon GitHub integration on the repository; it stores
-   `NEON_API_KEY` (secret) and `NEON_PROJECT_ID` (variable) for the preview
-   branch workflow.
-5. Copy the pooled and direct connection strings into Vercel as
-   `DATABASE_URL` and `DATABASE_URL_UNPOOLED` for production and, from the
-   `staging` branch, for preview.
+3. Do not create roles in the console: console roles join
+   `neon_superuser`, which bypasses row level security. The first migration
+   creates `tidefern_app` (no login, no bypass) with its grants. After that
+   migration has run on a branch that serves an app, run `ALTER ROLE
+   tidefern_app LOGIN PASSWORD '<secret>'` once in the SQL editor and store
+   that role's pooled connection string as `DATABASE_URL` for the matching
+   environment. Child branches inherit the role.
+4. Skip the Neon GitHub integration; previews are handled by Neon's Vercel
+   integration in the next step, and CI never holds a database credential.
+5. Install Neon's Vercel integration on the Tidefern project with the
+   `staging` branch as the parent for previews. It creates a branch per
+   preview deployment and injects `DATABASE_URL` and
+   `DATABASE_URL_UNPOOLED`. For production, set `DATABASE_URL` to the
+   `tidefern_app` pooled string and `DATABASE_URL_UNPOOLED` to the owner's
+   direct string. Set the build command to `pnpm db:migrate && next build`
+   once `packages/db` exists.
 
 ### GitHub
 
@@ -82,8 +89,9 @@ pnpm test:e2e                    # Playwright against the production build
 pnpm dev                         # http://localhost:3000
 ```
 
-Playwright downloads its Chromium build on first run; set
-`PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to reuse an installed browser.
+Playwright's browser is a separate install: `pnpm --filter web exec
+playwright install chromium` (with `--with-deps` where you have sudo), or
+set `PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH` to reuse an installed browser.
 
 ## Environment variables
 
@@ -138,3 +146,6 @@ an hour once production exists, modeled on the owner's Aviune repository.
   (entity name, contact address, inbox), and attorney review before Phase 2.
 - Vercel Pro upgrade and a cloud KMS before anyone outside the household
   signs up.
+- Vercel access for this tooling: the connected Vercel token was not
+  authorized for the team scope, so the project must be imported by the
+  owner (steps above) or the connector re-authorized with team scope.

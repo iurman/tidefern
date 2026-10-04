@@ -99,19 +99,13 @@ request exercises both. The route handler is four lines:
 
 ```ts
 // apps/web/src/app/api/[[...route]]/route.ts
+import { after } from "next/server";
 import { createApp } from "@tidefern/api";
 export const maxDuration = 60;
-const app = createApp({ basePath: "/api" });
+// The /api prefix is permanent inside the package. defer lets the API run post-response work without importing a framework.
+const app = createApp({ defer: (task) => after(task) });
 const handler = (request: Request) => app.fetch(request);
-export {
-  handler as GET,
-  handler as POST,
-  handler as PUT,
-  handler as PATCH,
-  handler as DELETE,
-  handler as HEAD,
-  handler as OPTIONS,
-};
+export { handler as GET, handler as POST, handler as PUT, handler as PATCH, handler as DELETE, handler as HEAD, handler as OPTIONS };
 ```
 
 Evidence: Hono's Next.js guide documents exactly this mount
@@ -136,13 +130,20 @@ per-file export. Better Auth's own Next.js handler also just returns
 
 ### 3.3 Splitting the API out later
 
-Add `apps/api/src/index.ts` containing `import { createApp } from
-"@tidefern/api"; export default createApp({ basePath: "/" });`, create a
+The `/api` prefix is permanent: every path in the committed OpenAPI
+document starts with `/api/v1`, generated clients are keyed by those
+paths, and installed mobile builds depend on them. A split deployment
+therefore answers at `https://api.<domain>/api/v1/...`. Add
+`apps/api/src/index.ts` containing `import { createApp } from
+"@tidefern/api"; import { waitUntil } from "@vercel/functions"; export
+default createApp({ defer: (task) => waitUntil(task()) });`, create a
 second Vercel project with Root Directory `apps/api`, point `api.` at it,
-turn on CORS for the web origin in the Hono app and set
-`trustedOrigins` in Better Auth. Nothing inside `packages/api` changes.
-Vercel deploys a default-exported Hono app from `src/index.ts` with zero
-configuration.
+turn on CORS for the web origin in the Hono app, add the origin to Better
+Auth's `trustedOrigins`, and keep a rewrite from `/api/:path*` on the web
+origin to the new host until every installed client has moved. Nothing
+inside `packages/api` changes. Vercel deploys a default-exported Hono app
+from `src/index.ts` with zero configuration.
+
 
 ### 3.4 Vercel project settings
 
@@ -150,12 +151,12 @@ configuration.
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Framework preset                        | Next.js                                                                                                                                                       |
 | Root Directory                          | `apps/web` (Include source files outside of the Root Directory stays on, which is the default)                                                                |
-| Build command                           | default (`next build`); install at the repository root from `pnpm-lock.yaml`                                                                                  |
+| Build command | `pnpm db:migrate && next build` once `packages/db` exists (Phase 1); until then default. Migrations run in every Vercel environment against that environment's direct database URL, so previews and production migrate themselves |
 | Node.js version                         | 24.x (from `engines.node` at the root)                                                                                                                        |
 | Skip deployment for unaffected projects | On (default for GitHub-connected pnpm workspaces)                                                                                                             |
 | Deployment protection                   | Vercel Authentication on for previews; a Protection Bypass for Automation secret stored as `VERCEL_AUTOMATION_BYPASS_SECRET` in GitHub for the smoke workflow |
 | Functions region                        | `iad1`, declared in `apps/web/vercel.json`, next to Neon `us-east-1`                                                                                          |
-| Environment variables                   | Section 16; sensitive values marked sensitive; previews never receive production secrets                                                                      |
+| Environment variables | Section 17; sensitive values marked sensitive; previews never receive production secrets. Database URLs for previews are injected per deployment by Neon's Vercel integration |
 
 ### 3.5 DNS
 
@@ -186,14 +187,16 @@ tidefern/
   openapi/v1.json              Committed contract; CI fails on drift
   docs/                        This file, build prompt, plan, progress, runbook, research, design records
   .agents/skills/              Canonical project skills; .claude/skills links to them
-  .github/workflows/           ci.yml, deploy-verify.yml, codeql.yml (+ neon-preview.yml in Phase 1)
+  .github/workflows/           ci.yml, deploy-verify.yml, codeql.yml (+ the oasdiff step in Phase 1)
 ```
 
 Dependency direction, enforced by ESLint `no-restricted-imports` in every
 package and reviewed in pull requests:
 
-- `apps/web` may import `api` (only to mount it), `api-client`, `schemas`,
-  `core`, `design-tokens`. Never `db`, `auth` server code or `crypto`.
+- `apps/web` may import `api` (only to mount it and hand it `after`),
+  `api-client`, `schemas`, `core`, `design-tokens`, and the auth client.
+  Never `db`, `auth` server code or `crypto`; its ESLint config forbids
+  those imports.
 - `packages/api` is the only package that imports `db`, `auth` and `crypto`.
   It never imports `next`, `react` or `react-dom`.
 - `core` and `schemas` have no I/O dependencies; `core` runs identically in
@@ -251,9 +254,32 @@ tests and the production build. CI runs the same plus the browser suite.
   from the same objects that validate requests. `app.doc("/v1/openapi.json")`
   serves it; `pnpm openapi:generate` writes `openapi/v1.json`, and CI fails
   when the committed file differs from the code.
-- Opaque string ids (UUIDv7 generated server-side), ISO 8601 calendar dates
-  as `YYYY-MM-DD`, explicit enums, cursor pagination, `Idempotency-Key` on
-  every create.
+- Ids are UUIDv7. Create requests may carry an `id` (validated as v7) so
+  an offline client can mint it; the server mints one when absent and
+  answers 409 `conflict` if the id already exists under another subject.
+  Day entries are addressed by `(subject, date)` and written with `PUT`.
+  ISO 8601 calendar dates as `YYYY-MM-DD`; instants as RFC 3339 UTC with
+  exactly three fractional digits and `Z` (Swift clients configure
+  `.iso8601WithFractionalSeconds`).
+- Every controlled vocabulary (flow, symptoms, moods, event kinds) is a
+  closed `z.enum` exported from `packages/schemas` and seeded into the
+  database from the same list. Free text is accepted only in fields the API
+  encrypts. Adding an enum value is additive; clients render an unknown
+  value as "other" and never fail to parse; clients ignore unknown fields.
+- Lists return `{ items, nextCursor }` with opaque base64url cursors;
+  `limit` is 1 to 200, default 50. Syncable lists accept `updatedSince`
+  (RFC 3339) and include tombstones. Updates accept `If-Match: <version>`
+  and answer 409 `conflict` on a stale version.
+- Non-browser clients send `X-Tidefern-Client: <platform>/<semver>`; the
+  API logs it (allowlisted) and may answer 426 `upgrade_required` for a
+  build below the minimum supported version.
+- `GET /api/v1/me` returns the actor id, profile, active grants and session
+  expiry, so every client bootstraps the same way.
+- Step-up: sensitive operations (section 6.1) require a fresh
+  authentication marker on the session, and the API answers 401
+  `unauthenticated` with `detail: "fresh_authentication_required"` so a
+  phone with a bearer session can re-authenticate in place.
+
 - Health data travels only in request and response bodies. `GET
 /api/v1/entries?from=2026-09-01` is fine; `GET /api/v1/symptoms/nausea` is
   not. Vercel runtime logs record paths and query strings.
@@ -262,21 +288,31 @@ tests and the production build. CI runs the same plus the browser suite.
   `/api/:path*`). Nothing personal is ever cached by a shared cache or by
   Next.js data caching.
 - One error shape: RFC 9457 problem details with `application/problem+json`,
-  a stable machine `code` (`validation_failed`, `unauthenticated`,
-  `forbidden`, `not_found`, `rate_limited`, `internal`), and field errors
-  for 422. Error messages never echo health data. Denied access returns 404,
-  not 403, so existence is not revealed.
+  `type` as a stable URN (`urn:tidefern:problem:<code>`, so it never depends
+  on a domain) and a closed `code` list: `validation_failed`,
+  `unauthenticated`, `forbidden` (origin and cross-site failures only),
+  `not_found`, `conflict`, `rate_limited`, `upgrade_required`, `internal`.
+  Field errors accompany 422. Error messages never echo health data.
+  Denied access returns 404, not 403, so existence is not revealed. The
+  committed document keeps `servers: [{ url: "/" }]`; native clients are
+  constructed with an explicit server URL, never from that list.
+
 - Validation failures go through the `defaultHook` so the 422 shape is
   identical for every route.
 
 ### 5.2 Clients
 
-- Web: `packages/api-client` wraps `openapi-fetch` 0.17 with types from
-  `openapi-typescript` 7.x generated from `openapi/v1.json`, `credentials:
-"include"` and the idempotency header helper. Server components call the
-  same client with forwarded cookies; nothing in `apps/web` touches the
-  database.
-- Expo (Phase 3): the same package.
+- Web: `packages/api-client` exports `createApiClient({ baseUrl, fetch,
+  headers, generateId })` over `openapi-fetch` 0.17 with types from
+  `openapi-typescript` 7.x generated from `openapi/v1.json`. In the browser
+  `fetch` is `window.fetch` with `credentials: "include"`. In server
+  components `fetch` is the mounted Hono app's own `app.fetch` with the
+  incoming request headers forwarded: in process, no second function
+  invocation, no preview-protection problem. Nothing in `apps/web` touches
+  the database or the auth server configuration; the session is read
+  through `GET /api/v1/me`.
+
+- Expo (Phase 3): the same package with the Better Auth Expo client's fetch (SecureStore cookie attached) and a UUIDv7 generator that does not depend on `crypto.randomUUID`.
 - Swift and Kotlin (Phase 4, only if earned): `swift-openapi-generator` and
   OpenAPI Generator from the same file.
 - Contract drift gate: `pnpm openapi:check` today; add `oasdiff breaking`
@@ -285,11 +321,20 @@ tests and the production build. CI runs the same plus the browser suite.
 
 ### 5.3 Idempotency
 
-`POST` creates accept an `Idempotency-Key` header (UUID). The API stores
-`(actor_id, key) -> response status, body hash, created_at` in an
-`idempotency_keys` table with a 24-hour expiry, returns the stored response
-on replay, and rejects a replay with a different body hash with 409. Mobile
-retries on flaky networks never double-log a symptom.
+`POST` creates require an `Idempotency-Key` header (a UUID, 400 when
+missing). The middleware inserts `(actor_id, key, route, request_hash,
+state = in_flight)` into `idempotency_keys` before the handler runs, with a
+unique index on `(actor_id, key)`:
+
+- a duplicate insert while the first request is still `in_flight` returns
+  409, so two concurrent retries cannot both execute;
+- a `done` row with a different `request_hash` returns 409;
+- a `done` row with the same hash is replayed by re-reading the stored
+  `resource_id` through `can()` and `withActor()` and re-rendering the
+  response, so revocation and deletion still apply;
+- response bodies are never stored, because for day entries and notes they
+  would hold decrypted free text outside the encrypted columns;
+- a daily job deletes rows older than 24 hours.
 
 ## 6. Identity and sessions
 
@@ -313,7 +358,10 @@ app.all("/auth/*", (c) => auth.handler(c.req.raw));
 | Rate limiting          | `rateLimit: { enabled: true, storage: "database" }`                                                                                                                                                       | Memory storage is per instance and useless on serverless. Vercel Firewall rules on auth, invite and upload paths once on Pro.                                                                                             |
 | Sessions               | 7-day expiry, 1-day `updateAge`; "Devices" screen backed by `listSessions`, `revokeSession`, `revokeOtherSessions`                                                                                        | Short enough for health data; revocation is a Phase 1 feature.                                                                                                                                                            |
 | Plugins not enabled    | organization, SSO, OIDC provider, MCP, device authorization, anonymous, admin, SCIM                                                                                                                       | Not needed; several carried 2026 advisories. Smaller surface, fewer advisories that apply.                                                                                                                                |
-| Bot protection         | Cloudflare Turnstile on sign-up, reset and invite acceptance at the Phase 2 gate                                                                                                                          | Works without proxying traffic.                                                                                                                                                                                           |
+| Bot protection | Cloudflare Turnstile on sign-up, reset and invite acceptance at the Phase 2 gate | Works without proxying traffic. Its script is the one documented CSP exception, allowed only on those three unauthenticated routes, and it joins the processor list. |
+| Fresh authentication | Required (password, passkey or TOTP within the last ten minutes) before account deletion, data export, creating or changing a grant, sending an invitation, revoking devices and changing email or password | A password reset through email must never equal full access to sharing and export. |
+| Recovery | Email-based account recovery with a 24-hour cooling-off period, notification to every session, and no recovery for a lost passkey plus lost backup codes except through that path | Documented so support never improvises. |
+| Passkey relying party | `rpID` is the apex registrable domain, never `www`; passkeys are enabled only once that domain is live. Previews run on their own origin, so passkeys registered there are throwaway by design and preview browser tests sign in with email and password | Passkeys registered on a `vercel.app` host would not carry over to the real domain. |
 
 Pin the version, read release notes, update deliberately; Renovate groups
 Better Auth separately and never automerges it.
@@ -326,8 +374,8 @@ Better Auth separately and never automerges it.
 | Expo (Phase 3)   | Better Auth cookie sent as a header by `@better-auth/expo` | `expo-secure-store`; clear stale sessions on first launch after reinstall (iOS Keychain survives uninstall); exclude from Android Auto Backup. |
 | Native (Phase 4) | `Authorization: Bearer` via the bearer plugin              | iOS Keychain (`WhenUnlockedThisDeviceOnly`), Android Keystore-backed storage.                                                                  |
 
-Server components read the session with `auth.api.getSession({ headers:
-await headers() })` and render authenticated pages dynamically; no
+Server components read the session through `GET /api/v1/me` on the
+in-process client (section 5.2) and render authenticated pages dynamically; no
 authenticated route is ever statically rendered or ISR-cached.
 
 ## 7. Data: Neon Postgres with Drizzle
@@ -351,29 +399,60 @@ authenticated route is ever statically rendered or ISR-cached.
   driver for Node runtimes. Fluid compute shares one process across
   invocations, which is what makes the module-scope pool correct.
 - Migrations: `drizzle-kit generate` locally (SQL and journal committed),
-  `drizzle-kit migrate` in CI and on deploy against the direct URL, plus a
-  `packages/db/scripts/migrate.ts` runner for Neon preview branches. `push`
+  applied by `pnpm db:migrate` (a runner over `drizzle-orm/node-postgres/migrator`)
+  as the first half of the Vercel build command in every environment,
+  against that environment's direct URL. CI applies the same migrations to
+  PGlite in tests; CI never holds a production database credential. `push`
   is for local scratch only. Never `drizzle-kit up` (that is the v1 upgrade
   path, not this version).
 
 ### 7.2 Row level security from the first migration
 
-- A dedicated login role `tidefern_app` owns no tables. Every user-data
-  table is created with `.enableRLS()` and `pgPolicy` statements that read
-  `current_setting('app.actor_id', true)`. Migrations run as the owner role;
-  the app connects as the owner too but drops privileges per request.
+Roles created in the Neon console, CLI or API are members of
+`neon_superuser`, which carries `BYPASSRLS`, so a console-created
+application role would silently bypass every policy. The role is therefore
+created by SQL, and the application never connects as a role that can
+bypass RLS:
+
+- The first migration is hand-written SQL: `CREATE ROLE tidefern_app
+  NOLOGIN NOBYPASSRLS NOINHERIT` (guarded by a `DO` block so PGlite and
+  every Neon branch get it the same way), `GRANT tidefern_app TO
+  CURRENT_USER WITH SET TRUE`, `GRANT USAGE ON SCHEMA public TO
+  tidefern_app`, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN
+  SCHEMA public TO tidefern_app`, `GRANT USAGE ON ALL SEQUENCES IN SCHEMA
+  public TO tidefern_app`, and matching `ALTER DEFAULT PRIVILEGES`.
+- Once per Neon branch that serves an app (production, staging), the owner
+  runs `ALTER ROLE tidefern_app LOGIN PASSWORD '<secret>'` in the SQL
+  editor and stores that role's pooled URL as `DATABASE_URL`. Child branches
+  inherit the role and password. The owner role's URLs are used only by
+  migrations (`DATABASE_URL_UNPOOLED`) and the job runner. So every app
+  query already runs as a role that cannot bypass RLS, whether or not it is
+  inside the actor wrapper.
+- Every user-data table is created with `.enableRLS()` and also `ALTER
+  TABLE ... FORCE ROW LEVEL SECURITY`. Policies are split by command:
+  `FOR SELECT USING can_read(subject_id, category)`, `FOR INSERT WITH CHECK
+  can_write(subject_id, category)`, `FOR UPDATE USING ... WITH CHECK
+  can_write(...)`, `FOR DELETE USING subject_id = current_actor()`. The
+  helpers are `SECURITY DEFINER`, `STABLE`, with `SET search_path =
+  pg_catalog, public`, and they mirror `can()` in `core`: ownership,
+  guardianship, and an active grant at a sufficient level.
 - `withActor(actorId, fn)` in `packages/db` opens a transaction, runs
   `select set_config('app.actor_id', $1, true)` and `SET LOCAL ROLE
-tidefern_app`, runs `fn`, and commits; the role and setting reset with the
-  transaction. Verified on PGlite (Postgres 18.3 engine) during research;
-  re-verify once through Neon's pooler on the first branch (open question in
-  `docs/research/RESEARCH.md`).
-- Policies encode ownership and active grants through a `SECURITY DEFINER`
-  helper `can_read(subject_id, category)`, mirroring `can()` in `core`.
-  Application code remains the primary control; RLS is the backstop.
-- Background jobs run as the owner role with an explicit actor context when
-  they act for a user. Better Auth tables and `rate_limit` are not
-  user-scoped and stay outside RLS.
+  tidefern_app` (a no-op when already that role, and the way tests on
+  PGlite drop from its superuser default), runs `fn`, and commits; the
+  setting and the role reset with the transaction. Verified on PGlite
+  (Postgres 18.3 engine) during research.
+- Task B10 records, on a real Neon branch, the output of `SELECT rolname,
+  rolsuper, rolbypassrls FROM pg_roles WHERE rolname IN (current_user,
+  'tidefern_app')` and a query that returns zero rows for a foreign
+  subject, both from the pooled `tidefern_app` connection. Whether a
+  SQL-created login role authenticates through Neon's proxy is the one open
+  question (section 21); if it does not, the fallback is the owner
+  connection with `SET LOCAL ROLE` inside `withActor()` and a lint rule
+  that forbids database access outside it.
+- Better Auth tables, `rate_limit`, `jobs` and `idempotency_keys` are not
+  subject-scoped and stay outside RLS. Jobs run as the owner role with an
+  explicit actor context when they act for a user.
 - Cost: every request is a transaction, and policies need indexes on the
   columns they check (section 7.4). Acceptable at this scale.
 
@@ -384,12 +463,15 @@ tidefern_app`, runs `fn`, and commits; the role and setting reset with the
   subject's zone (`todayIn()` in `core`), never from the server clock.
 - UUIDv7 primary keys generated in the API (`crypto.randomUUID` is v4; use
   a v7 generator) for index locality; never sequential ids in URLs.
-- `created_at`, `updated_at` as `timestamptz`; `updated_at` and
-  client-generated entry ids exist from day one so an offline queue on
-  mobile can sync later without a schema change.
-- Hard delete by default. Soft delete only where a grace period is a
-  product requirement (account closure has a short undo window before the
-  DEK is destroyed).
+- `created_at`, `updated_at` as `timestamptz`. Every syncable table also
+  carries an integer `version` and writes a content-free `deleted_at`
+  tombstone (purged after 30 days, immediately on account deletion), so an
+  offline queue on mobile can sync later without a schema change.
+- Hard delete by default. The one grace period: closing an account locks it
+  and revokes every session and grant at once, then waits seven days
+  during which signing in again cancels the closure; the DEK is destroyed
+  at the end of that window, or immediately when the person chooses
+  "delete now". Nothing else is soft-deleted.
 - Encrypted columns are `bytea` holding `version || iv || tag ||
 ciphertext`; a sibling `kek_version` column records the wrapping key.
 
@@ -398,17 +480,18 @@ ciphertext`; a sibling `kek_version` column records the wrapping key.
 | Area                | Tables                                                                                                  | Notes                                                                                                                                                                                                                                         |
 | ------------------- | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Identity            | `user`, `session`, `account`, `verification`, `two_factor`, `passkey`, `rate_limit`                     | Generated by Better Auth.                                                                                                                                                                                                                     |
-| Profile             | `profiles`                                                                                              | `user_id`, display name, `time_zone`, `stage` (`cycle`, `pregnancy`, `postpartum`), `week_start`, units, notification detail level, `wrapped_dek`, `kek_provider`, `kek_version`.                                                             |
+| Profile | `profiles` | `user_id`, display name, `time_zone`, `stage` (`cycle`, `pregnancy`, `postpartum`), `week_start`, units, notification detail level. |
+| Keys | `subject_keys` | One row per subject, user or child: `subject_id`, `kind`, `wrapped_dek`, `kek_provider`, `kek_version`. Kept in its own table so no logical dump ever includes it. |
 | Relationships       | `households`, `household_members`, `invitations`                                                        | Role (`owner`, `partner`, `guardian`), status; invitations hold a hashed single-use token, 72-hour expiry, inviter. Membership grants nothing by itself.                                                                                      |
-| Consent and sharing | `grants`, `consents`                                                                                    | `grants`: owner, grantee, category, level, created, revoked. `consents`: user, purpose (`collection`, `sharing`, `notifications`), policy version, granted, withdrawn. Separate consents for collection and sharing are an MHMDA requirement. |
+| Consent and sharing | `grants`, `consents` | `grants`: owner, grantee, category, level, `child_id` (required when category is `child`), created, revoked. `consents`: user, purpose (`collection`, `sharing`, `notifications`), policy version, granted, withdrawn. Separate consents for collection and sharing are an MHMDA requirement. |
 | Cycle               | `cycle_entries`, `entry_symptoms`, `cycle_predictions`                                                  | Entries keyed by `(subject_id, date)`; symptoms and moods from a controlled vocabulary; predictions are derived rows regenerated on write.                                                                                                    |
 | Pregnancy           | `pregnancies`, `pregnancy_events`                                                                       | Several pregnancies per subject over time; `due_date`, `dating_method` (`lmp`, `ultrasound`, `manual`); events for appointments, milestones, symptoms; an `ended_at` with a reason kept private and handled gently in the UI.                 |
 | Children            | `children`, `child_guardians`, `child_events`, `child_measurements`                                     | Child belongs to a household; guardians many-to-many; measurements typed with units (`g`, `cm`, with imperial display).                                                                                                                       |
 | Notes and media     | `notes`, `photos`, `photo_variants`                                                                     | `subject_id`, `author_id`, category; encrypted body and caption; photos hold object keys, status, dimensions, never original filenames or EXIF.                                                                                               |
-| Platform            | `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `push_devices` (Phase 3) | Append-only audit (actor, action, subject, category, time, no content); outbox jobs with ids-only payloads; export and deletion state machines; allowlisted first-party counters.                                                             |
+| Platform | `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `push_devices` (Phase 3) | Append-only audit (actor, action, subject, category, time, no content; partner reads deduplicated per actor, subject, category and day; kept one year); outbox jobs with ids-only payloads; idempotency rows (24 hours); export and deletion state machines; `product_events` holds daily aggregate counts only, never a user id, kept 90 days. Better Auth stores IP address and user agent per session; sessions are deleted at expiry. |
 
 Key indexes: `(subject_id, date)` on entries; `(grantee_id, owner_id,
-category) WHERE revoked_at IS NULL` on grants; `(subject_id, created_at)`
+category, child_id) WHERE revoked_at IS NULL` on grants; `(subject_id, created_at)`
 on audit events; `(status, run_after)` on jobs; `(actor_id, key)` on
 idempotency keys.
 
@@ -417,12 +500,14 @@ idempotency keys.
 | Environment      | Database                                                                                                                                                                             | Secrets                                             | Data                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | -------------------------------------- |
 | Local            | PGlite in tests; a personal Neon branch or local Postgres 18 for `pnpm dev`                                                                                                          | `.env.local`, never real keys                       | Seeded synthetic data (`pnpm db:seed`) |
-| Preview (per PR) | Neon branch created by `neondatabase/create-branch-action@v6` from the `staging` branch, never from production, `expires_at` 7 days; deleted on close with `delete-branch-action@v3` | Preview-scoped Vercel variables, a preview KEK      | Seeded synthetic data                  |
+| Preview (per PR) | A Neon branch per preview deployment, created and injected (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`) by Neon's Vercel integration from the `staging` branch, never from production, and deleted when the preview is; migrated and seeded by the build command | Preview-scoped Vercel variables, a preview KEK, console email transport | Seeded synthetic data only, so a leaked preview secret reaches nothing real |
 | Staging          | Separate Neon branch (or project at Scale)                                                                                                                                           | Staging credentials and KEK                         | Seeded synthetic data                  |
 | Production       | Neon production branch, pooled connections, 7-day history                                                                                                                            | Production credentials and KEK, R2 bucket (Phase 2) | Real users                             |
 
 Preview deployments stay behind Vercel Authentication. Production data never
-leaves production; "reset from parent" refreshes the shared dev branch.
+leaves production; "reset from parent" refreshes the shared dev branch. A
+GitHub Actions workflow cannot create the preview branch in time for a
+Git-triggered Vercel build, which is why the Neon integration owns it.
 
 ## 8. Domain model and authorization
 
@@ -452,7 +537,7 @@ leaves production; "reset from parent" refreshes the shared dev branch.
 | `journal.private`    | Her private notes                                               | Never shareable              |
 | `pregnancy.overview` | Week, due date, milestones, appointments                        | Off                          |
 | `pregnancy.photos`   | Bump photos and journal entries                                 | Off                          |
-| `child` (per child)  | Milestones, measurements, feeds, sleep, photos                  | Guardians: full. Others: off |
+| `child` (one grant per child, `child_id` set) | Milestones, measurements, feeds, sleep, photos | Guardians: full. Others: off |
 
 `summary` is a product feature as much as a security level: "show my
 partner how I'm doing" can be a status card, not raw logs.
@@ -462,7 +547,9 @@ partner how I'm doing" can be a status card, not raw logs.
 1. Authenticate (Better Auth session) and load the actor with their
    guardianships and active grants.
 2. Resolve the target resource and its `subject_id` on the server. Never
-   trust a subject or owner id sent by the client.
+   trust a subject or owner id sent by the client. For child records the
+   subject is the child; `can()` resolves guardianship and child grants by
+   `childId`, and a grant for child A never reaches child B.
 3. `can(actor, action, resource)`: owner allows; guardian of the child
    allows; an active grant covering the category at a sufficient level
    allows; otherwise 404.
@@ -474,7 +561,17 @@ partner how I'm doing" can be a status card, not raw logs.
    (summarized per day), every partner write, and every grant change.
 
 The scaffold already ships `can()` with tests for owner, guardian, summary
-versus read, revoked grants, the private journal and the no-share rule.
+versus read, revoked grants, per-child scoping, the private journal and the
+no-share rule.
+
+Invitations: a hashed single-use token bound to the invitee's email,
+72-hour expiry; acceptance happens only by `POST` after the invitee has
+signed in with that verified email, never on a `GET` link (cookies ride on
+top-level navigations); an invitee who already belongs to another
+household is asked which household to join; the inviter sees pending
+invitations and can withdraw them. Cross-site request checks (`Origin` and
+`Sec-Fetch-Site`) and a database-backed per-actor rate limit apply to every
+`/api/v1` mutation from Phase 1.
 
 ### 8.4 Edge cases designed now, built when needed
 
@@ -490,16 +587,30 @@ grants are symmetric and separate).
 ### 9.1 Hard rules
 
 - No advertising SDKs, pixels, session replay or third-party analytics
-  anywhere, including the marketing site and sign-up path. A strict CSP
-  (`script-src 'self'`) makes a future dependency unable to add one
-  silently.
+  anywhere, including the marketing site and sign-up path. The CSP issues
+  a per-request nonce from `apps/web/src/proxy.ts` and sets `script-src
+  'self' 'nonce-...' 'strict-dynamic'`; `unsafe-inline` never appears in
+  `script-src`, so a future dependency cannot load a script from another
+  origin or inject one inline. Every HTML route renders per request as a
+  consequence, which is the documented cost of a nonce policy. The browser
+  suite asserts the header on every run.
 - No third-party scripts on authenticated pages, ever.
 - No health data in URLs, query strings, page titles, push text, email
   subjects, cache keys, job names or log lines. Route names are neutral:
   `/today`, `/calendar`, `/journal`, `/family`, `/settings`. Even "visited
   `/pregnancy`" is consumer health data under MHMDA's "derived" clause.
 - Allowlist logging: a structured logger that emits only route template,
-  status, latency, request id and a hashed user id. Never bodies.
+  status, latency, request id and an HMAC-SHA256 of the user id under a
+  per-environment secret (`LOG_HMAC_SECRET`); a bare hash of a UUID is
+  reversible by anyone holding the user table. Never bodies, never query
+  strings.
+- Phase 2 photos: `POST /api/v1/uploads` with `{ purpose, contentType,
+  byteLength }` returns `{ uploadId, url, method, headers, expiresAt }`,
+  and `POST /api/v1/photos` finalizes with `{ uploadId, subjectId,
+  caption }`. The browser upload needs `connect-src` to gain exactly one
+  R2 origin and the bucket's CORS to allow `PUT` from the site origin only;
+  if that is unwanted, uploads proxy through the API and the CSP stays
+  unchanged.
 - Every SDK and vendor is a processor. `docs/LAUNCH_RUNBOOK.md` keeps the
   list of vendors, what each receives and the terms that cover it.
 
@@ -513,14 +624,16 @@ stage, ids, because predictions, calendars and filtering query them.
 Design (verified against Node 24 `crypto` docs and the AWS KMS data-key
 pattern during research):
 
-1. Each user gets a random 32-byte data encryption key (DEK) at sign-up,
-   stored only wrapped.
+1. Each subject gets a random 32-byte data encryption key (DEK): a user at
+   sign-up, a child when the child is created. Keys live only wrapped in
+   `subject_keys`. Child rows are encrypted with the child's key, so a
+   co-guardian keeps reading them after the other guardian leaves.
 2. A key encryption key (KEK) wraps DEKs. `KeyProvider` is an interface:
    `EnvKeyProvider` reads `TIDEFERN_KEK_V1` (32 random bytes, base64, a
    sensitive Vercel variable) in Phase 1; `AwsKmsKeyProvider`
    (`GenerateDataKey` and `Decrypt` with an encryption context) replaces it
-   at the Phase 2 gate by re-wrapping DEKs in a background job. `profiles`
-   records `kek_provider` and `kek_version` per user.
+   at the Phase 2 gate by re-wrapping DEKs in a background job.
+   `subject_keys` records `kek_provider` and `kek_version` per subject.
 3. Fields are encrypted with AES-256-GCM, a fresh random 12-byte IV per
    value, a 16-byte tag, and additional authenticated data of `table:column:
 row_id` so ciphertext cannot be moved between rows. Stored as
@@ -528,9 +641,13 @@ row_id` so ciphertext cannot be moved between rows. Stored as
 4. The API unwraps a user's DEK on request and caches it in memory for the
    request only. Shared data is decrypted with the owner's DEK after `can()`
    approves, so grants never share keys.
-5. Account deletion destroys the wrapped DEK first; encrypted fields in the
-   live database and in every backup become unreadable immediately
-   (crypto-shredding). The row deletion job follows.
+5. Account deletion destroys the user's wrapped DEK, which makes the live
+   rows unreadable at once, then deletes the rows. Copies of the wrapped
+   key exist only in Neon's point-in-time history and age out with it
+   (7 days on Launch); Phase 1 keeps no other backup, and any logical dump
+   added later excludes `subject_keys`. A child's DEK is destroyed only
+   when the last guardian leaves. A KEK version is retired only after
+   every history window that could hold keys wrapped under it has passed.
 6. KEK rotation yearly (new version, re-wrap DEKs); per-user DEK rotation
    only after a suspected compromise.
 
@@ -545,7 +662,7 @@ opt-in "sealed journal" after Phase 2.
 | Network interception                         | TLS everywhere, HSTS, no plaintext endpoints                                                  |
 | Stolen disk or provider media                | Neon and R2 encryption at rest                                                                |
 | Leaked database dump, branch or credentials  | Field-level encryption of free text; structured data still protected by authorization and RLS |
-| Backup read after a user deleted her account | Crypto-shredding of the DEK                                                                   |
+| Backup read after a user deleted her account | DEK destroyed; the only copies live in Neon history and age out within the window; no other backup holds keys |
 | Over-broad developer or support access       | Encrypted fields unreadable without the KEK; KMS access audited after Phase 2                 |
 | Compromised API at runtime                   | Not solved by encryption; least privilege, short-lived credentials, monitoring                |
 
@@ -560,7 +677,7 @@ caching on anything personal.
 
 | Vendor     | Receives                                                          | Terms                  |
 | ---------- | ----------------------------------------------------------------- | ---------------------- |
-| Vercel     | Request paths (opaque), logs (allowlisted), environment variables | Vercel DPA, self-serve |
+| Vercel | Runs the application: processes all data in plaintext in memory, holds the Phase 1 KEK and every other secret, stores allowlisted logs | Vercel DPA, self-serve |
 | Neon       | The database (free text encrypted)                                | Neon DPA, self-serve   |
 | GitHub     | Source code, CI logs (no secrets, no data)                        | GitHub terms           |
 | Resend     | Email addresses, generic subjects and bodies                      | Resend DPA, self-serve |
@@ -589,12 +706,17 @@ A `jobs` table (`id`, `type`, `payload_json` with ids only, `run_after`,
 `attempts`, `status`, `locked_at`, `last_error`) written in the same
 transaction as the change that caused it. Three drains:
 
-1. Inline: after a request commits, `after()` from `next/server` tries to
-   drain the jobs it just enqueued (claim with `SELECT ... FOR UPDATE SKIP
-LOCKED`). On Hobby this is how reminders and emails go out promptly.
-2. Scheduled: a `GET /api/v1/internal/jobs/run` endpoint protected by
-   `CRON_SECRET`, scheduled in `vercel.json` once a day on Hobby and every
-   minute on Pro.
+1. Inline: after a request commits, the API calls the `defer` callback it
+   was constructed with (`after()` from `next/server` in the Next.js host,
+   a plain task starter in a standalone host) to drain the jobs it just
+   enqueued (claim with `SELECT ... FOR UPDATE SKIP LOCKED`). On Hobby this
+   is how reminders and emails go out promptly. The API never imports a
+   framework.
+2. Scheduled: a `GET /api/internal/jobs/run` endpoint outside the public
+   `/v1` contract and excluded from the OpenAPI document, protected by a
+   bearer `CRON_SECRET` compared in constant time, failing closed with 404
+   when the secret is unset (previews, local); scheduled in `vercel.json`
+   once a day on Hobby and every minute on Pro.
 3. Manual: `pnpm jobs:run` locally.
 
 Every job is idempotent, retried with backoff and moved to `dead` after five
@@ -605,7 +727,9 @@ so they survive function timeouts. Job types are neutral (`reminder.send`,
 
 ### 10.2 Email
 
-Resend, one sender domain authenticated in Cloudflare DNS. Subjects and
+Resend, one sender domain authenticated in Cloudflare DNS. Every link in
+an email is an https URL on the apex, never a custom scheme, so it can
+become a universal link in Phase 3. Subjects and
 bodies are generic ("Your Tidefern reminder", "Confirm your email"), never
 health content. A console transport renders mail to stdout in development
 and tests; CI never sends.
@@ -623,13 +747,13 @@ chosen text; content loads after the app opens.
 
 | Right                  | Mechanism                                                                                                                                                                                                                                                                 |
 | ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Export                 | `data_requests` job builds a ZIP (JSON per area, processed photos later), stores it privately, emails a generic "your export is ready" link to a signed-in page; expires in 7 days                                                                                        |
+| Export | Phase 1: generated on demand and streamed to the signed-in person after fresh authentication, never stored (a ZIP of decrypted notes in Postgres would bypass field encryption). Phase 2: stored encrypted in private R2 with a 7-day expiry and a generic "your export is ready" email |
 | Revoke a partner       | `revoked_at` on grants takes effect on the next request; partner-authored notes about her stay hers; audit event written                                                                                                                                                  |
 | Remove a partner       | Revoke all grants and end membership; child co-guardianship handled explicitly                                                                                                                                                                                            |
 | Delete a note or photo | Hard delete, variants removed in the same job                                                                                                                                                                                                                             |
 | Devices                | Session list and revocation through Better Auth                                                                                                                                                                                                                           |
 | Activity               | Read view over `audit_events`: sign-ins, devices, grants given and revoked, partner contributions, exports                                                                                                                                                                |
-| Close account          | Re-authenticate; revoke sessions; partners lose access; destroy the DEK; delete rows and objects; transfer co-owned children; keep a minimal tombstone only if needed to honor the request; a public web page offers the same entry point (required by Google Play later) |
+| Close account | Fresh authentication; sessions and grants revoked and the account locked at once; a 7-day undo window (or "delete now"); then the user's DEK is destroyed, rows and objects deleted, co-owned children transferred to the remaining guardian, processors notified (the Resend contact and its email logs deleted), and a minimal tombstone kept only if needed to honor the request; a public web page offers the same entry point (required by Google Play later) |
 
 ## 12. Product surface for the first web release
 
@@ -890,7 +1014,12 @@ before a gesture.
 | `apps/web`         | Playwright + axe against the production build                                               | Navigation, theme and sound persistence, forms and their failure states, keyboard paths, 320 px reflow, both themes, security headers, no indexing on previews, design-reference tools |
 | Contract           | `pnpm openapi:check`, `oasdiff breaking` (Phase 1)                                          | No silent breaking change                                                                                                                                                              |
 | Visual             | `apps/web/scripts/capture.mjs`                                                              | Screenshots of key routes in both themes at desktop and phone widths for human review in `docs/design/QA.md`                                                                           |
-| Performance        | Lighthouse 13.x on the production build, mobile throttling                                  | Budgets: 1.5 MB initial transfer, 200 KB compressed first-route JavaScript, LCP 2.5 s, CLS 0.1 as lab proxies; recorded with tool version and conditions                               |
+| Performance | Lighthouse 13.x on the production build, mobile throttling | Budgets: 1.5 MB initial transfer, 200 KB compressed first-route JavaScript, LCP 2.5 s, CLS 0.1 as lab proxies; recorded with tool version and conditions |
+| Security, required | Vitest and Playwright | `withActor()` runs as a role with `rolbypassrls = false`; an insert by a `summary` grantee is rejected by RLS; a query for a foreign subject returns zero rows; `script-src` carries a nonce and no `unsafe-inline`; log lines contain no body fields; idempotency replay never reads a stored body; the job runner answers 404 without `CRON_SECRET`; a child grant for one child does not reach another; a child note survives the author's account closure when a co-guardian exists |
+
+Browser tests sign in against the production build through seeded,
+already-verified users and a mail capture endpoint that exists only when
+`E2E_MAIL_CAPTURE=true`, which Vercel production never sets.
 
 Rules: tests protect behavior at real boundaries; no giant snapshots, no
 constant-matching assertions, no fake successful integrations. A failing
@@ -906,22 +1035,23 @@ separately from an application defect.
 | `ci.yml`                           | push to `main`, pull requests                                     | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
 | `deploy-verify.yml`                | `deployment_status` success (sent by Vercel for every deployment) | curl the deployed home page and `/api/v1/health` with the protection bypass header, then the `@smoke` Playwright subset against the deployment URL; failure shows on the pull request                 |
 | `codeql.yml`                       | push, pull requests, weekly                                       | CodeQL security-and-quality for JavaScript and TypeScript                                                                                                                                             |
-| `neon-preview.yml` (Phase 1)       | pull request opened, synchronized, closed                         | Create a Neon branch from `staging` with a 7-day expiry, run migrations and seed against it, pass its URLs to the preview build; delete on close                                                      |
+| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` against the base branch's `openapi/v1.json`, failing on breaking changes |
 | Renovate (`.github/renovate.json`) | weekly                                                            | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged                                                                                                 |
 
-Required status checks on `main`: `verify` (the CI job) and `CodeQL`. Secret scanning with push protection on. Secrets the
-workflows read: `VERCEL_AUTOMATION_BYPASS_SECRET`; Phase 1 adds
-`NEON_API_KEY` (secret) and `NEON_PROJECT_ID` (variable) installed by the
-Neon GitHub integration.
+Required status checks on `main`: `verify` (the CI job) and `CodeQL`.
+Secret scanning with push protection on. The only secret the workflows
+read is `VERCEL_AUTOMATION_BYPASS_SECRET`; CI never holds a database
+credential. Preview databases are handled by Neon's Vercel integration,
+not by Actions.
 
 ### 16.2 Deployment flow
 
 1. An agent or a person pushes a branch and opens a pull request.
 2. CI runs. Vercel builds a preview from the same commit and reports a
    GitHub deployment; `deploy-verify.yml` smoke tests it.
-3. A reviewer (or the owner) merges. Vercel builds production from `main`,
-   migrations run as a build step against the direct database URL before
-   `next build` (Phase 1), and the smoke workflow verifies production.
+3. A reviewer (or the owner) merges. Vercel builds production from `main`
+   with `pnpm db:migrate && next build` (Phase 1) against the production
+   direct URL, and the smoke workflow verifies production.
 4. Rollback is "promote the previous deployment" in Vercel; a migration
    that cannot be rolled forward gets a corrective migration, never a
    history rewrite.
@@ -945,9 +1075,11 @@ what, why, checks run, evidence, build-plan task ids.
 | `DATABASE_URL`                          | all                    | Pooled Neon string for the app                                                                                    |
 | `DATABASE_URL_UNPOOLED`                 | build and CI           | Direct string for migrations only                                                                                 |
 | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL` | all                    | Session signing and the auth base URL                                                                             |
-| `TIDEFERN_KEK_V1`                       | all, sensitive         | Phase 1 key encryption key; different per environment                                                             |
+| `TIDEFERN_KEK_V1` | all, sensitive | Phase 1 key encryption key, base64 of 32 random bytes; different per environment; the suffix is the `kek_version` stored in `subject_keys` |
+| `LOG_HMAC_SECRET` | all, sensitive | Keys the HMAC of user ids in log lines |
+| `E2E_MAIL_CAPTURE` | local and CI only | Exposes a test-only endpoint that returns the last verification link; never set on Vercel |
 | `RESEND_API_KEY`, `EMAIL_FROM`          | preview and production | Transactional email; local uses the console transport                                                             |
-| `CRON_SECRET`                           | production             | Authorizes the scheduled job runner                                                                               |
+| `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset |
 | `R2_*`                                  | Phase 2                | Private bucket credentials scoped to one bucket                                                                   |
 | `VERCEL_AUTOMATION_BYPASS_SECRET`       | GitHub only            | Lets the smoke workflow reach protected previews                                                                  |
 
@@ -984,10 +1116,13 @@ has a case.
 
 ## 19. Operations
 
-- Backups: Neon point-in-time restore (7 days on Launch, 30 on Scale) plus
-  a weekly encrypted `pg_dump` to a locked-down bucket with 30-day
-  retention so deletions still propagate. Restore drill every quarter: RPO
-  under 1 hour, RTO under 4 hours.
+- Backups: Neon point-in-time restore (7 days on Launch, 30 on Scale) is
+  the Phase 1 backup; there is deliberately no logical dump, because a dump
+  would copy wrapped keys outside the window that crypto-shredding relies
+  on. If a dump is ever added, it excludes `subject_keys` and names its
+  store, key custody and retention here. Restore rehearsal: restore
+  production to a branch, run the smoke suite against it, record the time
+  (task J7, then quarterly). RPO under 1 hour, RTO under 4 hours.
 - Monitoring in Phase 1: Vercel logs and the deployment smoke workflow; a
   scheduled uptime check of `/` and `/api/v1/health` (GitHub Actions cron,
   like the owner's Aviune repository). Phase 2 adds scrubbed error tracking
@@ -1031,7 +1166,8 @@ has a case.
 
 | Question                                                                                                                     | Owner                 | When                                   |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------- |
-| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected (verified on PGlite only)?                     | build agent           | first Neon branch in Phase 1           |
+| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected (verified on PGlite only)? | build agent | first Neon branch in Phase 1 |
+| Does a SQL-created `LOGIN` role (`tidefern_app`) authenticate through Neon's proxy with a password, so the app never connects as a `BYPASSRLS` role? Fallback in section 7.2 | build agent | task B10 |
 | Does the first Vercel build succeed with pnpm 10 from `packageManager` and the monorepo root install?                        | owner and build agent | first preview                          |
 | Exact `deployment.environment` strings Vercel sends (`Preview`, `Production`) for the smoke workflow filter                  | build agent           | first pull request; log the event once |
 | When `eslint-config-next` supports ESLint 10 so the web app can leave 9                                                      | Renovate              | monthly                                |

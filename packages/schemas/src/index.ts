@@ -12,12 +12,28 @@ export const Id = z.uuid().describe("Opaque resource identifier");
 
 /** RFC 9457 problem details. The only error shape the API emits. */
 export const Problem = z.object({
-  type: z.url().describe("A URI that identifies the problem type"),
+  type: z
+    .string()
+    .regex(/^urn:tidefern:problem:[a-z_]+$/)
+    .describe("A stable URN that identifies the problem type; it never depends on a domain"),
   title: z.string(),
   status: z.int().min(400).max(599),
   detail: z.string().optional(),
   instance: z.string().optional(),
-  code: z.string().describe("Stable machine-readable code such as validation_failed"),
+  code: z
+    .enum([
+      "validation_failed",
+      "unauthenticated",
+      "forbidden",
+      "not_found",
+      "conflict",
+      "rate_limited",
+      "upgrade_required",
+      "internal",
+    ])
+    .describe(
+      "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found.",
+    ),
   errors: z
     .array(z.object({ path: z.string(), message: z.string() }))
     .optional()
@@ -50,11 +66,47 @@ export type ShareLevel = z.infer<typeof ShareLevel>;
 export const Stage = z.enum(["cycle", "pregnancy", "postpartum"]);
 export type Stage = z.infer<typeof Stage>;
 
+/**
+ * Controlled vocabularies are closed enums so they can live in plaintext
+ * columns and render as pickers in every client. Free text goes only into
+ * fields the API encrypts. Adding a value is additive; clients show an
+ * unknown value as "other" and never fail to parse.
+ */
+export const FlowLevel = z.enum(["none", "spotting", "light", "medium", "heavy"]);
+export type FlowLevel = z.infer<typeof FlowLevel>;
+
+export const SymptomCode = z.enum([
+  "cramps",
+  "headache",
+  "bloating",
+  "fatigue",
+  "tender_breasts",
+  "nausea",
+  "backache",
+  "acne",
+  "cravings",
+  "insomnia",
+  "spotting",
+  "discharge",
+  "hot_flashes",
+  "dizziness",
+  "mood_swings",
+  "anxiety",
+  "low_energy",
+  "high_energy",
+  "other",
+]);
+export type SymptomCode = z.infer<typeof SymptomCode>;
+
+export const MoodCode = z.enum(["low", "steady", "bright"]);
+export type MoodCode = z.infer<typeof MoodCode>;
+
 export const CycleEntryInput = z.object({
+  id: z.uuid().optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
   date: CalendarDate,
-  flow: z.enum(["none", "spotting", "light", "medium", "heavy"]).optional(),
-  symptoms: z.array(z.string().min(1).max(40)).max(30).default([]),
-  mood: z.enum(["low", "steady", "bright"]).optional(),
+  flow: FlowLevel.optional(),
+  symptoms: z.array(SymptomCode).max(30).default([]),
+  mood: MoodCode.optional(),
   note: z.string().max(4000).optional().describe("Encrypted at rest with the subject's data key"),
 });
 export type CycleEntryInput = z.infer<typeof CycleEntryInput>;

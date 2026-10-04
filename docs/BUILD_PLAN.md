@@ -6,21 +6,40 @@ narrative log.
 
 ## Protocol
 
-1. Before starting a task, set its Status to `claimed` and its Owner to your
-   agent name or handle in the same commit as your first change, or in a
-   small commit of its own. Never work on a task someone else has claimed.
-2. Move it to `in progress` when code lands on a branch, `blocked` with a
+1. A claim is two things: the Status `claimed` and Owner edit on a branch
+   named `claude/<id>-<topic>`, committed on its own, and an open draft
+   pull request whose title begins with the id. Before claiming, run `git
+   fetch origin`, read `origin/main:docs/BUILD_PLAN.md` (not your working
+   copy), then check open pull requests and remote branches
+   (`claude/<id>-*`) for the id. If any shows it, the task is taken; on a
+   tie the lower pull request number wins and the other agent closes
+   theirs. Never work on a task someone else has claimed.
+2. Move it to `in progress` when code lands on the branch, `blocked` with a
    note when you cannot proceed, and `done` only when the Evidence column
    points at something real: a merged pull request, a passing command with
    its output recorded in the progress log, a screenshot path in
    `docs/design/qa/`.
-3. Keep dependencies honest. A task whose `Needs` column lists an open task
-   cannot be claimed until that task is `done`.
+3. Keep dependencies honest. `Needs` is read from `origin/main`; a task
+   whose `Needs` lists a task that is not `done` there cannot be claimed.
 4. Add tasks when you discover them. Give them the next id in their group,
-   never renumber existing ids.
+   never renumber existing ids. Every new generated file adds its check to
+   the root `check` script and to the "Generated files" step of `ci.yml`
+   in the same pull request.
 5. One lead agent owns groups G and H (visual direction and shared UI).
-   Subagents may take any task in B through F, I and J whose files do not
-   overlap with an open task.
+   Subagents may take any task in B through F, I and J. Each group names
+   the paths it touches; two open tasks never share a path. Plan and log
+   edits go in their own small commits so they merge cleanly.
+
+Paths by group: A touches `docs/`, `.github/`, `apps/web/vercel.json`; B
+touches `packages/db/`; C touches `packages/auth/` and
+`apps/web/src/lib/auth-client.ts`; D touches `packages/crypto/`; E touches
+`packages/api/`, `packages/schemas/`, `packages/api-client/`,
+`openapi/`; F touches `packages/core/`; G touches `packages/design-tokens/`,
+`apps/web/src/app/design/`, `apps/web/src/components/`,
+`apps/web/src/app/globals.css`, `docs/design/`; H touches the named route
+directories under `apps/web/src/app/`; I touches `packages/api/src/jobs/`
+and `packages/db/src/schema/jobs.ts`; J touches `apps/web/tests/`,
+`docs/design/QA.md`, `docs/LAUNCH_RUNBOOK.md`, `.github/workflows/`.
 
 Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 
@@ -44,54 +63,54 @@ Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 | A1  | Repository intake: read the documents, run `pnpm check` and `pnpm test:e2e`, record versions and results in the progress log                                                               |        | todo   |       |          |
 | A2  | Confirm the Vercel project (`apps/web` root, Node 24, `iad1`) is connected and that `deploy-verify.yml` passed on a preview; log the `deployment` event payload once                       |        | todo   |       |          |
 | A3  | Neon project on Postgres 18 with `production`, `staging` and `dev` branches; `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in Vercel and `.env.local`; history retention 7 days on production | A2     | todo   |       |          |
-| A4  | `neon-preview.yml`: branch per pull request from `staging` with expiry, migrate and seed, delete on close                                                                                  | A3, B1 | todo   |       |          |
+| A4 | Neon's Vercel integration installed on the project: a branch per preview deployment from `staging` with injected `DATABASE_URL` and `DATABASE_URL_UNPOOLED`; Vercel build command set to `pnpm db:migrate && next build` | A3, B1 | todo |  |  |
 | A5  | GitHub repository settings: required checks, secret scanning with push protection, `VERCEL_AUTOMATION_BYPASS_SECRET`                                                                       | A2     | todo   |       |          |
 
 ### B. Data layer (`packages/db`)
 
 | Id  | Task                                                                                                                                       | Needs    | Status | Owner | Evidence |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------ | ----- | -------- |
-| B1  | Package skeleton: drizzle config, pooled client with `attachDatabasePool`, migration runner, `withActor()` helper, PGlite test harness     | A1       | todo   |       |          |
-| B2  | Identity and profile schema: generated Better Auth tables, `profiles` with time zone, stage, units, DEK columns                            | B1, C1   | todo   |       |          |
-| B3  | Relationship schema: `households`, `household_members`, `invitations`, `grants`, `consents`                                                | B1       | todo   |       |          |
+| B1 | Package skeleton: drizzle config, pooled client with `attachDatabasePool`, migration runner, root `db:generate`, `db:migrate`, `db:seed` scripts, the hand-written first migration creating `tidefern_app` with its grants, `withActor()` helper, PGlite test harness. Accepts: `pnpm db:migrate` applies the committed journal to PGlite in the harness | A1 | todo |  |  |
+| B2 | Identity and profile schema: generated Better Auth tables, `profiles` with time zone, stage and units, `subject_keys` | B1, C1 | todo |  |  |
+| B3 | Relationship schema: `households`, `household_members`, `invitations`, `grants` with `child_id`, `consents` | B1 | todo |  |  |
 | B4  | Cycle schema: `cycle_entries`, `entry_symptoms`, `cycle_predictions`, vocabulary seed                                                      | B1       | todo   |       |          |
 | B5  | Pregnancy schema: `pregnancies`, `pregnancy_events`                                                                                        | B1       | todo   |       |          |
 | B6  | Children schema: `children`, `child_guardians`, `child_events`, `child_measurements`                                                       | B1       | todo   |       |          |
 | B7  | Platform schema: `notes`, `photos` (metadata only), `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`          | B1       | todo   |       |          |
-| B8  | RLS policies and `can_read()` helper on every user-data table, with PGlite tests for owner, grant, revoked, private journal and role reset | B2 to B7 | todo   |       |          |
-| B9  | Seed script with two synthetic households covering every stage and grant state                                                             | B2 to B7 | todo   |       |          |
-| B10 | Verify `SET LOCAL ROLE` and `set_config` through Neon's pooler on a real branch; record the result                                         | A3, B8   | todo   |       |          |
+| B8 | RLS with `FORCE ROW LEVEL SECURITY`, split policies and the `can_read()` and `can_write()` helpers on every user-data table, with PGlite tests for owner, grant levels (a `summary` grantee cannot insert), revoked grants, per-child scoping, private journal, zero rows for a foreign subject and role reset | B2 to B7 | todo |  |  |
+| B9 | Deterministic seed script: named personas, dates relative to a frozen "today", two households covering every stage and grant state, encrypted notes written with a development KEK, verified users for browser tests | B2 to B7, D2 | todo |  |  |
+| B10 | On a real Neon branch, from the pooled `tidefern_app` connection: record `SELECT rolname, rolsuper, rolbypassrls FROM pg_roles WHERE rolname IN (current_user, 'tidefern_app')`, confirm `SET LOCAL ROLE` and `set_config` behave through the pooler, and confirm a foreign subject returns zero rows | A3, B8 | todo |  |  |
 
 ### C. Identity (`packages/auth`)
 
 | Id  | Task                                                                                                                                                                                           | Needs  | Status | Owner | Evidence |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ | ----- | -------- |
 | C1  | Better Auth server config (email and password with verification, `revokeSessionsOnPasswordReset`, passkey, TOTP, database rate limiting, 7-day sessions) and `npx auth@latest generate` output | B1     | todo   |       |          |
-| C2  | Mount at `/auth/*` in the Hono app before `/v1`; session middleware that loads the actor with guardianships and grants                                                                         | C1, B3 | todo   |       |          |
+| C2 | Mount at `/auth/*` in the Hono app before `/v1`; session middleware that loads the actor with guardianships and grants; fresh-authentication checks for deletion, export, grants, invitations, devices and credential changes | C1, B3, B6 | todo |  |  |
 | C3  | React client with passkey and 2FA plugins; sign up, sign in, verify, reset and sign out screens with honest pending and failure states                                                         | C2     | todo   |       |          |
 | C4  | Devices screen (list, revoke one, revoke others) and TOTP enrollment with backup codes                                                                                                         | C3     | todo   |       |          |
-| C5  | Email transport: Resend in preview and production, console locally; generic verification and reset templates                                                                                   | C1     | todo   |       |          |
+| C5 | Email transport: Resend in production, console locally and in previews; generic verification and reset templates; the `E2E_MAIL_CAPTURE` endpoint for browser tests, never on Vercel production | C1 | todo |  |  |
 
 ### D. Encryption (`packages/crypto`)
 
 | Id  | Task                                                                                                                                                                           | Needs  | Status | Owner | Evidence |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------ | ------ | ----- | -------- |
-| D1  | Envelope encryption module: `KeyProvider` interface, `EnvKeyProvider`, AES-256-GCM with AAD, versioned ciphertext, tests for round trip, tamper, AAD mismatch and crypto-shred | A1     | todo   |       |          |
-| D2  | DEK provisioning on account creation; field helpers used by the API for notes, captions and free text                                                                          | D1, B2 | todo   |       |          |
+| D1 | Envelope encryption module: `KeyProvider` interface, `EnvKeyProvider` reading `TIDEFERN_KEK_V1` (tests inject a fixed key and never read the environment), AES-256-GCM with AAD, versioned ciphertext, tests for round trip, tamper, AAD mismatch and crypto-shred | A1 | todo |  |  |
+| D2 | DEK provisioning for users at sign-up and children at creation; field helpers used by the API for notes, captions and free text | D1, B2 | todo |  |  |
 
 ### E. API contract (`packages/api`, `packages/schemas`, `packages/api-client`)
 
 | Id  | Task                                                                                         | Needs      | Status | Owner | Evidence |
 | --- | -------------------------------------------------------------------------------------------- | ---------- | ------ | ----- | -------- |
-| E1  | Middleware: actor context, idempotency keys, audit writer, allowlist logger                  | C2, B7     | todo   |       |          |
+| E1 | Middleware: actor context, cross-site request checks, per-actor rate limit on mutations, idempotency keys that never store bodies, audit writer with per-day dedupe, HMAC allowlist logger | C2, B7 | todo |  |  |
 | E2  | Profile and consents routes                                                                  | E1, B2     | todo   |       |          |
 | E3  | Cycle routes: entries by date range, upsert day, predictions, vocabulary                     | E1, B4     | todo   |       |          |
 | E4  | Pregnancy routes: start, dating, events, end with reason                                     | E1, B5     | todo   |       |          |
 | E5  | Children routes: children, guardians, events, measurements with percentiles                  | E1, B6, F1 | todo   |       |          |
 | E6  | Notes routes with encryption and category rules                                              | E1, D2     | todo   |       |          |
-| E7  | Sharing routes: invitations (hashed single-use tokens), grants, revocation, remove partner   | E1, B3     | todo   |       |          |
-| E8  | Activity, export request, account deletion request routes                                    | E1, B7     | todo   |       |          |
-| E9  | `packages/api-client` generated from the spec with a drift gate and `oasdiff breaking` in CI | E2 to E8   | todo   |       |          |
+| E7 | Sharing routes: invitations (hashed single-use tokens bound to the invitee email, accepted only by POST after sign-in), grants with `child_id`, revocation, remove partner | E1, B3 | todo |  |  |
+| E8 | Activity (cursor paginated), on-demand streamed export, account closure with the undo window, all behind fresh authentication | E1, B7 | todo |  |  |
+| E9 | `packages/api-client` generated from the spec, root `client:generate` and `client:check`, and the `oasdiff/oasdiff-action/breaking` step in `ci.yml` | E2 to E8 | todo |  |  |
 
 ### F. Domain (`packages/core`)
 
@@ -119,13 +138,13 @@ Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 | Id  | Task                                                                                                                                                                     | Needs          | Status | Owner | Evidence |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | -------------- | ------ | ----- | -------- |
 | H1  | `/welcome` onboarding with separate collection consent, time zone, stage, first dates, optional passkey                                                                  | C3, E2, G5     | todo   |       |          |
-| H2  | `/today`                                                                                                                                                                 | E3, E4, G5     | todo   |       |          |
-| H3  | `/calendar` and `/log/[date]`                                                                                                                                            | E3, G5         | todo   |       |          |
-| H4  | `/journey` pregnancy and postpartum                                                                                                                                      | E4, G5         | todo   |       |          |
-| H5  | `/family` and `/family/[childId]` with growth chart                                                                                                                      | E5, G5         | todo   |       |          |
-| H6  | `/sharing` with grant descriptions and the invitation flow                                                                                                               | E7, G5         | todo   |       |          |
-| H7  | `/settings`: profile, units, theme with follow-system, sound, notification level, devices, export, delete                                                                | E2, E8, C4, G5 | todo   |       |          |
-| H8  | `/activity`                                                                                                                                                              | E8, G5         | todo   |       |          |
+| H2 | `/today`. Accepts: shows cycle day or pregnancy week, the prediction with uncertainty and the estimate sentence, the quick log, and what each partner can see right now; empty state before the first log | E2, E3, E4, E7, G5 | todo |  |  |
+| H3 | `/calendar` and `/log/[date]`. Accepts: month and list views, predicted period and fertile window drawn with uncertainty, tap a day to open the sheet, flow, symptoms, mood and an encrypted note saved with honest pending and failure states | E3, G5 | todo |  |  |
+| H4 | `/journey`. Accepts: week-by-week view from the due date, dating method visible, appointments and milestones, a gentle end-of-pregnancy path that suppresses reminders, postpartum view after birth | E4, G5 | todo |  |  |
+| H5 | `/family` and `/family/[childId]`. Accepts: children with guardians, feeds, sleep, milestones, measurements with WHO or CDC percentile bands and unit toggle, per-child timeline | E5, G5 | todo |  |  |
+| H6 | `/sharing`. Accepts: each person and category with a plain description of what it reveals before it can be turned on, revoke in one step, invitation sending and withdrawal, acceptance only after sign-in | E7, C5, G5 | todo |  |  |
+| H7 | `/settings`. Accepts: profile, time zone and units, theme with follow-system, sound level and quiet hours, notification detail with a lock-screen preview, devices, export, account closure with fresh authentication and the undo window | E2, E8, C4, G5 | todo |  |  |
+| H8 | `/activity`. Accepts: sign-ins, devices, grants given and revoked, partner contributions and exports from audit events, cursor paginated, no health content | E8, G5 | todo |  |  |
 | H9  | Public pages: home refresh, `/privacy` (consumer health data policy draft with owner inputs listed), `/terms`, `/accessibility`, `/account/delete`, 404 and error polish | G2             | todo   |       |          |
 | H10 | Reminder emails through the outbox with the three-level detail setting                                                                                                   | I1, C5         | todo   |       |          |
 
@@ -133,8 +152,8 @@ Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 
 | Id  | Task                                                                                                                 | Needs      | Status | Owner | Evidence |
 | --- | -------------------------------------------------------------------------------------------------------------------- | ---------- | ------ | ----- | -------- |
-| I1  | Outbox table, inline drain with `after()`, cron endpoint with `CRON_SECRET`, `vercel.json` schedule, `pnpm jobs:run` | B7         | todo   |       |          |
-| I2  | Export and account deletion state machines, DEK destruction first, co-guardian transfer                              | I1, E8, D2 | todo   |       |          |
+| I1 | Outbox table, inline drain through the API's `defer` callback, `/api/internal/jobs/run` failing closed without `CRON_SECRET` (tested), `vercel.json` schedule, root `jobs:run` | B7 | todo |  |  |
+| I2 | Account closure state machine: lock and revoke at once, 7-day undo window or delete now, DEK destruction, row and object deletion, co-guardian transfer, processor notification | I1, E8, D2 | todo |  |  |
 
 ### J. Quality and release
 
@@ -145,4 +164,5 @@ Status values: `todo`, `claimed`, `in progress`, `blocked`, `done`.
 | J3  | Review loops (copy, visual, behavior, motion, performance) logged in `docs/design/QA.md` with screenshots                              | J1       | todo   |       |          |
 | J4  | `docs/LAUNCH_RUNBOOK.md` completed with precise remaining owner inputs                                                                 | J3       | todo   |       |          |
 | J5  | Uptime workflow for `/` and `/api/v1/health`                                                                                           | A2       | todo   |       |          |
-| J6  | Final handoff: preview link, screenshots, verified results, open items                                                                 | J1 to J5 | todo   |       |          |
+| J6 | Final handoff: preview link, screenshots, verified results, open items | J1 to J5, J7 | todo |  |  |
+| J7 | Restore rehearsal: restore production to a Neon branch, run the smoke suite against it, record the time taken | A3, J1 | todo |  |  |

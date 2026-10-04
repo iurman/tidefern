@@ -23,8 +23,19 @@ describe("api", () => {
     expect(response.headers.get("content-type")).toContain("application/problem+json");
     expect(Problem.parse(await response.json()).code).toBe("not_found");
   });
-  it("honors a different mount path for a standalone deployment", async () => {
-    const standalone = createApp({ basePath: "/" });
-    expect((await standalone.request("/v1/health")).status).toBe(200);
+  it("keeps the /api/v1 prefix permanent and runs deferred work the host hands in", async () => {
+    const deferred: Array<() => Promise<void>> = [];
+    const hosted = createApp({ defer: (task) => deferred.push(task) });
+    expect((await hosted.request("/v1/health")).status).toBe(404);
+    expect((await hosted.request("/api/v1/health")).status).toBe(200);
+    const document = (await (await hosted.request("/api/v1/openapi.json")).json()) as {
+      paths: Record<string, unknown>;
+    };
+    expect(Object.keys(document.paths).every((path) => path.startsWith("/api/v1/"))).toBe(true);
+    expect(deferred).toEqual([]);
+  });
+  it("emits problem types as stable URNs with a closed code list", async () => {
+    const body = Problem.parse(await (await app.request("/api/v1/missing")).json());
+    expect(body.type).toBe("urn:tidefern:problem:not_found");
   });
 });

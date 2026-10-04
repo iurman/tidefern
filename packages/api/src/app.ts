@@ -7,13 +7,15 @@ export const API_VERSION = "0.1.0";
 
 export type Defer = (task: () => Promise<void>) => void;
 
+/**
+ * The mount prefix is permanent. Every path in the committed OpenAPI
+ * document starts with /api/v1, installed clients are generated against
+ * those paths, and a standalone deployment answers at the same paths on its
+ * own host. Changing it would be a breaking change for every client.
+ */
+export const API_PREFIX = "/api";
+
 export interface ApiOptions {
-  /**
-   * Mount prefix for the whole app. The web app mounts it at /api, so the
-   * versioned contract answers at /api/v1 and Better Auth at /api/auth. A
-   * standalone deployment can mount at "/" and answer at /v1.
-   */
-  basePath?: string;
   /**
    * Runs work after the response is sent, for example draining outbox jobs
    * the request enqueued. The Next.js host passes `after` from next/server;
@@ -26,10 +28,10 @@ export interface ApiOptions {
 /**
  * The Tidefern API. Framework neutral: it is a Hono app that the Next.js
  * route handler forwards to today and that can run on its own Vercel
- * project, Node, or Workers later without changes here.
+ * project, Node, or Workers later without changes here. A standalone host
+ * passes its own defer (for example waitUntil from @vercel/functions).
  */
 export function createApp(options: ApiOptions = {}) {
-  const basePath = options.basePath ?? "/api";
   const defer: Defer = options.defer ?? ((task) => void task());
   const app = new OpenAPIHono<{ Variables: { defer: Defer } }>({
     defaultHook: (result, c) => {
@@ -43,7 +45,7 @@ export function createApp(options: ApiOptions = {}) {
       }
       return undefined;
     },
-  }).basePath(basePath);
+  }).basePath(API_PREFIX);
 
   app.use("*", async (c, next) => {
     c.set("defer", defer);

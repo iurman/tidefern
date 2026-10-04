@@ -1,7 +1,8 @@
 import type { Context } from "hono";
 import type { Problem } from "@tidefern/schemas";
 
-const PROBLEM_BASE = "https://tidefern.app/problems/";
+// A URN, not a URL: RFC 9457 does not require a resolvable type, and the domain is still an owner input.
+const PROBLEM_BASE = "urn:tidefern:problem:";
 
 export type ProblemCode =
   "not_found" | "validation_failed" | "unauthenticated" | "forbidden" | "rate_limited" | "internal";
@@ -17,7 +18,7 @@ const TITLES: Record<ProblemCode, string> = {
 
 export function problem(
   c: Context,
-  status: 400 | 401 | 403 | 404 | 409 | 422 | 429 | 500,
+  status: 400 | 401 | 403 | 404 | 409 | 422 | 426 | 429 | 500,
   code: ProblemCode,
   extra: Partial<Pick<Problem, "detail" | "errors">> = {},
 ) {
