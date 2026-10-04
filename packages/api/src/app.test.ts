@@ -24,7 +24,7 @@ describe("api", () => {
     expect(Problem.parse(await response.json()).code).toBe("not_found");
   });
   it("honors a different mount path for a standalone deployment", async () => {
-    const standalone = createApp({ basePath: "/v1" });
+    const standalone = createApp({ basePath: "/" });
     expect((await standalone.request("/v1/health")).status).toBe(200);
   });
 });

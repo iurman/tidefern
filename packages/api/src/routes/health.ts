@@ -3,7 +3,7 @@ import { Health } from "@tidefern/schemas";
 
 export const healthRoute = createRoute({
   method: "get",
-  path: "/health",
+  path: "/v1/health",
   tags: ["platform"],
   summary: "Liveness and version",
   responses: {

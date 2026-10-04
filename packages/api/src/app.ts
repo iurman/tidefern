@@ -6,7 +6,11 @@ import { healthRoute } from "./routes/health";
 export const API_VERSION = "0.1.0";
 
 export interface ApiOptions {
-  /** Mount prefix. The web app mounts the API at /api/v1; a standalone deployment may choose /v1. */
+  /**
+   * Mount prefix for the whole app. The web app mounts it at /api, so the
+   * versioned contract answers at /api/v1 and Better Auth at /api/auth. A
+   * standalone deployment can mount at "/" and answer at /v1.
+   */
   basePath?: string;
 }
 
@@ -16,7 +20,7 @@ export interface ApiOptions {
  * project, Node, or Workers later without changes here.
  */
 export function createApp(options: ApiOptions = {}) {
-  const basePath = options.basePath ?? "/api/v1";
+  const basePath = options.basePath ?? "/api";
   const app = new OpenAPIHono({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -38,6 +42,8 @@ export function createApp(options: ApiOptions = {}) {
     c.header("Cache-Control", "private, no-store");
   });
 
+  // Better Auth mounts here in the build: app.all("/auth/*", (c) => auth.handler(c.req.raw))
+
   app.openapi(healthRoute, (c) =>
     c.json(
       {
@@ -50,7 +56,7 @@ export function createApp(options: ApiOptions = {}) {
     ),
   );
 
-  app.doc("/openapi.json", {
+  app.doc("/v1/openapi.json", {
     openapi: "3.1.0",
     info: {
       title: "Tidefern API",
