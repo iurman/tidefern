@@ -21,6 +21,12 @@ which only the owner performs.
    Create a Protection Bypass for Automation secret and store it in GitHub
    as the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`; regenerating
    it later invalidates earlier deployments, so redeploy after a rotation.
+   Until that secret exists every `Verify deployment` run fails with a 401
+   message naming this step, because a deployment's unique URL is itself
+   protected. Also add the GitHub repository variable `PRODUCTION_URL`
+   (Settings, Secrets and variables, Actions, Variables) with the public
+   production origin, for example `https://tidefern.vercel.app`, so the
+   production smoke test checks what people actually reach.
    Firewall: add the one WAF rate-limit rule Hobby allows, on `/api/auth/*`
    keyed by IP (a window of 60 seconds is enough), as defense in depth.
    Escrow: store `TIDEFERN_KEK_V1` and `BETTER_AUTH_SECRET` in the owner's

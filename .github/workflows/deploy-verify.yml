@@ -23,7 +23,9 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      DEPLOY_URL: ${{ github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      # Production is checked on its public domain (repository variable PRODUCTION_URL) when one is set,
+      # because a deployment's unique URL sits behind Vercel Authentication and needs the bypass secret.
+      DEPLOY_URL: ${{ (github.event.deployment.environment == 'Production' && vars.PRODUCTION_URL) || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - name: Check out the deployed commit
@@ -38,6 +40,12 @@ jobs:
           auth=()
           if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
             auth=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+          fi
+          status=$(curl --silent --output /dev/null --write-out "%{http_code}" --location --max-time 30 \
+            "${auth[@]}" "${DEPLOY_URL}/")
+          if [ "$status" = "401" ] && [ -z "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            echo "::error::${DEPLOY_URL} is behind Vercel Authentication and the repository secret VERCEL_AUTOMATION_BYPASS_SECRET is not set. Create a Protection Bypass for Automation secret in the Vercel project and add it to GitHub (docs/LAUNCH_RUNBOOK.md, Vercel step 4); for production you can also set the repository variable PRODUCTION_URL to the public domain."
+            exit 1
           fi
           curl --fail-with-body --silent --show-error --location --max-time 30 --retry 3 --retry-all-errors \
             "${auth[@]}" "${DEPLOY_URL}/" | grep --fixed-strings --quiet "Tidefern"
