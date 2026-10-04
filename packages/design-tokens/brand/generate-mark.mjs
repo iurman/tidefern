@@ -1,165 +1,213 @@
-// Tidefern mark generator: a fern frond unrolling from a sea glass wave.
-// Geometry is computed so leaflets follow the stem tangent and shrink toward the crozier.
 import { writeFileSync } from "node:fs";
-
-const FERN = "#2F4F46",
-  SEA = "#6EA7A0",
-  SAGE = "#B7C9B1",
-  MIST = "#F7F5EF",
-  LEAF_DARK = "#4E7A6B";
 const f = (n) => Math.round(n * 10) / 10;
+const SEA = "#6EA7A0",
+  MIST = "#F7F5EF",
+  FERN = "#2F4F46",
+  STEM = "#7FA084",
+  LEAF = "#7E9C7A";
 
-// Stem: cubic bezier from the wave up and leftward, then a crozier spiral.
-const P0 = [292, 372],
-  P1 = [330, 296],
-  P2 = [318, 196],
-  P3 = [256, 148];
-function bez(t) {
+// Stem: rises from the wave's dip, curves up and left; then a counterclockwise crozier.
+const P0 = [352, 312],
+  P1 = [386, 244],
+  P2 = [356, 164],
+  P3 = [312, 118];
+const bez = (t) => {
   const u = 1 - t;
   return [
     u * u * u * P0[0] + 3 * u * u * t * P1[0] + 3 * u * t * t * P2[0] + t * t * t * P3[0],
     u * u * u * P0[1] + 3 * u * u * t * P1[1] + 3 * u * t * t * P2[1] + t * t * t * P3[1],
   ];
-}
-function bezTangent(t) {
+};
+const tan = (t) => {
   const u = 1 - t;
   const x = 3 * u * u * (P1[0] - P0[0]) + 6 * u * t * (P2[0] - P1[0]) + 3 * t * t * (P3[0] - P2[0]);
   const y = 3 * u * u * (P1[1] - P0[1]) + 6 * u * t * (P2[1] - P1[1]) + 3 * t * t * (P3[1] - P2[1]);
   const l = Math.hypot(x, y);
   return [x / l, y / l];
-}
-// Crozier: spiral starting at P3 heading along the end tangent, curling clockwise inward.
-function spiralPoints() {
-  const [tx, ty] = bezTangent(1);
-  let ang = Math.atan2(ty, tx); // heading
-  let r0 = 48; // initial radius of curvature
+};
+
+function spiral() {
+  const [tx, ty] = tan(1);
+  let ang = Math.atan2(ty, tx);
   const pts = [];
   let [x, y] = P3;
-  const steps = 72,
-    totalTurn = Math.PI * 2.35;
-  for (let i = 0; i <= steps; i++) {
-    const s = i / steps;
-    const r = r0 * Math.pow(0.16, s); // radius shrinks toward the center
-    const dAng = totalTurn / steps;
-    // move along the arc: step length = r * dAng
-    const step = r * dAng;
-    x += Math.cos(ang) * step;
-    y += Math.sin(ang) * step;
-    ang += dAng; // turn clockwise (screen coords: increasing angle turns right/down)
-    pts.push([x, y]);
+  const steps = 90,
+    turn = Math.PI * 2.5,
+    r0 = 74;
+  for (let i = 1; i <= steps; i++) {
+    const s = i / steps,
+      r = r0 * Math.pow(0.12, s),
+      d = turn / steps;
+    x += Math.cos(ang) * r * d;
+    y += Math.sin(ang) * r * d;
+    ang -= d; // counterclockwise on screen
+    pts.push([x, y, ang]);
   }
   return pts;
 }
-function polyToPath(pts) {
-  return pts.map(([x, y], i) => `${i ? "L" : "L"}${f(x)} ${f(y)}`).join(" ");
-}
+const sp = spiral();
+const seg = (a, b) =>
+  sp
+    .slice(a, b)
+    .map(([x, y]) => `L${f(x)} ${f(y)}`)
+    .join(" ");
+const stemBez = `M${P0[0]} ${P0[1]} C${P1[0]} ${P1[1]} ${P2[0]} ${P2[1]} ${P3[0]} ${P3[1]}`;
+// Tapered stem: four stroke widths over the length.
+const stemParts = (color) =>
+  [
+    [stemBez, 26],
+    [`M${P3[0]} ${P3[1]} ${seg(0, 30)}`, 20],
+    [`M${f(sp[29][0])} ${f(sp[29][1])} ${seg(30, 60)}`, 14],
+    [`M${f(sp[59][0])} ${f(sp[59][1])} ${seg(60, 90)}`, 10],
+  ]
+    .map(
+      ([d, w]) =>
+        `<path fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round" d="${d}"/>`,
+    )
+    .join("\n  ");
 
-const spiral = spiralPoints();
-const stemD = `M${P0[0]} ${P0[1]} C${P1[0]} ${P1[1]} ${P2[0]} ${P2[1]} ${P3[0]} ${P3[1]} ${polyToPath(spiral)}`;
-
-// Leaflet: a pointed oval of length L and width W drawn along +x from the stem point.
-function leaf(x, y, angleDeg, L, W) {
-  const d = `M0 0 C${f(L * 0.12)} ${f(-W * 0.62)} ${f(L * 0.78)} ${f(-W * 0.66)} ${f(L)} 0 C${f(L * 0.78)} ${f(W * 0.66)} ${f(L * 0.12)} ${f(W * 0.62)} 0 0 Z`;
-  return { x: f(x), y: f(y), a: f(angleDeg), d };
-}
-// Place leaflets alternating sides along the bezier part of the stem.
+// Leaflet: pointed oval of length L and width W along +x.
+const leafD = (L, W) =>
+  `M0 0 C${f(L * 0.2)} ${f(-W * 0.6)} ${f(L * 0.8)} ${f(-W * 0.5)} ${f(L)} 0 C${f(L * 0.8)} ${f(W * 0.5)} ${f(L * 0.2)} ${f(W * 0.6)} 0 0 Z`;
 const leaves = [];
-const ts = [0.08, 0.2, 0.33, 0.46, 0.59, 0.72, 0.84, 0.94];
-ts.forEach((t, i) => {
-  const [x, y] = bez(t);
-  const [tx, ty] = bezTangent(t);
-  const side = i % 2 === 0 ? 1 : -1; // 1 = right of travel (outer, right side of frond), -1 = left
-  const nx = -ty * side,
-    ny = tx * side; // normal
-  const grow = 1 - t * 0.72; // shrink toward tip
-  const inner = side === -1; // inside of the curl crowds, so inner leaflets are shorter and lean more
-  const L = (inner ? 88 : 104) * grow,
-    W = (inner ? 42 : 50) * grow;
-  const lean = inner ? 0.62 : 0.46;
-  const dx = nx * (1 - lean) + tx * lean,
-    dy = ny * (1 - lean) + ty * lean;
-  const ang = (Math.atan2(dy, dx) * 180) / Math.PI;
-  // offset so the leaf base sits on the stem edge
-  leaves.push({ ...leaf(x + nx * 4, y + ny * 4, ang, L, W), side });
-});
-// Two small leaflets on the crozier
+// Five feather leaflets on the right of the stem, pointing up and right.
 [
-  [0.16, 1],
-  [0.44, -1],
-].forEach(([s, side]) => {
-  const i = Math.round(s * (spiral.length - 1));
-  const [x, y] = spiral[i],
-    [x2, y2] = spiral[Math.min(i + 1, spiral.length - 1)];
-  const tx = x2 - x,
-    ty = y2 - y,
-    l = Math.hypot(tx, ty);
-  const nx = (-ty / l) * side,
-    ny = (tx / l) * side;
-  const dx = nx * 0.5 + (tx / l) * 0.5,
-    dy = ny * 0.5 + (ty / l) * 0.5;
-  leaves.push({
-    ...leaf(x + nx * 3, y + ny * 3, (Math.atan2(dy, dx) * 180) / Math.PI, 24, 12),
-    side,
-  });
+  [0.07, 140],
+  [0.23, 128],
+  [0.39, 112],
+  [0.55, 96],
+  [0.7, 78],
+].forEach(([t, L]) => {
+  const [x, y] = bez(t),
+    [tx, ty] = tan(t);
+  const rx = -ty,
+    ry = tx; // right of travel
+  const ang = (Math.atan2(ty, tx) * 180) / Math.PI + 46;
+  leaves.push({ x: f(x + rx * 8), y: f(y + ry * 8), a: f(ang), d: leafD(L, L * 0.46) });
 });
-
-// Wave: a soft lens rising to a crest left of center, dipping to meet the stem, then a short rise.
-const waveD =
-  "M52 376 C92 292 198 274 268 316 C300 336 326 352 362 350 C384 348 402 352 414 372 C404 426 336 468 238 468 C142 468 68 434 52 376 Z";
-const highlightD = "M84 384 C124 322 206 308 266 346 C290 362 310 372 334 372";
-
-function leavesSvg(fillLeft, fillRight) {
-  return leaves
+// Halo of small leaflets around the outside of the crozier.
+[
+  [1, 46],
+  [8, 46],
+  [15, 44],
+  [22, 42],
+  [29, 40],
+  [36, 36],
+  [43, 32],
+].forEach(([i, L]) => {
+  const [x, y, ang] = sp[i];
+  const tx = Math.cos(ang + (Math.PI * 2.45) / 90),
+    ty = Math.sin(ang + (Math.PI * 2.45) / 90);
+  const ox = -ty,
+    oy = tx; // outward (right of travel while turning left)
+  const dir = (Math.atan2(oy * 0.8 + ty * 0.2, ox * 0.8 + tx * 0.2) * 180) / Math.PI;
+  leaves.push({ x: f(x + ox * 7), y: f(y + oy * 7), a: f(dir), d: leafD(L, L * 0.5) });
+});
+const leavesSvg = (fill) =>
+  leaves
     .map(
       (l) =>
-        `<path fill="${l.side === 1 ? fillRight : fillLeft}" transform="translate(${l.x} ${l.y}) rotate(${l.a})" d="${l.d}"/>`,
+        `<path fill="${fill}" transform="translate(${l.x} ${l.y}) rotate(${l.a})" d="${l.d}"/>`,
     )
-    .join("\n    ");
+    .join("\n  ");
+
+// Wave: rounded body on the left, a pronounced crest, a steep dip under the frond, a tail tapering to a point.
+// The top edge is three cubic segments; the highlight is that edge offset inward so it hugs the crest all the way down the tail.
+const top = [
+  [
+    [36, 392],
+    [40, 292],
+    [96, 236],
+    [150, 230],
+  ],
+  [
+    [150, 230],
+    [198, 226],
+    [252, 292],
+    [346, 314],
+  ],
+  [
+    [346, 314],
+    [406, 326],
+    [448, 382],
+    [488, 444],
+  ],
+];
+const bottom = "C452 470 356 482 236 476 C128 470 44 442 36 392 Z";
+const waveD = `M36 392 ${top.map((c) => `C${c[1][0]} ${c[1][1]} ${c[2][0]} ${c[2][1]} ${c[3][0]} ${c[3][1]}`).join(" ")} ${bottom}`;
+function cubicAt(c, t) {
+  const u = 1 - t;
+  return [
+    u * u * u * c[0][0] + 3 * u * u * t * c[1][0] + 3 * u * t * t * c[2][0] + t * t * t * c[3][0],
+    u * u * u * c[0][1] + 3 * u * u * t * c[1][1] + 3 * u * t * t * c[2][1] + t * t * t * c[3][1],
+  ];
 }
-function mark({ stem, leafLeft, leafRight, wave, highlight, highlightOpacity = 1, title }) {
-  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
+function cubicTan(c, t) {
+  const u = 1 - t;
+  const x =
+    3 * u * u * (c[1][0] - c[0][0]) +
+    6 * u * t * (c[2][0] - c[1][0]) +
+    3 * t * t * (c[3][0] - c[2][0]);
+  const y =
+    3 * u * u * (c[1][1] - c[0][1]) +
+    6 * u * t * (c[2][1] - c[1][1]) +
+    3 * t * t * (c[3][1] - c[2][1]);
+  const l = Math.hypot(x, y);
+  return [x / l, y / l];
+}
+const hiPts = [];
+top.forEach((c, i) => {
+  for (let k = 0; k <= 24; k++) {
+    const t = k / 24;
+    if (i > 0 && k === 0) continue;
+    const [x, y] = cubicAt(c, t);
+    const [tx, ty] = cubicTan(c, t);
+    hiPts.push([x - -ty * 0 + ty * 0 + -ty * -1 * 0, y, tx, ty]);
+  }
+});
+// offset inward (to the right of travel, which is below the top edge here) by 26 px
+const OFF = 30;
+const offs = hiPts.map(([x, y, tx, ty]) => [x + -ty * OFF, y + tx * OFF]);
+const usable = offs.slice(2, offs.length - 5);
+const highlightD =
+  `M${f(usable[0][0])} ${f(usable[0][1])} ` +
+  usable
+    .slice(1)
+    .map(([x, y]) => `L${f(x)} ${f(y)}`)
+    .join(" ");
+
+const svg = (
+  title,
+  { stem, leaf, wave, hi, hiOpacity = 1 },
+) => `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
   <title id="title">${title}</title>
   <path fill="${wave}" d="${waveD}"/>
-  <path fill="none" stroke="${highlight}" stroke-opacity="${highlightOpacity}" stroke-width="13" stroke-linecap="round" d="${highlightD}"/>
-  <g>
-    ${leavesSvg(leafLeft, leafRight)}
-  </g>
-  <path fill="none" stroke="${stem}" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" d="${stemD}"/>
+  <path fill="none" stroke="${hi}" stroke-opacity="${hiOpacity}" stroke-width="20" stroke-linecap="round" d="${highlightD}"/>
+  ${leavesSvg(leaf)}
+  ${stemParts(stem)}
 </svg>
 `;
-}
 const out = {
-  "tidefern-mark.svg": mark({
-    title: "Tidefern mark",
-    stem: FERN,
-    leafLeft: SAGE,
-    leafRight: LEAF_DARK,
-    wave: SEA,
-    highlight: MIST,
-  }),
-  "tidefern-mark-dark.svg": mark({
-    title: "Tidefern mark for dark surfaces",
-    stem: "#DCE6DA",
-    leafLeft: "#B7C9B1",
-    leafRight: "#8FC1B9",
+  "tidefern-mark.svg": svg("Tidefern mark", { stem: STEM, leaf: LEAF, wave: SEA, hi: MIST }),
+  "tidefern-mark-dark.svg": svg("Tidefern mark for dark surfaces", {
+    stem: "#A9C4A6",
+    leaf: "#A3BF9E",
     wave: "#6EA7A0",
-    highlight: MIST,
-    highlightOpacity: 0.85,
+    hi: MIST,
+    hiOpacity: 0.85,
   }),
-  "tidefern-mark-mono.svg": mark({
-    title: "Tidefern mark, one color",
+  "tidefern-mark-mono.svg": svg("Tidefern mark, one color", {
     stem: FERN,
-    leafLeft: FERN,
-    leafRight: FERN,
+    leaf: FERN,
     wave: FERN,
-    highlight: MIST,
+    hi: MIST,
   }),
 };
 out["tidefern-icon.svg"] =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
   <title id="title">Tidefern app icon</title>
   <rect width="512" height="512" rx="112" fill="${MIST}"/>
-  <g transform="translate(36 30) scale(0.86)">
+  <g transform="translate(34 40) scale(0.86)">
 ${out["tidefern-mark.svg"]
   .split("\n")
   .slice(2, -2)
@@ -168,18 +216,15 @@ ${out["tidefern-mark.svg"]
   </g>
 </svg>
 `;
-// Small: thicker stem, four leaflets, no highlight detail beyond one stroke.
-const smallLeaves = leaves
-  .filter((_, i) => i < 6 && i % 1 === 0)
-  .filter((_, i) => [0, 1, 2, 3].includes(i));
+const smallLeaves = leaves.slice(0, 3).concat(leaves.slice(5, 8));
 out["tidefern-mark-small.svg"] =
   `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
   <title id="title">Tidefern mark, small sizes</title>
   <path fill="${SEA}" d="${waveD}"/>
-  <path fill="none" stroke="${MIST}" stroke-width="22" stroke-linecap="round" d="${highlightD}"/>
-  ${smallLeaves.map((l) => `<path fill="${l.side === 1 ? LEAF_DARK : SAGE}" transform="translate(${l.x} ${l.y}) rotate(${l.a}) scale(1.25)" d="${l.d}"/>`).join("\n  ")}
-  <path fill="none" stroke="${FERN}" stroke-width="28" stroke-linecap="round" stroke-linejoin="round" d="${stemD}"/>
+  <path fill="none" stroke="${MIST}" stroke-width="20" stroke-linecap="round" d="${highlightD}"/>
+  ${smallLeaves.map((l) => `<path fill="${LEAF}" transform="translate(${l.x} ${l.y}) rotate(${l.a}) scale(1.15)" d="${l.d}"/>`).join("\n  ")}
+  <path fill="none" stroke="${STEM}" stroke-width="30" stroke-linecap="round" stroke-linejoin="round" d="${stemBez} ${seg(0, 50)}"/>
 </svg>
 `;
-for (const [name, svg] of Object.entries(out)) writeFileSync(new URL(name, import.meta.url), svg);
-console.log("wrote", Object.keys(out).join(", "));
+for (const [n, s] of Object.entries(out)) writeFileSync(new URL(n, import.meta.url), s);
+console.log("wrote");
