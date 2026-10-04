@@ -43,7 +43,11 @@ export function soundEnabled(): boolean {
 
 /**
  * Create or resume the shared context. Call it from inside a user gesture.
- * Safari also reports "interrupted" after backgrounding; resume covers both.
+ * The state is read after creation rather than assumed, because a browser
+ * may start a context without a gesture (Chrome's media engagement index) or
+ * report the standard "interrupted" state after iOS backgrounds the page;
+ * resume() covers "suspended" and "interrupted" alike and play() only ever
+ * fires while the state is "running".
  */
 export function unlockAudio(): AudioContext | null {
   if (typeof window === "undefined" || typeof AudioContext === "undefined") return null;
@@ -59,6 +63,18 @@ export function unlockAudio(): AudioContext | null {
     });
   }
   return context;
+}
+
+/**
+ * Fast path on mount: when the page already has sticky activation (a
+ * client-side navigation after a click, or a tab the person has used), the
+ * context can start now instead of waiting for the next input.
+ */
+export function unlockIfActivated(): void {
+  if (typeof navigator === "undefined") return;
+  const activation = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } })
+    .userActivation;
+  if (activation?.hasBeenActive) unlockAudio();
 }
 
 export function audioReady(): boolean {

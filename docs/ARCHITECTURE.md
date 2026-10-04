@@ -259,6 +259,12 @@ tests and the production build. CI runs the same plus the browser suite.
 - Everything under `/api/v1`. Additive changes only inside `v1`; a breaking
   change means `/api/v2` with an overlap period, because installed mobile
   builds run for months.
+- `packages/schemas` imports `z` from plain `zod` and names reusable
+  components with `.meta({ id, description })`, which zod-to-openapi 9
+  reads exactly like `.openapi("Name")`; `z` from `@hono/zod-openapi` and
+  `.openapi()` appear only inside `packages/api` (parameters, headers,
+  examples), so clients never depend on Hono and never hit a missing
+  `.openapi` method in a bundle that did not load the patch.
 - Routes are defined with `createRoute` from `@hono/zod-openapi` using the
   Zod schemas in `packages/schemas`, so the OpenAPI document is generated
   from the same objects that validate requests. `app.doc("/v1/openapi.json")`
@@ -359,14 +365,14 @@ app.all("/auth/*", (c) => auth.handler(c.req.raw));
 
 | Option                 | Value                                                                                                                                                                                                     | Why                                                                                                                                                                                                                       |
 | ---------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Adapter                | `drizzleAdapter(db, { provider: "pg", schema })`; schema generated with `npx auth@latest generate --config packages/auth/src/auth.ts --output packages/db/src/auth-schema.ts` and migrated by drizzle-kit | One migration tool. The CLI package is named `auth`; `@better-auth/cli` is deprecated.                                                                                                                                    |
-| `baseURL` / `basePath` / `trustedOrigins` | `BETTER_AUTH_URL` in production; on previews derived at module load from `VERCEL_URL`; `basePath` `/api/auth`; `trustedOrigins` is the production origin plus the team's preview pattern (`https://*-<team-slug>.vercel.app`) in Phase 1, with `tidefern://` reserved for Phase 3 and `exp://**` in development only | Every Vercel preview has its own host, so a fixed base URL would reject every preview sign-in. Secure cookies and the `__Secure-` prefix turn on automatically when the URL is https or `NODE_ENV` is production. |
+| Adapter | `drizzleAdapter` imported from `@better-auth/drizzle-adapter` (the 1.7.7 path; `better-auth/adapters/drizzle` is only a compatibility export), called as `drizzleAdapter(db, { provider: "pg", schema })`; schema generated with `npx auth@latest generate --config packages/auth/src/auth.ts --output packages/db/src/auth-schema.ts` and migrated by drizzle-kit | One migration tool. The CLI package is named `auth`; `@better-auth/cli` is deprecated.                                                                                                                                    |
+| `baseURL` / `basePath` / `trustedOrigins` | Better Auth 1.7.7's multi-host form: `baseURL: { allowedHosts: ["<production host>", "tidefern-*-<team-slug>.vercel.app"], fallback: "https://<production host>", protocol: "https" }`, so each preview answers on its own host and production stays fixed; `basePath` `/api/auth`; `trustedOrigins` carries the same two patterns and nothing wider (a bare `*.vercel.app` would trust every other Vercel customer), with `tidefern://` reserved for Phase 3 and `exp://**` in development only; `telemetry: { enabled: false }` plus `BETTER_AUTH_TELEMETRY=0` in CI and Vercel so the no-telemetry rule is explicit | Every Vercel preview has its own host, so a fixed base URL would reject every preview sign-in. Secure cookies and the `__Secure-` prefix turn on automatically when the URL is https or `NODE_ENV` is production. |
 | `emailAndPassword`     | `enabled`, `requireEmailVerification: true`, `revokeSessionsOnPasswordReset: true` (off by default), reset and verification mail through Resend with generic text                                         | Verification also prevents account enumeration on sign-up.                                                                                                                                                                |
 | Passkeys               | `@better-auth/passkey` with `rpID`, `rpName`, `origin`                                                                                                                                                    | Encouraged primary method on the web. Native passkey ceremonies on Expo are unverified; prototype before relying on them.                                                                                                 |
-| TOTP                   | `twoFactor()` from `better-auth/plugins` with backup codes                                                                                                                                                | Optional for everyone, prompted for anyone who grants partner access. Keep `session.cookieCache` off until the 2FA interaction with it is re-verified (an April 2026 advisory, fixed in 1.4.9, involved cached sessions). |
+| TOTP | `twoFactor()` from `better-auth/plugins` with single-use backup codes; `trustDevice` stays off, because a 30-day remembered device on a shared household computer defeats the second factor; passkeys are the convenient path | Optional for everyone, prompted for anyone who grants partner access. Keep `session.cookieCache` off until the 2FA interaction with it is re-verified (an April 2026 advisory, fixed in 1.4.9, involved cached sessions). |
 | Social sign-in | Not in Phase 1 | Apple and Google arrive with the mobile app; Apple is required by App Store guideline 4.8 once Google exists. |
 | Mobile plugins | Reserved, not enabled: `expo()` from `@better-auth/expo` and `bearer()` arrive in Phase 3 together with the `tidefern://` scheme | Nothing server-side needs to change shape when they do. |
-| Rate limiting          | `rateLimit: { enabled: true, storage: "database" }`                                                                                                                                                       | Memory storage is per instance and useless on serverless. Vercel Firewall rules on auth, invite and upload paths once on Pro.                                                                                             |
+| Rate limiting | `rateLimit: { enabled: true, storage: "database" }`. Built-in rules limit sign-in, sign-up and credential changes to 3 requests per 10 seconds in any production build, so browser tests sign in once per worker and share a `storageState`; the integration job runs with `NODE_ENV=production` because rate limiting is disabled in development and would otherwise never touch the `rate_limit` table | Memory storage is per instance and useless on serverless. Vercel Firewall rules on auth, invite and upload paths once on Pro. |
 | Sessions               | 7-day expiry, 1-day `updateAge`; "Devices" screen backed by `listSessions`, `revokeSession`, `revokeOtherSessions`                                                                                        | Short enough for health data; revocation is a Phase 1 feature.                                                                                                                                                            |
 | Plugins not enabled    | organization, SSO, OIDC provider, MCP, device authorization, anonymous, admin, SCIM                                                                                                                       | Not needed; several carried 2026 advisories. Smaller surface, fewer advisories that apply.                                                                                                                                |
 | Bot protection | Cloudflare Turnstile on sign-up, reset and invite acceptance at the Phase 2 gate | Works without proxying traffic. Its script is the one documented CSP exception, allowed only on those three unauthenticated routes, and it joins the processor list. |
@@ -404,9 +410,12 @@ authenticated route is ever statically rendered or ISR-cached.
   session-level `SET`, `LISTEN/NOTIFY`, SQL `PREPARE` and session advisory
   locks; transaction-scoped `set_config(..., true)` and `SET LOCAL` are what
   the actor context uses.
-- Driver on Vercel Fluid compute: a module-scope `pg` Pool (`max` 2 to 5,
-  `idleTimeoutMillis` 5000) wrapped by `drizzle-orm/node-postgres` and
-  registered with `attachDatabasePool` from `@vercel/functions`. Neon and
+- Driver on Vercel Fluid compute: a module-scope `pg` Pool (`max` 2, which
+  is what Neon's serverless pooling guide gives per container while Vercel's
+  guidance says never exactly 1; `idleTimeoutMillis` 5000) wrapped by
+  `drizzle-orm/node-postgres` and registered with `attachDatabasePool` from
+  `@vercel/functions` (documented as the supported helper, still tagged
+  experimental in the 3.9.x type definitions). Neon and
   Vercel both document this as the right choice over the Neon serverless
   driver for Node runtimes. Fluid compute shares one process across
   invocations, which is what makes the module-scope pool correct.
@@ -439,7 +448,14 @@ such membership, and the app never connects as a role that can bypass RLS:
   CURRENT_USER WITH SET TRUE`, `GRANT USAGE ON SCHEMA public TO
   tidefern_app`, `GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN
   SCHEMA public TO tidefern_app`, `GRANT USAGE ON ALL SEQUENCES IN SCHEMA
-  public TO tidefern_app`, and matching `ALTER DEFAULT PRIVILEGES`.
+  public TO tidefern_app`, and matching `ALTER DEFAULT PRIVILEGES`. It is
+  a custom migration (`drizzle-kit generate --custom`) because drizzle-kit
+  emits roles, `ENABLE ROW LEVEL SECURITY` and policies but has no API for
+  `GRANT`; `entities.roles` is set to `{ provider: "neon" }` so drizzle-kit
+  manages `tidefern_app` and ignores Neon's own roles. An ESLint
+  restriction forbids using `db` directly outside `withActor()` and
+  `withSystem()` in route code, and an integration test runs two actors
+  concurrently through the pooled endpoint, which PGlite cannot reproduce.
 - Once per Neon branch that serves an app (production, staging), the owner
   runs `ALTER ROLE tidefern_app LOGIN PASSWORD '<secret>'` in the SQL
   editor and stores that role's pooled URL as `DATABASE_URL`. Child branches
@@ -778,7 +794,11 @@ pattern during research):
    `EnvKeyProvider` reads `TIDEFERN_KEK_V1` (32 random bytes, base64, a
    sensitive Vercel variable) in Phase 1; `AwsKmsKeyProvider`
    (`GenerateDataKey` and `Decrypt` with an encryption context) replaces it
-   at the Phase 2 gate by re-wrapping DEKs in a background job.
+   at the Phase 2 gate by re-wrapping DEKs in a background job. The KMS
+   encryption context holds opaque identifiers only (subject id, key id,
+   KEK version), never table or column names, because AWS writes it in
+   plaintext to CloudTrail; the table and column binding stays in the local
+   AAD below.
    `subject_keys` records `kek_provider` and `kek_version` per subject.
 3. Fields are encrypted with AES-256-GCM, a fresh random 12-byte IV per
    value, a 16-byte tag, and additional authenticated data of `table:column:
@@ -956,7 +976,7 @@ production with `SITE_INDEXABLE=true`):
 | Route                      | Visitor question                          | Action                                                                                                              |
 | -------------------------- | ----------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
 | `/`                        | What is Tidefern and is it for me?        | Sign in or create an account (Phase 1), explore the design system                                                   |
-| `/privacy` | What happens to my account data? | The general privacy policy: account data, device storage, email, no cookies beyond the session; owner-reviewed before public launch |
+| `/privacy` | What happens to my account data? | The general privacy policy: account data, device storage (the session cookie and the two remembered preference keys, each with its strictly necessary or appearance basis and how to stop storing it), email, no cookies beyond the session; owner-reviewed before public launch |
 | `/health-privacy` | What happens to my health data? | The Consumer Health Data Privacy Policy: only the five RCW 19.373.020 items plus the request and appeal path, linked from every public page with exactly that label (the Attorney General requires a separate, distinct link with no extra content); drafts carry noindex and say so |
 | `/terms`, `/accessibility` | What are the terms, how accessible is it? | Drafts marked as such until reviewed                                                                                |
 | `/account/delete` | How do I delete my account? | Signed-in deletion entry point reachable from a public page |
@@ -1047,7 +1067,7 @@ values below are the ones that pass that gate on 2026-10-04.
 | surface | `#FFFFFF` | `#15221E` | cards and inputs |
 | panel | `#EDE9DF` | `#1B2B26` | grouped regions |
 | overlay | `#FFFFFF` | `#2A4039` | dialogs, menus, sheets (highest tier) |
-| warmth | `#E6D6C3` | `#3A2F28` | a highlighted day; pairs with text, accent and danger only |
+| warmth | `#E6D6C3` | `#3A2F28` | a highlighted day; pairs with text, accent and danger only; never hosts a form control (the border token measures 2.99:1 on it) |
 | text | `#1F3530` | `#EEEBE3` | every surface, 4.5:1 or better |
 | muted | `#4E6162` | `#9FB0A8` | page, surface, panel, overlay |
 | accent | `#35645D` | `#8FC1B9` | every surface including warmth |
@@ -1078,11 +1098,20 @@ before and without JavaScript. A pre-paint script then reads one stored
 key (`tidefern-theme-v1`) and sets `data-theme` and `data-theme-source` on
 `<html>` (which carries no default attribute) so there is no flash and no
 hydration mismatch; while the source is `system`, a `change` listener on
-the media query applies a system switch live. The toggle stores an
-explicit choice; Settings offers "follow system" to clear it.
-`color-scheme` is set per theme so form controls and scrollbars match,
-`theme-color` is declared for both schemes, and the web manifest, which
-cannot switch per scheme, uses the light page color. Images never invert;
+the media query applies a system switch live (Apple's Auto appearance
+flips during the day), and a `storage` listener carries a choice made in
+another tab. The toggle stores an explicit choice and rewrites both
+`theme-color` metas so an installed web app matches; Settings offers
+"follow system" to clear it. `color-scheme: light dark` is declared through
+the viewport export and set per theme so form controls and scrollbars
+match, `theme-color` is declared for both schemes, and the web manifest,
+which cannot switch per scheme, uses the light page color. The two stored
+keys (`tidefern-theme-v1`, `tidefern-sound-v1`) are listed on `/privacy`
+under functional storage with the sentence "Remembered on this device";
+each has a visible way to stop storing (follow system, and the sound
+default), which is what the UK's PECR Schedule A1 appearance exception
+(in force 5 February 2026) asks for alongside the US and EU positions in
+9.6. Images never invert;
 the mark swaps to its dark variant.
 
 Why system default rather than dark-first (the site-build skill's usual
@@ -1376,6 +1405,18 @@ clinician reminder is also what App Store guideline 1.4.1 asks for):
 - Sound never carries meaning alone. Every success or error cue accompanies
   visible text.
 
+- Activation and state, from the HTML and Web Audio specifications
+  checked in verification: the unlock listens on the five activation
+  triggering inputs, and on mount it also starts the context immediately
+  when `navigator.userActivation.hasBeenActive` is already true (a client
+  navigation after a click); the context's state is read after creation
+  rather than assumed, since Chrome's media engagement index can start one
+  without a gesture; `interrupted` is now a standard `AudioContextState`
+  (typed in TypeScript 6), so `resume()` is called for it exactly as for
+  `suspended` and cues play only while the state is `running`. The Audio
+  Session API stays unset: only Safari implements it and its default is
+  `auto`.
+
 ### 14.2 What the build adds
 
 The `/design/sound` chapter with playable cues, a level meter and the
@@ -1391,7 +1432,7 @@ before a gesture.
 | ------------------ | ------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `packages/core`    | Vitest                                                                                      | Date math across zones and boundaries, cycle and pregnancy predictions with worked vectors, `can()` for every rule                                                                     |
 | `packages/schemas` | Vitest                                                                                      | Parsing of every request shape and rejection of health data in the wrong place                                                                                                         |
-| `packages/db`      | Vitest + PGlite 0.5.8 (one instance per file, migrations applied with the Drizzle migrator) | RLS policies: the actor sees only their rows, revoked grants hide rows, the private journal never leaks, `SET LOCAL ROLE` resets                                                       |
+| `packages/db` | Vitest + PGlite 0.5.8 (one instance per file, migrations applied with the Drizzle migrator), plus one integration job against `postgres:18` with `NODE_ENV=production` and two concurrent actors through a pooled connection | RLS policies: the actor sees only their rows, revoked grants hide rows, the private journal never leaks, `SET LOCAL ROLE` resets, pooler reuse never leaks an actor                                                       |
 | `packages/crypto`  | Vitest                                                                                      | Round trips, AAD mismatch and tamper detection, provider swap, crypto-shred makes ciphertext unreadable                                                                                |
 | `packages/api`     | Vitest with `app.request()`                                                                 | Each route against the committed spec, problem details, idempotency replay, `no-store` headers, denial returns 404                                                                     |
 | `apps/web`         | Playwright + axe against the production build                                               | Navigation, theme and sound persistence, forms and their failure states, keyboard paths, 320 px reflow, both themes, security headers, no indexing on previews, design-reference tools |
@@ -1402,7 +1443,10 @@ before a gesture.
 
 Browser tests sign in against the production build through seeded,
 already-verified users and a mail capture endpoint that exists only when
-`E2E_MAIL_CAPTURE=true`, which Vercel production never sets.
+`E2E_MAIL_CAPTURE=true`, which Vercel production never sets. Each
+Playwright worker signs in once and shares its `storageState`, because
+Better Auth's built-in production rule allows three sign-ins per ten
+seconds; tests never relax the rate limit.
 
 Rules: tests protect behavior at real boundaries; no giant snapshots, no
 constant-matching assertions, no fake successful integrations. A failing
@@ -1415,11 +1459,18 @@ separately from an application defect.
 
 | Workflow                           | Trigger                                                           | Does                                                                                                                                                                                                  |
 | ---------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml`                           | push to `main`, pull requests                                     | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
+| `ci.yml` | push to `main`, pull requests, `workflow_dispatch` for a pre-pull-request run | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
 | `deploy-verify.yml`                | `deployment_status` success (sent by Vercel for every deployment) | curl the deployed home page and `/api/v1/health` with the protection bypass header, then the `@smoke` Playwright subset against the deployment URL; failure shows on the pull request                 |
 | `codeql.yml`                       | push, pull requests, weekly                                       | CodeQL security-and-quality for JavaScript and TypeScript                                                                                                                                             |
-| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` against the base branch's `openapi/v1.json`, failing on breaking changes |
-| Renovate (`.github/renovate.json`) | weekly                                                            | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged                                                                                                 |
+| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` pinned by digest (`b9325c9e0a27ab65b0da3b766522cedec6be81dc`, v0.1.18) against the base branch's `openapi/v1.json`, `fail-on: ERR`, and `review: false` because the default uploads both specs to oasdiff.com; the job keeps `contents: read` and reads the result from the job summary |
+| Renovate (`.github/renovate.json`) | weekly | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged, action digests pinned, `typescript` held below 7 and the web app's `eslint` below 10 for the reasons in section 4, 0.x packages never automerged. Automerge stays off; if it is ever turned on, the `main` ruleset must require zero approvals or list the Renovate app as a bypass actor, because any required approval leaves its pull requests waiting forever |
+
+Every action is pinned to a commit digest with its version in a comment
+(the digests were resolved with `git ls-remote --tags` on 2026-10-04;
+`pnpm/action-setup`'s moving `v6` tag still points at 6.0.10, which
+predates pnpm 12). A docs-only or CI-only commit still produces a Vercel
+production build, because Vercel treats changes outside the workspace
+definition as global; that is expected, not a misconfiguration.
 
 Required status checks on `main`: the checks named `verify` and `CodeQL`,
 which are the job names in `ci.yml` and `codeql.yml` (GitHub matches

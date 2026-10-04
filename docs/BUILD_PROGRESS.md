@@ -201,3 +201,25 @@ tests green.
 
 Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
 tests green.
+
+### Verification pass (2026-10-04)
+
+- Data and auth: pool `max` 2; the GRANT migration is a drizzle-kit custom
+  migration with `entities.roles` set to Neon; the Better Auth adapter
+  import, the multi-host `baseURL` with the narrow preview pattern,
+  telemetry off, `trustDevice` off, the built-in sign-in rate limit and
+  the shared `storageState` for browser tests, the production-mode
+  integration job, and the opaque KMS encryption context are recorded.
+- Contract and CI: every action is pinned to a verified commit digest,
+  `ci.yml` accepts `workflow_dispatch`, Renovate holds `typescript` below
+  7 and the web app's `eslint` below 10 and never automerges 0.x; the
+  oasdiff step is pinned with `fail-on: ERR` and `review: false`; schemas
+  use `.meta({ id })` from plain zod and `.openapi()` stays inside the API
+  package.
+- Sound and dark mode: the sound module starts the context on mount when
+  sticky activation already exists, treats `interrupted` as standard, and
+  reads state after creation; theme sync listens for cross-tab storage
+  changes and rewrites the theme-color metas on an explicit choice; the
+  viewport declares `color-scheme: light dark`; warmth never hosts a form
+  control; the two stored preference keys are documented for `/privacy`
+  with the UK PECR Schedule A1 basis.

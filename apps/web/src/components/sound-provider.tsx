@@ -1,6 +1,6 @@
 "use client";
 import { useEffect } from "react";
-import { haptic, play, unlockAudio } from "@/lib/sound";
+import { haptic, play, unlockAudio, unlockIfActivated } from "@/lib/sound";
 
 const INTERACTIVE =
   'a[href], button, summary, input, select, textarea, [role="button"], [role="tab"], [role="switch"]';
@@ -16,6 +16,7 @@ const INTERACTIVE =
  */
 export function SoundProvider() {
   useEffect(() => {
+    unlockIfActivated();
     const unlock = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key === "Escape") return;
       unlockAudio();

@@ -75,7 +75,7 @@ on; it never sits waiting on them.
 
 | Id  | Task                                                                                                                                       | Needs    | Status | Owner | Evidence |
 | --- | ------------------------------------------------------------------------------------------------------------------------------------------ | -------- | ------ | ----- | -------- |
-| B1 | Package skeleton: drizzle config, pooled client with `attachDatabasePool`, migration runner, root `db:generate`, `db:migrate`, `db:seed` scripts, the hand-written first migration creating `tidefern_app` with its grants, `withActor()` and `withSystem()` helpers, PGlite test harness. Accepts: `pnpm db:migrate` applies the committed journal to PGlite in the harness | A1 | todo |  |  |
+| B1 | Package skeleton: drizzle config with `entities.roles: { provider: "neon" }`, pooled client (`max` 2, `idleTimeoutMillis` 5000) with `attachDatabasePool`, migration runner, root `db:generate`, `db:migrate`, `db:seed` scripts, the custom first migration (`drizzle-kit generate --custom`) creating `tidefern_app` with its grants and default privileges, `withActor()` and `withSystem()` helpers, the ESLint restriction on direct `db` use in route code, PGlite test harness. Accepts: `pnpm db:migrate` applies the committed journal to PGlite in the harness | A1 | todo |  |  |
 | B2 | Identity and profile schema: generated Better Auth tables, `profiles` with time zone, stage and units, `subject_keys` | B1, C1 | todo |  |  |
 | B3 | Relationship schema: `households`, `household_members`, `invitations`, `grants` with `child_id`, `consents` | B1 | todo |  |  |
 | B4  | Cycle schema: `cycle_entries`, `entry_symptoms`, `cycle_predictions`, vocabulary seed                                                      | B1       | todo   |       |          |
@@ -90,7 +90,7 @@ on; it never sits waiting on them.
 
 | Id  | Task                                                                                                                                                                                           | Needs  | Status | Owner | Evidence |
 | --- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ------ | ----- | -------- |
-| C1  | Better Auth server config (email and password with verification, `revokeSessionsOnPasswordReset`, passkey, TOTP, database rate limiting, 7-day sessions) and `npx auth@latest generate` output | B1     | todo   |       |          |
+| C1 | Better Auth server config (email and password with verification, `revokeSessionsOnPasswordReset`, passkey, TOTP without `trustDevice`, database rate limiting, 7-day sessions, the multi-host `baseURL` with the narrow preview pattern, `telemetry.enabled: false`, adapter from `@better-auth/drizzle-adapter`) and `npx auth@latest generate` output | B1 | todo |  |  |
 | C2 | Mount at `/auth/*` in the Hono app before `/v1`; session middleware that loads the actor with guardianships and grants; fresh-authentication checks for deletion, export, grants, invitations, devices and credential changes | C1, B3, B6 | todo |  |  |
 | C3  | React client with passkey and 2FA plugins; sign up, sign in, verify, reset and sign out screens with honest pending and failure states                                                         | C2     | todo   |       |          |
 | C4  | Devices screen (list, revoke one, revoke others) and TOTP enrollment with backup codes                                                                                                         | C3     | todo   |       |          |
@@ -115,7 +115,7 @@ on; it never sits waiting on them.
 | E6  | Notes routes with encryption and category rules                                              | E1, D2     | todo   |       |          |
 | E7 | Sharing routes: invitations (hashed single-use tokens bound to the invitee email, accepted only by POST after sign-in), grants with `child_id`, revocation, remove partner | E1, B3 | todo |  |  |
 | E8 | Activity (cursor paginated), on-demand streamed export, account closure with the undo window, all behind fresh authentication | E1, B7 | todo |  |  |
-| E9 | `packages/api-client` generated from the spec, root `client:generate` and `client:check`, and the `oasdiff/oasdiff-action/breaking` step in `ci.yml` | E2 to E8 | todo |  |  |
+| E9 | `packages/api-client` generated from the spec with openapi-typescript 7.13 and openapi-fetch 0.17 (TypeScript stays 6.0.x; the 7.x package has no compiler API), root `client:generate` and `client:check` (`--check` in CI), and the `oasdiff/oasdiff-action/breaking` step in `ci.yml` pinned by digest with `fail-on: ERR` and `review: false` | E2 to E8 | todo |  |  |
 
 ### F. Domain (`packages/core`)
 
@@ -165,7 +165,7 @@ on; it never sits waiting on them.
 
 | Id  | Task                                                                                                                                   | Needs    | Status | Owner | Evidence |
 | --- | -------------------------------------------------------------------------------------------------------------------------------------- | -------- | ------ | ----- | -------- |
-| J1  | Playwright suites per flow (auth, onboarding, logging, sharing, settings, deletion), axe in both themes, keyboard paths, 320 px reflow | H1 to H9 | todo   |       |          |
+| J1 | Playwright suites per flow (auth, onboarding, logging, sharing, settings, deletion) with one sign-in per worker and a shared `storageState`, axe with the `wcag22aa` tags in both themes, keyboard paths, 320 px reflow | H1 to H9 | todo |  |  |
 | J2  | Lighthouse on the production build with recorded conditions; budgets met or explained                                                  | H1 to H9 | todo   |       |          |
 | J3  | Review loops (copy, visual, behavior, motion, performance) logged in `docs/design/QA.md` with screenshots                              | J1       | todo   |       |          |
 | J4  | `docs/LAUNCH_RUNBOOK.md` completed with precise remaining owner inputs                                                                 | J3       | todo   |       |          |

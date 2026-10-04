@@ -1,5 +1,6 @@
 "use client";
 import { THEME_KEY } from "@/lib/site";
+import { syncThemeColorMeta } from "@/components/theme-sync";
 
 export function ThemeToggle() {
   function toggle() {
@@ -7,6 +8,7 @@ export function ThemeToggle() {
     const next = root.dataset.theme === "dark" ? "light" : "dark";
     root.dataset.theme = next;
     root.dataset.themeSource = "user";
+    syncThemeColorMeta(next);
     try {
       localStorage.setItem(THEME_KEY, next);
     } catch {

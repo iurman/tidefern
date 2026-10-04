@@ -36,6 +36,23 @@
     {
       "matchManagers": ["github-actions"],
       "groupName": "github actions"
+    },
+    {
+      "description": "openapi-typescript 7.13 crashes under the TypeScript 7 package, which ships no compiler API; typescript-eslint also stops at 6.1",
+      "matchPackageNames": ["typescript"],
+      "allowedVersions": "<7"
+    },
+    {
+      "description": "eslint-config-next's plugins fail on ESLint 10 in the web app",
+      "matchFileNames": ["apps/web/package.json"],
+      "matchPackageNames": ["eslint"],
+      "allowedVersions": "<10"
+    },
+    {
+      "description": "0.x packages break on minor bumps; never automerge them if automerge is ever enabled",
+      "matchCurrentVersion": "!/^0/",
+      "matchUpdateTypes": ["minor", "patch"],
+      "automerge": false
     }
   ]
 }
