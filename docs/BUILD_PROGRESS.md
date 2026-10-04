@@ -164,3 +164,40 @@ they land.
 
 Checks after the changes: `pnpm check` green (28 unit tests), 12 browser
 tests green.
+
+### Research integration, part 2 (2026-10-04)
+
+- Hosting verification: the `hono/vercel` deprecation is dated to 4.13.10
+  (not 4.13.9) and every `hono/<runtime>` adapter moved that day; Node 20
+  is disabled on Vercel since 2026-10-01 (the record pins 24.x and names
+  22.x the only fallback); `relatedProjects` and global-change deploys are
+  recorded for the split-out path; Vercel Workflows is the escape for jobs
+  over 300 seconds; the TypeScript 6 rationale rests on typescript-eslint
+  alone.
+- Agent practices: `CLAUDE.md` gained Claude-only compaction notes under
+  the `@AGENTS.md` import; `pnpm skills:check` validates spec frontmatter,
+  names, the 500 line ceiling and that every `.claude/skills` symlink
+  resolves, and runs in `pnpm check` and CI; the build prompt opens with
+  the autonomy and scope blocks, lists human-only actions, starts every
+  session from the progress log, the plan and the git log followed by the
+  smoke tests, and closes tasks only after a fresh-context review.
+- Compliance deltas: New York's bill passed both houses but is not law;
+  the HBNR penalty figure, the no-banner basis for strictly necessary
+  storage, WCAG 2.2's 3.3.8 and the `wcag22aa` axe tags, Vercel's DPA
+  covering Pro only, Neon under the Databricks agreement, and Resend's AI
+  subprocessors are all in sections 9.5, 9.6, 13.9 and 21.
+- Product domain: `packages/core` gained due dates from scan and transfer,
+  ACOG CO 700 redating bands, the ovulation band, exact unit conversions,
+  time zone validation and locale week start (32 unit tests); the record
+  explains the six day fertile window ending on ovulation with the two day
+  band, the luteal evidence, the post-birth restart event, loss copy, the
+  growth engine and milestone data with their licensing, and the copy
+  templates every prediction surface uses (13.10); plan rows F1, F4, H2
+  and H5 carry the acceptance criteria.
+- Typography: Newsreader and Figtree are final with the measured reasons
+  recorded; the roman Newsreader file is now the optical-size build with a
+  Times New Roman metric fallback; the brand asset pipeline (G4) names the
+  Next.js file conventions and safe zones verified in research.
+
+Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
+tests green.

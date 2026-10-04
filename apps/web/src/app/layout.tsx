@@ -8,15 +8,18 @@ import { ThemeSync } from "@/components/theme-sync";
 import { indexingAllowed, preferenceScript, site } from "@/lib/site";
 import "./globals.css";
 
+// The opsz file carries both axes so 16 px headings get the sturdier cut and the
+// display sizes get the higher contrast one; browsers apply it automatically.
 const newsreader = localFont({
   src: [
-    { path: "../../public/fonts/newsreader-latin-wght-normal.woff2", style: "normal" },
+    { path: "../../public/fonts/newsreader-latin-opsz-normal.woff2", style: "normal" },
     { path: "../../public/fonts/newsreader-latin-wght-italic.woff2", style: "italic" },
   ],
   variable: "--font-newsreader",
   display: "swap",
   weight: "200 800",
   fallback: ["Georgia", "Times New Roman"],
+  adjustFontFallback: "Times New Roman",
 });
 
 const figtree = localFont({

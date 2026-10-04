@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { addDays, diffDays, isCalendarDate, todayIn } from "./dates";
+import { addDays, diffDays, isCalendarDate, isKnownTimeZone, todayIn, weekStartFor } from "./dates";
 
 describe("calendar dates", () => {
   it("validates real dates only", () => {
@@ -19,5 +19,21 @@ describe("calendar dates", () => {
     const instant = new Date("2026-10-05T03:30:00Z");
     expect(todayIn("America/Los_Angeles", instant)).toBe("2026-10-04");
     expect(todayIn("Asia/Tokyo", instant)).toBe("2026-10-05");
+  });
+});
+
+describe("time zones and week start", () => {
+  it("resolves a local calendar date from an instant in any zone", () => {
+    const instant = new Date("2026-10-04T06:30:00Z");
+    expect(todayIn("America/Los_Angeles", instant)).toBe("2026-10-03");
+    expect(todayIn("Pacific/Auckland", instant)).toBe("2026-10-04");
+  });
+  it("accepts known zones and rejects made-up ones", () => {
+    expect(isKnownTimeZone("Europe/Berlin")).toBe(true);
+    expect(isKnownTimeZone("Mars/Olympus")).toBe(false);
+  });
+  it("reads the week start from the locale with Monday as the fallback", () => {
+    expect(weekStartFor("en-US")).toBe(7);
+    expect(weekStartFor("en-GB")).toBe(1);
   });
 });

@@ -44,6 +44,9 @@ jobs:
       - name: Prose gate (no em dashes)
         run: pnpm prose:check
 
+      - name: Skills gate (spec frontmatter, symlinks resolve)
+        run: pnpm skills:check
+
       - name: Generated files are current (tokens, brand copies, OpenAPI)
         run: |
           pnpm tokens:check

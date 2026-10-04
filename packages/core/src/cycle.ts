@@ -34,6 +34,13 @@ export interface CyclePrediction {
   fertileWindow: { start: CalendarDate; end: CalendarDate } | null;
   /** Plus or minus days the person should expect around the prediction. */
   uncertaintyDays: number;
+  /**
+   * Plus or minus days around estimated ovulation. The 14 day luteal phase is
+   * a convention (ACOG); measured luteal phases average 12.4 days with a wide
+   * range (Bull 2019), and NHS gives 12 to 16 days, so ovulation is always a
+   * band, never a day.
+   */
+  ovulationBandDays: number;
   irregular: boolean;
 }
 
@@ -53,6 +60,7 @@ export const MIN_PLAUSIBLE = 21;
 export const MAX_PLAUSIBLE = 45;
 const MAX_SAMPLES = 6;
 const UNCERTAINTY_AFTER_RESET = 5;
+export const OVULATION_BAND_DAYS = 2;
 
 function sortedStarts(starts: PeriodStart[]): PeriodStart[] {
   return [...starts].sort((a, b) => compareDates(a.date, b.date));
@@ -125,6 +133,7 @@ export function predictCycle(
       ovulation: null,
       fertileWindow: null,
       uncertaintyDays: Math.max(uncertaintyFor(0, irregular), resetFloor),
+      ovulationBandDays: OVULATION_BAND_DAYS,
       irregular,
     };
   }
@@ -139,6 +148,7 @@ export function predictCycle(
     ovulation,
     fertileWindow: { start: addDays(ovulation, -5), end: ovulation },
     uncertaintyDays: Math.max(uncertaintyFor(sampleSize, irregular), resetFloor),
+    ovulationBandDays: OVULATION_BAND_DAYS,
     irregular,
   };
 }

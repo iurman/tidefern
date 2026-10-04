@@ -27,6 +27,7 @@ describe("cycle prediction", () => {
     expect(prediction?.ovulation).toBe("2026-08-07");
     expect(prediction?.fertileWindow).toEqual({ start: "2026-08-02", end: "2026-08-07" });
     expect(prediction?.uncertaintyDays).toBe(2);
+    expect(prediction?.ovulationBandDays).toBe(2);
   });
   it("ignores implausible gaps such as a missed month of logging", () => {
     const withGap = [...regular, { date: "2026-11-20" }];

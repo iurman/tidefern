@@ -18,9 +18,10 @@
     "openapi:generate": "pnpm --filter @tidefern/api openapi:generate",
     "openapi:check": "pnpm --filter @tidefern/api openapi:check",
     "prose:check": "node scripts/check-prose.mjs",
+    "skills:check": "node scripts/check-skills.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm prose:check && pnpm tokens:check && pnpm tokens:contrast && pnpm --filter web brand:check && pnpm openapi:check && pnpm format:check && turbo run lint typecheck test build",
+    "check": "pnpm prose:check && pnpm skills:check && pnpm tokens:check && pnpm tokens:contrast && pnpm --filter web brand:check && pnpm openapi:check && pnpm format:check && turbo run lint typecheck test build",
     "tokens:contrast": "pnpm --filter @tidefern/design-tokens contrast"
   },
   "devDependencies": {

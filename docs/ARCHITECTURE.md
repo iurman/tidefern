@@ -115,7 +115,7 @@ export { handler as GET, handler as POST, handler as PUT, handler as PATCH, hand
 
 Evidence: Hono's Next.js guide documents exactly this mount
 (`app/api/[[...route]]/route.ts`, `basePath('/api')`, Node runtime). The
-`hono/vercel` adapter is deprecated since Hono 4.13.9 and is literally
+`hono/vercel` adapter is deprecated since Hono 4.13.10 (every `hono/<runtime>` adapter moved to an `@hono/*` package that day, and the old paths go away in Hono 5) and is literally
 `(app) => (req) => app.fetch(req)`, so calling `app.fetch` directly is the
 same thing without a dependency; `@hono/vercel` 1.0.0 exists if an adapter
 import is preferred. Next.js route handlers are dynamic by default since 15,
@@ -147,7 +147,12 @@ turn on CORS for the web origin in the Hono app, add the origin to Better
 Auth's `trustedOrigins`, and keep a rewrite from `/api/:path*` on the web
 origin to the new host until every installed client has moved. Nothing
 inside `packages/api` changes. Vercel deploys a default-exported Hono app
-from `src/index.ts` with zero configuration.
+from `src/index.ts` with zero configuration. Two platform facts for that
+day: `relatedProjects` in `vercel.json` (up to three projects in one
+repository) wires a web preview to its matching API preview through
+`VERCEL_RELATED_PROJECTS`; and Vercel treats changes to the root
+`turbo.json`, `pnpm-workspace.yaml`, root `package.json`, shared tsconfig
+and the lockfile as global, deploying every connected project.
 
 
 ### 3.4 Vercel project settings
@@ -509,7 +514,7 @@ ciphertext`; a sibling `kek_version` column records the wrapping key.
 | Consent and sharing | `grants`, `consents` | `grants`: owner, grantee, category, level, `child_id` (required when category is `child`), `policy_version` and `description_version` (the version of the plain-words description shown when the grant was made), `notify` (her per-person switch for partner notifications, default false), created, revoked. `consents`: user, purpose (`collection`, `notifications`; `third_party_sharing` is reserved for any future disclosure to an entity, because a grant to a partner is a disclosure to a consumer and not MHMDA sharing), `policy_version`, `text_hash` of the exact disclosure shown, `granted_at`, `withdrawn_at`. Consent is its own unchecked control, never bundled with terms acceptance (RCW 19.373.010). |
 | Cycle               | `cycle_entries`, `entry_symptoms`, `cycle_predictions`                                                  | Entries keyed by `(subject_id, date)`; symptoms and moods from a controlled vocabulary; predictions are derived rows regenerated on write.                                                                                                    |
 | Pregnancy | `pregnancies`, `pregnancy_events`, `due_date_changes` | Several pregnancies per subject over time; `due_date`, `dating_method` (`lmp`, `ultrasound`, `transfer`, `manual`); every change of the due date is appended to `due_date_changes` (previous value, new value, method, changed_at) and the previous value stays visible to her; events for appointments and milestones only (symptoms in any stage live on the day sheet); `ended_at` and `ended_reason` (`birth`, `loss`, `other`), the reason shown to nobody but her. Section 8.4 has the rules. |
-| Children            | `children`, `child_guardians`, `child_events`, `child_measurements`                                     | Child belongs to a household; guardians many-to-many; measurements typed with units (`g`, `cm`, with imperial display).                                                                                                                       |
+| Children            | `children`, `child_guardians`, `child_events`, `child_measurements`                                     | Child belongs to a household; guardians many-to-many; measurements stored as SI integers (grams, millimetres, millilitres) and converted at the edge with the exact NIST factors in `packages/core/src/units.ts`; imperial is a display choice.                                                                                                                       |
 | Notes and media     | `notes`, `photos`, `photo_variants`                                                                     | `subject_id`, `author_id`, category; encrypted body and caption; photos hold object keys, status, dimensions, never original filenames or EXIF.                                                                                               |
 | Platform | `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `push_devices` (Phase 3) | Append-only audit (actor, action, subject, category, time, no content; partner reads deduplicated per actor, subject, category and day; kept one year); outbox jobs with ids-only payloads; idempotency rows (24 hours); export and deletion state machines; `product_events` holds daily aggregate counts only, never a user id, kept 90 days; it also carries the operational counters (sign-in failures, job failures, 5xx per route, sweep outcomes). Better Auth stores IP address and user agent per session; sessions are deleted at expiry. Closing an account deletes `audit_events` where the deleted user is subject or actor; the closure tombstone holds only an HMAC of the email and the request dates. Section 11 has the single retention schedule. |
 
@@ -653,7 +658,16 @@ partner's view without a notification.
 Postpartum: between birth and the first logged period `/today` and
 `/calendar` show the child's age and the quiet "log a period when it
 comes" card, no period prediction and no fertile window, with a line that
-cycles often return later while feeding. Predictions resume by rule 4.
+cycles often return later while feeding (ACOG: ovulation can return within
+weeks without breastfeeding and usually by about six months with it, and
+pregnancy is possible before the first period). The first period logged
+after birth is the event that restarts cycle statistics, and the
+postpartum span is excluded from averages. Predictions resume by rule 4.
+
+Loss copy: the person chooses the word (pregnancy or baby) and the product
+reuses it; nothing week-by-week or milestone-shaped is generated after a
+loss; no platitudes (BJA Education 2022 guidance); resources are offered
+once, not repeated.
 
 Cycle estimates (`packages/core/src/cycle.ts`): the fertile window is the
 five days before estimated ovulation and the day itself (Wilcox, Dunson and
@@ -662,7 +676,37 @@ average and the irregularity check, so a missed month of logging is a gap,
 not a cycle; when periods exist but no cycle is in that range the result is
 `not_enough_regular_cycles` and no date is shown; one logged period gives a
 `first_guess` labelled as such; uncertainty is 4 days for a first guess, 3
-for two cycles, 2 for three or more, 5 when irregular.
+for two cycles, 2 for three or more, 5 when irregular. Ovulation is always
+drawn as a band of plus or minus 2 days (`ovulationBandDays`): the 14 day
+luteal phase is ACOG's convention, Apple uses 13, and measured luteal
+phases average 12.4 days with a wide range (Bull 2019, 612,613 cycles), so
+a single ovulation day would be a false precision. The drawn fertile band
+therefore reaches one day past the estimated ovulation date, which also
+matches ACOG's patient guidance that pregnancy is possible until the day
+after ovulation.
+
+Pregnancy math (`packages/core/src/pregnancy.ts`, ACOG CO 700): due date
+from the last period plus 280 days, from a scan as the scan date plus the
+days left of 280 at the measured age, from a transfer as the transfer date
+plus 280 minus the embryo's age plus 14 (a day-5 embryo gives 261 days);
+gestational age as `38w1d` with trimesters changing at day 98 and day 196;
+`shouldRedate()` applies the CO 700 discrepancy bands (5 days before 9w0d,
+7 to 15w6d, 10 to 21w6d, 14 to 27w6d, 21 after) so a scan changes the due
+date only when it should.
+
+Child growth and milestones (task F1 and the new F4): one LMS engine with
+two vendored datasets, WHO Child Growth Standards under 730 days and CDC
+charts after, as CDC recommends; the published z-score formulas; the WHO
+plus or minus 3 SD tail adjustment for weight-based indicators; extremes
+labelled at the 2.3rd and 97.7th percentiles. CDC data and the 2022
+milestone checklists (12 ages, 159 items, "most children do this by", a
+surveillance tool and never screening) are public domain with the
+"Source: CDC" attribution and non-endorsement sentence in
+`packages/core/data/SOURCES.md`; WHO tables carry WHO terms, so they are
+vendored with attribution now and a permission request is filed before any
+paid tier (section 21). Feeding, diaper and sleep counts are shown against
+the published AAP and AASM ranges as context, never as alarms, and no sleep
+target is shown before four months.
 
 Pointing to care: when logged data suggests a clinician should be involved
 (heavy bleeding in pregnancy, a period more than two weeks late outside
@@ -784,21 +828,21 @@ made deliberately, not by drift.
 
 | Vendor     | Receives                                                          | Terms                  |
 | ---------- | ----------------------------------------------------------------- | ---------------------- |
-| Vercel | Runs the application: processes all data in plaintext in memory, holds the Phase 1 KEK and every other secret, stores allowlisted logs | Vercel DPA, self-serve |
-| Neon       | The database (free text encrypted)                                | Neon DPA, self-serve   |
-| GitHub     | Source code, CI logs (no secrets, no data)                        | GitHub terms           |
-| Resend     | Email addresses, generic subjects and bodies                      | Resend DPA, self-serve |
-| Cloudflare | DNS queries only (Phase 1); R2 objects (Phase 2)                  | Cloudflare terms       |
+| Vercel | Runs the application: processes all data in plaintext in memory, holds the Phase 1 KEK and every other secret, stores allowlisted logs (1 hour on Hobby) | Vercel DPA, self-serve, but it covers Pro and Enterprise only and Hobby is non-commercial, so the Phase 2 gate (anyone outside the household) means Pro |
+| Neon | The database (free text encrypted) | Neon is a Databricks product: the Neon Product Specific Schedule sits under the Databricks Master Cloud Services Agreement, which incorporates the Databricks DPA; record Databricks, Inc. as the contracting party in the processor register |
+| GitHub | Source code, CI logs (no secrets, no user data; fixtures are synthetic) | GitHub terms and DPA |
+| Resend | Email addresses, generic subjects and bodies | Resend DPA, self-serve; its subprocessor list names AI providers, so every email stays generic and the owner checks the account for AI features that read content (section 21) |
+| Cloudflare | DNS queries only (Phase 1); encrypted R2 objects (Phase 2) | Self-serve agreement incorporating the Cloudflare Customer DPA |
 
 ### 9.6 Regulation, in architectural terms
 
 | Rule                                      | Applies                                                 | Built in                                                                                                                                                                                                                                            |
 | ----------------------------------------- | ------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | HIPAA                                     | Generally no (consumer-selected app, no covered entity) | Nothing now; if a clinic or insurer ever integrates, sign BAAs (Vercel Pro add-on, Neon Scale) and swap R2 for S3                                                                                                                                   |
-| FTC Health Breach Notification Rule | Yes; covers fertility and symptom tracking | A disclosure the person did not authorize is a breach, including an SDK, a vendor, or a `can()` or RLS bug that showed a partner an ungranted category; hence no SDKs and the policy tests. Plaintext columns are unsecured under the Rule, so only the encrypted free text is outside it in a leaked dump. Notice per 16 CFR 318.4 to 318.6: individuals without unreasonable delay and within 60 calendar days of discovery, by email where the person chose email; the FTC at the same time when 500 or more people are affected, otherwise within 60 days after the calendar year ends; prominent media when 500 or more residents of one state are affected; content per 318.6. `docs/INCIDENT.md` (task J8) holds the plan and the notice template |
+| FTC Health Breach Notification Rule | Yes; covers fertility and symptom tracking | A disclosure the person did not authorize is a breach, including an SDK, a vendor, or a `can()` or RLS bug that showed a partner an ungranted category; hence no SDKs and the policy tests. Plaintext columns are unsecured under the Rule, so only the encrypted free text is outside it in a leaked dump. Notice per 16 CFR 318.4 to 318.6: individuals without unreasonable delay and within 60 calendar days of discovery, by email where the person chose email; the FTC at the same time when 500 or more people are affected, otherwise within 60 days after the calendar year ends; prominent media when 500 or more residents of one state are affected; content per 318.6. `docs/INCIDENT.md` (task J8) holds the plan and the notice template. Civil penalties run to $53,088 per violation (2026 figure) |
 | FTC Act Section 5 | Yes | Privacy promises match behavior: every privacy claim on a public page traces to a row in sections 9 to 11, and a claim that cannot be traced is removed (the Flo and Premom orders were about overstated promises). The policies are written from the vendor table and the retention schedule, not aspirationally. A claims register (`docs/CLAIMS.md`, task J8) lists what the product may and may not say and is reviewed at the Phase 2 copy audit |
 | Washington MHMDA | Yes (home state) | Consent as the Act defines it (section 7.4); respond to any rights request within 45 days, one 45-day extension; delete from live tables at closure and from Neon history within 7 days (the statute allows up to six months for backups); notify processors; a separate `/health-privacy` page containing only the RCW 19.373.020 items, linked from every public page as "Consumer Health Data Privacy Policy"; the rights and appeal path in section 11; no sale; no geofencing; processor contracts |
-| Other states (NV, CT, CA, VA, CO, TX, MD) | Mostly yes                                              | Building to MHMDA covers them; California's CMIA needs counsel review before public launch                                                                                                                                                          |
+| Other states (NV, CT, CA, VA, CO, TX, MD) | Mostly yes | Building to MHMDA covers them; California's CMIA needs counsel review before public launch. New York's health information privacy bill (S9269/A10357) passed both houses in June 2026 but had not been delivered to the governor as of 2026-10-04, so nothing applies yet; section 21 tracks it. No US or EU rule requires a consent banner for strictly necessary storage (session, theme, sound, offline cache), and `/privacy` lists each stored item with that basis                                                                                                                                                          |
 | COPPA | No as designed | Adults only, attested at sign-up (section 8.4); never give children logins; a minor's account is closed on discovery; child data is still health data |
 | FDA device software | General wellness only | No contraception, conception-planning, infertility or pregnancy-detection claims anywhere (21 CFR 884.5370 makes contraception software a class II device; the General Wellness guidance exempts only software unrelated to a disease or condition). Every fertile-window element carries "An estimate from your logged dates. Not a form of contraception." Checked against the claims register at the Phase 2 copy audit |
 | Apple and Google (Phase 3)                | Yes                                                     | In-app and web account deletion, privacy labels and Data safety matching real behavior, no iCloud storage of health data                                                                                                                            |
@@ -835,7 +879,10 @@ after 24 hours, tombstones after 30 days, `product_events` after 90 days,
 owner a generic notice when any job sits in `dead`.
 
 Every job is idempotent, retried with backoff and moved to `dead` after five
-attempts for inspection without content. Long workflows (export, account
+attempts for inspection without content. If a step ever needs more than
+Hobby's 300 second ceiling, Vercel Workflows is the documented escape
+before upgrading, and long HTTP/1.1 requests must stream heartbeats because
+intermediaries close idle connections. Long workflows (export, account
 deletion) are state machines in `data_requests` advanced one step per run,
 so they survive function timeouts. Job types are neutral (`reminder.send`,
 `photo.process`, `account.delete`).
@@ -1050,15 +1097,36 @@ setting without a click. Both themes are finished before either ships.
 | Display, headings, wordmark text | Newsreader (variable, OFL, Production Type) | An old-style serif with the contrast and warmth of the sheet's wordmark; optical-size axis available for display sizes |
 | Body, controls, labels, numerals | Figtree (variable, OFL, Erik Kennedy)       | Warm geometric sans that matches the tracked tagline, reads well at 14 to 16 px, has tabular-friendly numerals         |
 
-Self-hosted Latin subsets from fontsource 5.3.0 with license files beside
-them; `next/font/local` with `display: swap` and metric fallbacks. The scale
-is in `tokens.json` (`type-display` through `type-caption`). Body 17 px on
-desktop, 16 px on phones, line height 1.6; reading passages 45 to 68
-characters wide. The build compares two alternates in rendered specimens
-(Fraunces and Source Serif 4 for the serif; Albert Sans and Instrument Sans
-for the sans) beside the mark and records the comparison in
-`docs/design/TYPOGRAPHY.md`; the pairing above is the decision unless the
-specimens show a legibility problem.
+This pairing is final; the comparison was run during research rather than
+left to the build. Measured stroke contrast on a rasterized lowercase o put
+Fraunces far ahead (11.0 thick to thin at opsz 144) but it has no tabular
+figures and its default instance is the Black 9 pt cut; Cormorant Garamond
+is the closest literal match to the sheet's high-contrast old-style
+wordmark but its 0.386 x-height fails at 14 to 16 px; Instrument Serif is
+static with no figures feature; Newsreader (2.41 at opsz 72) is the one
+old-style serif with an optical-size axis, tabular and proportional
+figures, and no Reserved Font Name. Figtree was kept over Plus Jakarta Sans
+because Google's own description names its uppercase punch for labels,
+which is what the tracked tagline needs; its resemblance to another
+tracker's interface face is answered by Tidefern's serif-led identity, not
+by swapping the sans. Fallback pairing if the owner rejects either face:
+EB Garamond and Plus Jakarta Sans.
+
+Files: the roman Newsreader file is the optical-size build (both axes, 132
+KB) so browsers serve the sturdier cut at 16 px and the higher-contrast cut
+at display sizes with no CSS; the Newsreader italic is the weight-only
+build because the product uses one italic; Figtree ships roman and italic.
+Self-hosted Latin subsets from fontsource 5.3.0 with the OFL text beside
+them (the license requires it for distributed copies) and both copyright
+lines on the credits page; `next/font/local` with `display: swap`, weight
+ranges, and `adjustFontFallback` set to Times New Roman for the serif and
+Arial for the sans. The wordmark is outlined SVG geometry from Newsreader
+at opsz 72, never live text, so it renders identically in email, social
+cards and icons. Counters, dates and tables set
+`font-variant-numeric: tabular-nums`. The scale is in `tokens.json`
+(`type-display` through `type-caption`). Body 17 px on desktop, 16 px on
+phones, line height 1.6; reading passages 45 to 68 characters wide.
+Prediction and loss copy follows the templates in 13.10.
 
 ### 13.6 Layout, spacing, radius, motion
 
@@ -1207,10 +1275,13 @@ What the reference borrows from the strongest model found in research
 ### 13.9 Accessibility targets
 
 WCAG 2.2 AA throughout: landmarks, one H1, skip link, visible unobscured
-focus, 24 by 24 px minimum targets (44 px where practical), no drag-only
-interactions, 200 percent zoom and 320 px reflow, 4.5:1 text and 3:1
-non-text contrast in both themes, named controls, reduced motion. Axe runs
-on every route in both themes in CI; manual keyboard passes are recorded in
+focus (2.4.11), 24 by 24 px minimum targets (2.5.8; 44 px where practical),
+no drag-only interactions (2.5.7), accessible authentication (3.3.8: sign-in
+never asks anyone to solve, recall or transcribe anything; passkeys and
+password-manager-friendly fields, no CAPTCHA), 200 percent zoom and 320 px
+reflow, 4.5:1 text and 3:1 non-text contrast in both themes, named
+controls, reduced motion. Axe runs on every route in both themes in CI with
+the `wcag22aa` tag set; manual keyboard passes are recorded in
 `docs/design/QA.md`.
 
 ### 13.10 Content, forms, imagery and forced colors
@@ -1233,6 +1304,20 @@ on every route in both themes in CI; manual keyboard passes are recorded in
   one-color variant in `forced-colors: active`, focus uses the system
   `Highlight` color, and data marks keep their dashed and outlined
   distinctions so they survive without hue.
+
+Prediction and estimate copy, the templates every surface uses (the
+clinician reminder is also what App Store guideline 1.4.1 asks for):
+
+| Situation | Copy |
+| --------- | ---- |
+| Estimate from three or more cycles | "Based on your last 5 cycles, your next period will likely start between Oct 7 and Oct 9." |
+| First guess | "Log 3 periods and Tidefern can start estimating. For now this is a rough guess: around Oct 8, give or take 4 days." |
+| Not enough regular cycles | "Your recent cycles have been too different from each other to estimate a date. Keep logging and this will update." |
+| Ovulation and fertile days | "Ovulation is estimated around Sep 24 (Sep 22 to 26). Sep 19 to 24 are the days pregnancy is most likely. An estimate from your logged dates. Not a form of contraception." |
+| Footer on every prediction surface | "Tidefern gives estimates from what you log. It does not provide medical advice, diagnosis or treatment, and is not a form of birth control. Talk with your doctor or midwife before making health decisions." |
+| Deviation nudge | "Your last 6 cycles ranged from 24 to 39 days. Variation like this is common, and it is worth mentioning to your doctor or midwife." |
+| Pointing to care | "This is worth mentioning to your doctor or midwife." |
+| Milestones | "Most children do this by [age]. This is not a screening tool; your pediatrician is." |
 
 ## 14. Interface sound and touch
 
@@ -1488,6 +1573,28 @@ has a case.
   pull request and the deployment smoke test. Nothing is reported done
   without the command output that proves it.
 - Never from memory: versions, API shapes, legal facts. Resolve, cite, pin.
+- Layout, from the tool documentation checked on 2026-10-04: Codex and
+  Cursor read `.agents/skills` natively and follow symlinks; Claude Code
+  reads only `.claude/skills` and documents per-skill symlinked folders;
+  Claude Code reads `AGENTS.md` directly only when no `CLAUDE.md` exists,
+  so `CLAUDE.md` keeps the `@AGENTS.md` import with Claude-only notes
+  below it (compaction must preserve task ids, modified files, commands
+  and owner decisions). Skill frontmatter uses only the six Agent Skills
+  specification fields; `pnpm skills:check` enforces names, lengths, the
+  500 line ceiling and that every symlink resolves. Windows checkouts
+  need `core.symlinks` enabled or the links appear as one-line files.
+- Session shape, from Anthropic's long-running agent guidance: a session
+  starts by reading `docs/BUILD_PROGRESS.md`, `docs/BUILD_PLAN.md` and
+  `git log`, then runs the smoke suite before new work; a task closes only
+  with the command output in its Evidence cell, after a fresh-context
+  review subagent has read the diff; tests are never removed or weakened
+  to pass; the lead keeps merging and verifying while subagents run; each
+  subagent brief names its objective, the files it may touch, the output
+  location and the done criteria, and returns a condensed summary.
+- Human-only actions, never taken by an agent: production migrations that
+  drop or rewrite data, deleting a person's data outside the product's own
+  flows, force pushes to shared branches, spending money or changing a
+  plan, and accepting legal text.
 
 ## 21. Open questions and re-verification list
 
@@ -1499,7 +1606,12 @@ has a case.
 | Exact `deployment.environment` strings Vercel sends (`Preview`, `Production`) for the smoke workflow filter                  | build agent           | first pull request; log the event once |
 | When `eslint-config-next` supports ESLint 10 so the web app can leave 9                                                      | Renovate              | monthly                                |
 | When typescript-eslint supports TypeScript 7.1's API                                                                         | Renovate              | monthly                                |
-| Whether pnpm 12 builds cleanly on Vercel                                                                                     | build agent           | a throwaway branch in Phase 1          |
+| Whether pnpm 12 builds cleanly on Vercel (the build image installs pnpm 12 and treats it as lockfile 9 compatible, while the public docs still list 6 to 10) | build agent | a throwaway branch in Phase 1 |
+| Whether Node 26 (LTS from 2026-10-28, ships Temporal) is offered by Vercel; until then `todayIn()` and `weekStartFor()` use Intl | Renovate and build agent | quarterly |
+| New York S9269/A10357: delivery to the governor, signature or veto, effective date | owner | monthly through December 2026 |
+| Whether Resend processes transactional email content with the AI providers on its subprocessor list by default, and whether that can be disabled per account | owner | before the first email is sent |
+| WHO permission for embedding the Child Growth Standards tables in a product with a paid tier; CDC material needs attribution only | owner | before any paid tier |
+| Whether Cursor shows one entry or two for a skill reachable through both `.agents/skills` and `.claude/skills` (cosmetic) | owner | first time the repo opens in Cursor |
 | Owner approval of the reconstructed mark and of the dark-surface variant the sheet does not show, or delivery of original vectors | owner | before the brand chapter is final |
 | Attorney review of consent flows, both privacy pages, vendor terms, the claims register and the incident plan; California CMIA scope; New York's health privacy bill status | owner | Phase 2 gate |
 | A child's records at the age of majority, the child's own later right to deletion, and whether a photo grant to someone outside the household needs every guardian's agreement in every state | owner with attorney | Phase 2 gate |

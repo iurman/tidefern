@@ -45,6 +45,31 @@ export function compareDates(a: CalendarDate, b: CalendarDate): number {
   return toUtc(a) - toUtc(b);
 }
 
+/** Whether a string names a time zone this runtime knows, checked before it is saved to a profile. */
+export function isKnownTimeZone(timeZone: string): boolean {
+  try {
+    new Intl.DateTimeFormat("en-CA", { timeZone }).format(0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * First day of the week for a locale, 1 for Monday through 7 for Sunday
+ * (the Intl convention). Node 24 and current browsers expose getWeekInfo;
+ * older runtimes expose the weekInfo accessor; Monday is the fallback.
+ */
+export function weekStartFor(locale: string): 1 | 2 | 3 | 4 | 5 | 6 | 7 {
+  const resolved = new Intl.Locale(locale) as Intl.Locale & {
+    getWeekInfo?: () => { firstDay: number };
+    weekInfo?: { firstDay: number };
+  };
+  const info = resolved.getWeekInfo?.() ?? resolved.weekInfo;
+  const day = info?.firstDay;
+  return day && day >= 1 && day <= 7 ? (day as 1 | 2 | 3 | 4 | 5 | 6 | 7) : 1;
+}
+
 /** Today's calendar date for a person in the given IANA time zone. */
 export function todayIn(timeZone: string, now: Date = new Date()): CalendarDate {
   const parts = new Intl.DateTimeFormat("en-CA", {
