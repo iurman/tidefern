@@ -5,14 +5,15 @@ import { play, unlockAudio } from "@/lib/sound";
 export function SoundToggle() {
   function toggle() {
     const root = document.documentElement;
-    const next = root.dataset.sound === "off" ? "on" : "off";
+    // The header control flips between silent and the full level; Settings offers "actions only".
+    const next = root.dataset.sound === "off" ? "all" : "off";
     root.dataset.sound = next;
     try {
       localStorage.setItem(SOUND_KEY, next);
     } catch {
       // Blocked storage still allows an in-session choice.
     }
-    if (next === "on") {
+    if (next === "all") {
       unlockAudio();
       play("toggle");
     }

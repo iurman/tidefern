@@ -53,6 +53,8 @@ export const SOUND_KEY = "tidefern-sound-v1";
 
 /**
  * Runs before paint. Reads two functional preferences only: an explicit theme
- * choice (light or dark; absent means follow the system) and the sound setting.
+ * choice (light or dark; absent means follow the system) and the sound level
+ * (all, actions or off; absent means all). Without JavaScript the stylesheet's
+ * prefers-color-scheme block already renders the system theme.
  */
-export const preferenceScript = `(function(){var r=document.documentElement;r.dataset.js="true";var t=null;try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.themeSource="system"}else{r.dataset.themeSource="user"}r.dataset.theme=t;var s="on";try{s=localStorage.getItem("${SOUND_KEY}")==="off"?"off":"on"}catch(e){}r.dataset.sound=s;})();`;
+export const preferenceScript = `(function(){var r=document.documentElement;r.dataset.js="true";var t=null;try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.themeSource="system"}else{r.dataset.themeSource="user"}r.dataset.theme=t;var s="all";try{var v=localStorage.getItem("${SOUND_KEY}");if(v==="off"||v==="actions"){s=v}}catch(e){}r.dataset.sound=s;})();`;

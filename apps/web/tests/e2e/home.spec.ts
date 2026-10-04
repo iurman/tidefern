@@ -40,7 +40,7 @@ test("theme follows the system on first visit and remembers an explicit choice",
 
 test("interface sound can be turned off and the choice persists", async ({ page }) => {
   await page.goto("/");
-  await expect(page.locator("html")).toHaveAttribute("data-sound", "on");
+  await expect(page.locator("html")).toHaveAttribute("data-sound", "all");
   await page.getByRole("button", { name: "Turn interface sounds off" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-sound", "off");
   await page.reload();
@@ -124,4 +124,27 @@ test("no audio context exists before a gesture and one shared context runs after
   });
   expect(after.count, "exactly one shared context after gestures").toBe(1);
   expect(after.state).toBe("running");
+});
+
+test("the system theme applies without JavaScript", async ({ browser }) => {
+  const context = await browser.newContext({ javaScriptEnabled: false, colorScheme: "dark" });
+  const page = await context.newPage();
+  await page.goto("/");
+  const background = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  expect(background).toBe("rgb(15, 26, 23)");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Life flows together.");
+  await context.close();
+});
+
+test("nothing animates forever", async ({ page }) => {
+  await page.goto("/");
+  const infinite = await page.evaluate(
+    () =>
+      Array.from(document.querySelectorAll("*")).filter((element) =>
+        getComputedStyle(element)
+          .animationIterationCount.split(",")
+          .some((count) => count.trim() === "infinite"),
+      ).length,
+  );
+  expect(infinite).toBe(0);
 });

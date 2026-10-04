@@ -1,4 +1,4 @@
-import { soundValue } from "@tidefern/design-tokens";
+import { hapticPattern, soundValue } from "@tidefern/design-tokens";
 
 /**
  * Tidefern's interface sound system. Everything is synthesized with the Web
@@ -18,13 +18,27 @@ let lastHover = 0;
 const MASTER_GAIN = soundValue("sound-master-gain");
 const HOVER_GAIN = soundValue("sound-hover-gain");
 const PRESS_GAIN = soundValue("sound-press-gain");
+const SUCCESS_GAIN = soundValue("sound-success-gain");
 const HOVER_HZ = soundValue("sound-hover-hz");
 const PRESS_HZ = soundValue("sound-press-hz");
+const SUCCESS_A = soundValue("sound-success-hz-a");
+const SUCCESS_B = soundValue("sound-success-hz-b");
+const ERROR_HZ = soundValue("sound-error-hz");
+const ERROR_END_HZ = soundValue("sound-error-end-hz");
 const MIN_GAP_MS = soundValue("sound-min-gap-ms");
 const FLOOR = 0.0001;
 
+export type SoundLevel = "all" | "actions" | "off";
+
+/** all: every cue including hover. actions: no hover ticks. off: silent. */
+export function soundLevel(): SoundLevel {
+  if (typeof document === "undefined") return "off";
+  const level = document.documentElement.dataset.sound;
+  return level === "off" || level === "actions" ? level : "all";
+}
+
 export function soundEnabled(): boolean {
-  return typeof document !== "undefined" && document.documentElement.dataset.sound !== "off";
+  return soundLevel() !== "off";
 }
 
 /**
@@ -99,6 +113,7 @@ export function play(cue: Cue) {
   const now = performance.now();
   switch (cue) {
     case "hover":
+      if (soundLevel() !== "all") return;
       if (now - lastHover < MIN_GAP_MS) return;
       lastHover = now;
       tone({ frequency: HOVER_HZ, type: "sine", decay: 0.03, gain: HOVER_GAIN });
@@ -122,22 +137,34 @@ export function play(cue: Cue) {
       });
       return;
     case "success":
-      tone({ frequency: 523.25, type: "sine", decay: 0.12, gain: PRESS_GAIN });
-      tone({ frequency: 783.99, type: "sine", decay: 0.16, gain: PRESS_GAIN * 0.8, delay: 0.09 });
+      tone({ frequency: SUCCESS_A, type: "sine", decay: 0.12, gain: SUCCESS_GAIN });
+      tone({
+        frequency: SUCCESS_B,
+        type: "sine",
+        decay: 0.16,
+        gain: SUCCESS_GAIN * 0.8,
+        delay: 0.09,
+      });
       return;
     case "error":
-      tone({ frequency: 196, endFrequency: 150, type: "triangle", decay: 0.18, gain: PRESS_GAIN });
+      tone({
+        frequency: ERROR_HZ,
+        endFrequency: ERROR_END_HZ,
+        type: "triangle",
+        decay: 0.18,
+        gain: PRESS_GAIN,
+      });
       return;
   }
 }
 
 export type HapticKind = "tap" | "select" | "success" | "error";
 
-const PATTERNS: Record<HapticKind, number | number[]> = {
-  tap: 8,
-  select: 4,
-  success: [10, 40, 14],
-  error: [20, 50, 20, 50, 20],
+const PATTERNS: Record<HapticKind, number[]> = {
+  tap: hapticPattern("haptic-tap-ms"),
+  select: hapticPattern("haptic-select-ms"),
+  success: hapticPattern("haptic-success-pattern"),
+  error: hapticPattern("haptic-error-pattern"),
 };
 
 /**

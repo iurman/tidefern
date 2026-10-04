@@ -842,9 +842,14 @@ days are handled without judgment, with a quiet path out of pregnancy mode.
 `packages/design-tokens/tokens.json` holds the palette, semantic colors
 (light and dark), type scale, spacing, radius, motion and sound tokens.
 `pnpm tokens:generate` writes `apps/web/src/app/tokens.css`; CI fails when
-it is stale. The same JSON is served at `/design/tokens.json`, the CSS at
-`/design/tokens.css`, and a future React Native theme and Swift or Kotlin
-constants compile from it.
+it is stale. `pnpm tokens:contrast` measures every color role against the
+surfaces its token names, in both themes, and fails below 4.5:1 for text
+roles and 3:1 for ui and data roles, so the color chapter can never claim
+an unmeasured value. The JSON carries palette, semantic colors (with a
+`kind` and the surfaces each is used on), data marks, type, weight,
+leading, tracking, spacing, radius, size, breakpoints, elevation, motion,
+sound and haptics. Today it compiles to CSS; a React Native theme and
+Swift or Kotlin constants compile from the same file in Phase 3.
 
 ### 13.2 Brand
 
@@ -853,7 +858,7 @@ From the brand sheet (`assets/brand/reference/tidefern-brand-sheet.webp`):
 | Name      | Hex       | Meaning   | Role in the system                                                                                    |
 | --------- | --------- | --------- | ----------------------------------------------------------------------------------------------------- |
 | Fern      | `#2F4F46` | Grounding | Light text and action fill; wordmark color                                                            |
-| Sea Glass | `#6EA7A0` | Balance   | Decorative water; darkened to `#3A6B64` for light-mode text, lifted to `#8FC1B9` for dark-mode accent |
+| Sea Glass | `#6EA7A0` | Balance   | Decorative water; darkened to `#35645D` for light-mode text, lifted to `#8FC1B9` for dark-mode accent |
 | Sage      | `#B7C9B1` | Growth    | Decorative leaf fills, dark-mode mark                                                                 |
 | Sand      | `#E6D6C3` | Warmth    | Warm surface accent (highlighted day)                                                                 |
 | Stone     | `#D9D9D4` | Clarity   | Neutral separators                                                                                    |
@@ -865,43 +870,67 @@ together" in Figtree uppercase, 0.18em tracking, Sea Glass accent. Closing
 line: "Healthy tomorrows, together". The mark is a fern frond unrolling from
 a wave with a mist highlight. Only a raster sheet exists, so
 `packages/design-tokens/brand/` holds a hand-authored vector reconstruction
-(light, dark and app-icon variants) marked as pending the owner's approval.
-If original vectors arrive, they replace the files in place. The mark is
-never recreated with a font, an image generator or a raster trace.
+(light, dark, one-color, small-size and app-icon variants) marked as
+pending the owner's approval; the dark-surface variant is an invention the
+sheet does not show and is an explicit approval item. Below 48 px rendered
+size the small variant (stem and wave, heavier strokes) is used, and the
+16 and 32 px favicons are rasterized from it. The lockup wordmark vector
+(outlined from Newsreader 500 with the sheet's swash f redrawn by hand) is
+a Phase 1 deliverable; live Newsreader text stands in until then. If
+original vectors arrive, they replace the files in place. The mark is never
+recreated with a font, an image generator or a raster trace.
 
 ### 13.3 Color roles and measured contrast
 
 Light and dark are designed independently; nothing is inverted. Every
-pairing below was measured with the WCAG 2.2 formula on 2026-10-04.
+role carries a `kind` and the list of surfaces it is used on; `pnpm
+tokens:contrast --matrix` prints the full matrix and `pnpm check` fails
+when any pairing is below its threshold (4.5:1 text, 3:1 ui and data). The
+values below are the ones that pass that gate on 2026-10-04.
 
-| Role                 | Light                 | Dark                  | Measured                                              |
-| -------------------- | --------------------- | --------------------- | ----------------------------------------------------- |
-| page                 | `#F7F5EF`             | `#0F1A17`             | canvas                                                |
-| surface              | `#FFFFFF`             | `#15221E`             | cards and inputs                                      |
-| panel                | `#EDE9DF`             | `#1B2B26`             | grouped regions                                       |
-| text                 | `#1F3530`             | `#EEEBE3`             | 11.9:1 light, 14.9:1 dark on page                     |
-| muted                | `#56696A`             | `#9FB0A8`             | 5.3:1 light, 7.8:1 dark on page; 4.8:1 on light panel |
-| accent               | `#3A6B64`             | `#8FC1B9`             | 5.6:1 light, 8.9:1 dark on page                       |
-| action / action-text | `#2F4F46` / `#F7F5EF` | `#8FC1B9` / `#0F1A17` | 8.3:1 light, 8.9:1 dark                               |
-| border               | `#6F8680`             | `#5C756C`             | at least 3:1 non-text on page                         |
-| focus                | `#3A6B64`             | `#A8D2CB`             | 2 px outline, 4 px offset                             |
-| warning              | `#8E5141`             | `#DDA58E`             | 5.4:1 light, 8.3:1 dark                               |
-| danger               | `#A63E37`             | `#E08A80`             | 5.7:1 light, 6.9:1 dark                               |
-| tide, leaf, warmth   | decorative            | decorative            | never text                                            |
+| Role | Light | Dark | Used on |
+| --- | --- | --- | --- |
+| page | `#F7F5EF` | `#0F1A17` | canvas |
+| surface | `#FFFFFF` | `#15221E` | cards and inputs |
+| panel | `#EDE9DF` | `#1B2B26` | grouped regions |
+| overlay | `#FFFFFF` | `#2A4039` | dialogs, menus, sheets (highest tier) |
+| warmth | `#E6D6C3` | `#3A2F28` | a highlighted day; pairs with text, accent and danger only |
+| text | `#1F3530` | `#EEEBE3` | every surface, 4.5:1 or better |
+| muted | `#4E6162` | `#9FB0A8` | page, surface, panel, overlay |
+| accent | `#35645D` | `#8FC1B9` | every surface including warmth |
+| action / action-text | `#2F4F46` / `#F7F5EF` | `#8FC1B9` / `#0F1A17` | action text is measured on the fill |
+| border | `#6F8680` | `#73908A` | 3:1 on page, surface, panel and overlay |
+| focus | `#3A6B64` | `#A8D2CB` | 2 px outline, 4 px offset |
+| success | `#3A664A` | `#A3CDA0` | derived from Sage, darkened for text |
+| warning | `#8E5141` | `#DDA58E` | text on every surface |
+| danger | `#9E3A33` | `#EC9E95` | text on every surface including the overlay dialog and warmth |
+| data-period | `#A8604A` | `#DDA58E` | logged period marks; predictions are the same color dashed with no fill |
+| data-fertile | `#3F736C` | `#8FC1B9` | fertile window marks; predictions dashed |
+| data-band | `#5F8A74` | `#8FB08A` | percentile band at 40 percent fill with a solid edge |
+| tide, leaf | decorative | decorative | never text, never a data mark |
 
-Raw brand colors Sea Glass, Sage, Sand, Stone and Clay fail 4.5:1 as text
-on Mist and are decoration-only in light mode; the darkened variants above
-carry text.
+Data marks never rely on color alone: ovulation uses the text role as a
+small outlined dot, today uses the action role, the measurement line uses
+the text role, and every predicted state is dashed. Raw brand colors Sea
+Glass, Sage, Sand, Stone and Clay fail 4.5:1 as text on Mist and are
+decoration-only in light mode; the darkened variants above carry text.
 
 ### 13.4 Theme behavior
 
-First visit follows the system preference (`prefers-color-scheme`); a
-pre-paint script reads one stored key (`tidefern-theme-v1`) and sets
-`data-theme` and `data-theme-source` on `<html>` so there is no flash and
-no hydration mismatch. The toggle stores an explicit choice; Settings
-offers "follow system" to clear it. `color-scheme` is set per theme so form
-controls and scrollbars match, and `theme-color` is declared for both
-schemes. Images never invert; the mark swaps to its dark variant.
+First visit follows the system preference. The generated stylesheet
+writes light on `:root`, dark under `[data-theme="dark"]`, and dark again
+inside a `prefers-color-scheme: dark` block scoped to
+`:root:not([data-theme="light"])`, so the system theme renders correctly
+before and without JavaScript. A pre-paint script then reads one stored
+key (`tidefern-theme-v1`) and sets `data-theme` and `data-theme-source` on
+`<html>` (which carries no default attribute) so there is no flash and no
+hydration mismatch; while the source is `system`, a `change` listener on
+the media query applies a system switch live. The toggle stores an
+explicit choice; Settings offers "follow system" to clear it.
+`color-scheme` is set per theme so form controls and scrollbars match,
+`theme-color` is declared for both schemes, and the web manifest, which
+cannot switch per scheme, uses the light page color. Images never invert;
+the mark swaps to its dark variant.
 
 Why system default rather than dark-first (the site-build skill's usual
 default): the brand sheet is light, the marketing page should look like the
@@ -927,12 +956,38 @@ specimens show a legibility problem.
 
 ### 13.6 Layout, spacing, radius, motion
 
-Max width 1200 px; gutters 64 px desktop, 32 px tablet, 24 px phone. Spacing
-scale 4 to 96 px. Radii: 10 px controls, 18 px cards, 28 px sheets, round
-pills. No scroll hijacking, custom cursors, animate-on-scroll reveals,
-glass panels, blurred orbs, gradient text or decorative status dots.
-Personality comes from the serif, the composition, the mark, the quiet tide
-and the sound.
+Max width 1200 px (reading columns 720 px); breakpoints 600 px (phone),
+960 px (tablet), 1024 px (the app's left rail appears) and 1200 px; gutters
+64 px desktop, 32 px tablet, 24 px phone. Spacing scale 4 to 96 px. Radii:
+10 px controls, 18 px cards, 28 px sheets, round pills. Controls are at
+least 44 px tall, primary actions 48 px, icons 20 px on a 24 px grid with a
+1.6 px stroke and round caps. Elevation: no drop shadows anywhere; layers
+separate by surface tier (page, surface, panel, overlay), a 1 px
+soft-border and, behind dialogs and sheets, a scrim of the page color at
+40 percent; z-index has three steps (sticky 5, overlay 20, toast 30). No
+scroll hijacking, custom cursors, animate-on-scroll reveals, glass panels,
+blurred orbs, gradient text or decorative status dots.
+
+Signature: five recurring moves, used everywhere and nowhere else, so the
+daily screens cannot converge on generic cards and chips.
+
+1. The frond: the cycle ring's progress arc ends in a small unrolling curl
+   taken from the mark's spiral, and the growth chart's measurement line
+   ends the same way.
+2. The tide line: one 1 px sea-glass hairline wave is the only decorative
+   rule in the product; it is the section divider, the today marker in the
+   calendar and the week marker in the journey view.
+3. Every estimate sentence ("Your next period is likely around...") is set
+   in Newsreader italic at `type-intro`, the only italic in the product.
+4. Numerals at display size (cycle day, week, weight) are Figtree 500 with
+   tabular figures, set beside a Newsreader label, never alone.
+5. Warmth: the one highlighted thing on a screen (today, the current week,
+   the newest milestone) sits on the warmth surface; nothing else does.
+
+The decorative tide on the marketing page is finite: it settles once after
+load and rests, so no automatic motion lasts more than five seconds and
+nothing on any route animates forever (WCAG 2.2.2; a browser test checks
+it).
 
 Motion contract (task G5 exports it from one `motion-tokens` module that
 both the app and `/design/motion` import):
@@ -969,15 +1024,31 @@ The build produces real, shared components and documents each with its
 states (default, hover, focus-visible, active, disabled, loading, error,
 empty) in `/design/components`:
 
-Logo and mark, header with primary navigation and controls, mobile menu
-(native disclosure, Escape closes and returns focus), footer, text link and
-button (primary, secondary, quiet, destructive), inline and toast feedback,
-form fields with validation, segmented control, chip group for symptoms,
-calendar month grid and list, day sheet, cycle ring (today's position,
-prediction and uncertainty), pregnancy week card, timeline, measurement
-chart with percentile band, person and grant cards, disclosure, dialog
-(native `<dialog>`), skeleton and empty states, theme and sound toggles,
-copy-code and token swatches for the reference.
+App shell, authenticated: on phones a persistent bottom tab bar with
+Today, Calendar, Journey or Family (by stage), Sharing and Settings, plus a
+quick-log button on Today; from 1024 px a left rail; the public header,
+with its primary navigation and native-disclosure mobile menu (Escape
+closes and returns focus), is used only on public routes. Icons: one
+project set on a 24 px grid, 1.6 px stroke, round caps, `currentColor`,
+every icon paired with visible text or an sr-only name; symptom and mood
+icons are drawn for Tidefern and listed in `docs/design/ASSETS.md`.
+
+Components: logo and mark, header, tab bar and rail, footer, text link and
+button (primary, secondary, quiet, destructive), inline and toast
+feedback, form fields with validation (label above, help text, inline
+error below the field, required marker, `inputMode` and `autocomplete`
+set), IANA time zone combobox, segmented date input, date range selection,
+flow scale, chip group for symptoms, mood selector, measurement input with
+unit toggle, segmented control, calendar month grid and list, day sheet,
+cycle ring (today's position, logged and predicted states, uncertainty
+drawn as a dashed arc, the frond curl), pregnancy week card, timeline,
+measurement chart with percentile band, person and grant cards,
+invitation card, consent record, device row, disclosure, dialog (native
+`<dialog>` on the overlay tier with the scrim), bottom sheet, skeleton and
+empty states, theme and sound toggles, copy-code and token swatches for
+the reference. Task G5's acceptance criterion is that every component
+named here exists with all eight states in both themes and appears in
+`/design/components`.
 
 ### 13.8 The `/design` reference
 
@@ -1036,6 +1107,27 @@ non-text contrast in both themes, named controls, reduced motion. Axe runs
 on every route in both themes in CI; manual keyboard passes are recorded in
 `docs/design/QA.md`.
 
+### 13.10 Content, forms, imagery and forced colors
+
+- Content design: pending, failure and empty states follow one voice table
+  in `docs/design/CONTENT.md` (pending says what is happening, failure says
+  what to do next, empty says what would be here, why it is not, and the
+  one action). Dates and numbers format through `Intl` in `en-US` for
+  Phase 1 with the profile's time zone, week start and units; strings live
+  in one module so a later locale is a translation, not a rewrite.
+- Forms: one field anatomy (label, optional help, control, inline error),
+  errors announced with `aria-describedby`, required marked in the label,
+  `inputMode="numeric"` for measurements, segmented inputs for dates, no
+  placeholder-as-label.
+- Imagery: no stock photography and no generated art. Empty states and
+  onboarding use text, the tide line and the mark; the social card is the
+  lockup on Mist with one line of copy. Photos in Phase 2 are the family's
+  own.
+- Forced colors: `forced-color-adjust: auto` everywhere; the mark uses its
+  one-color variant in `forced-colors: active`, focus uses the system
+  `Highlight` color, and data marks keep their dashed and outlined
+  distinctions so they survive without hue.
+
 ## 14. Interface sound and touch
 
 ### 14.1 Decisions
@@ -1061,9 +1153,12 @@ on every route in both themes in CI; manual keyboard passes are recorded in
 - Cues: hover tick (sine, 1760 Hz, mouse pointers only, at most one per
   90 ms), press drop (triangle, 523 Hz falling a fourth), toggle (the drop
   reversed), success (two rising sine notes), error (a low falling
-  triangle). Pitches and levels are tokens in `tokens.json`. Nothing plays
-  on page load, route change, toast arrival or a timer; every cue is a
-  direct response to the person's action and lasts well under a second.
+  triangle). Every pitch, level and haptic pattern is a token in
+  `tokens.json`, so `/design/sound` and any future client read the same
+  values. Every cue is a direct response to the person's action and lasts
+  well under a second, including one settle cue within 600 ms of a
+  navigation the person started with a click or Enter; never on back,
+  forward, reload, redirect, page load, toast arrival or a timer.
 - `SoundProvider` attaches once at the root and uses event delegation over
   `a, button, summary, input, select, textarea, [role=button|tab|switch]`,
   so every control responds without opting in. Enter and Space play the
@@ -1077,12 +1172,13 @@ on every route in both themes in CI; manual keyboard passes are recorded in
 - On iOS, Web Audio plays on the ambient session and the Ring/Silent switch
   mutes it. That is the behavior Apple's guidelines expect for sound
   effects; do not set `navigator.audioSession.type` to `playback`.
-- Default on, including hover, because the owner asked for hover feedback
-  explicitly; prior art (Microsoft, Material) ships control sounds off and
-  hover sounds rarely, so Settings offers three levels (all, actions only,
-  off) and the header mute flips between the chosen level and off. The
-  choice is stored on the device (`tidefern-sound-v1`), applied before
-  paint, and disclosed as functional storage ("remembered on this device").
+- Default `all`, including hover, because the owner asked for hover
+  feedback explicitly; prior art (Microsoft, Material) ships control sounds
+  off and hover sounds rarely, so `data-sound` is `all`, `actions` or `off`:
+  Settings offers the three levels and the header control flips between
+  `off` and `all`. The choice is stored on the device (`tidefern-sound-v1`),
+  applied before paint, and disclosed as functional storage ("remembered on
+  this device").
   WCAG 1.4.2 applies to audio longer than three seconds; these cues are far
   shorter, but the mute exists because control matters more than
   compliance, and no media query expresses a sound preference.
@@ -1294,7 +1390,7 @@ has a case.
 | When `eslint-config-next` supports ESLint 10 so the web app can leave 9                                                      | Renovate              | monthly                                |
 | When typescript-eslint supports TypeScript 7.1's API                                                                         | Renovate              | monthly                                |
 | Whether pnpm 12 builds cleanly on Vercel                                                                                     | build agent           | a throwaway branch in Phase 1          |
-| Owner approval of the reconstructed mark, or delivery of original vectors                                                    | owner                 | before the brand chapter is final      |
+| Owner approval of the reconstructed mark and of the dark-surface variant the sheet does not show, or delivery of original vectors | owner | before the brand chapter is final |
 | Attorney review of consent flows, privacy policy, vendor terms; California CMIA scope; New York's health privacy bill status | owner                 | Phase 2 gate                           |
 | Better Auth passkeys on Expo end to end                                                                                      | build agent           | Phase 3                                |
 

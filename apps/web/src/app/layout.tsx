@@ -4,6 +4,7 @@ import localFont from "next/font/local";
 import { Footer } from "@/components/footer";
 import { Header } from "@/components/header";
 import { SoundProvider } from "@/components/sound-provider";
+import { ThemeSync } from "@/components/theme-sync";
 import { indexingAllowed, preferenceScript, site } from "@/lib/site";
 import "./globals.css";
 
@@ -54,8 +55,6 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      data-theme="light"
-      data-sound="on"
       suppressHydrationWarning
       className={`${newsreader.variable} ${figtree.variable}`}
     >
@@ -64,6 +63,7 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
       </head>
       <body>
         <SoundProvider />
+        <ThemeSync />
         <a className="skip-link" href="#main">
           Skip to content
         </a>

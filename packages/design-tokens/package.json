@@ -12,7 +12,9 @@
     "generate": "node scripts/generate.mjs",
     "check": "node scripts/generate.mjs --check",
     "lint": "eslint .",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "contrast": "node scripts/contrast.mjs",
+    "contrast:matrix": "node scripts/contrast.mjs --matrix"
   },
   "devDependencies": {
     "@tidefern/config": "workspace:*",

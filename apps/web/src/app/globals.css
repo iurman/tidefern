@@ -195,6 +195,15 @@ img {
 [data-theme="dark"] .mark-dark {
   display: block;
 }
+/* Without JavaScript nothing sets data-theme, so the system preference decides. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .mark-light {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .mark-dark {
+    display: block;
+  }
+}
 .site-nav {
   display: flex;
   gap: 8px;
@@ -247,6 +256,14 @@ img {
 [data-theme="dark"] .when-dark,
 [data-sound="off"] .when-sound-off {
   display: inline-flex;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .when-light {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .when-dark {
+    display: inline-flex;
+  }
 }
 .when-light,
 .when-sound-on {
@@ -316,7 +333,8 @@ img {
   border-radius: 50%;
   background: var(--tide);
   opacity: 0.35;
-  animation: tide var(--duration-tide) var(--ease-tide) infinite alternate;
+  /* Finite: the tide settles once after load and rests (WCAG 2.2.2). */
+  animation: tide var(--duration-tide) var(--ease-tide) 1 forwards;
 }
 @keyframes tide {
   from {

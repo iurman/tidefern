@@ -47,6 +47,7 @@ jobs:
       - name: Generated files are current (tokens, brand copies, OpenAPI)
         run: |
           pnpm tokens:check
+          pnpm tokens:contrast
           pnpm --filter web brand:check
           pnpm openapi:check
 
