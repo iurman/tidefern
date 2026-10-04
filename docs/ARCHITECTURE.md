@@ -714,13 +714,21 @@ Child growth and milestones (task F1 and the new F4): one LMS engine with
 two vendored datasets, WHO Child Growth Standards under 730 days and CDC
 charts after, as CDC recommends; the published z-score formulas; the WHO
 plus or minus 3 SD tail adjustment for weight-based indicators; extremes
-labelled at the 2.3rd and 97.7th percentiles. CDC data and the 2022
-milestone checklists (12 ages, 159 items, "most children do this by", a
-surveillance tool and never screening) are public domain with the
-"Source: CDC" attribution and non-endorsement sentence in
-`packages/core/data/SOURCES.md`; WHO tables carry WHO terms, so they are
-vendored with attribution now and a permission request is filed before any
-paid tier (section 21). Feeding, diaper and sleep counts are shown against
+labelled at the 2.3rd and 97.7th percentiles. The infant tables come from
+CDC's own hosting of the WHO birth to 24 month LMS files (CSV, weight for
+age, length for age, weight for length, head circumference), attributed to
+WHO as author of the standard and CDC as source of the files, rather than
+WHO's spreadsheet tables. CDC data and the 2022 milestone checklists (12
+ages, 159 items, placed where at least 75 percent of children have the
+skill, a surveillance tool that CDC says must not be used as screening or
+diagnosis) are public domain with the "Source: CDC" attribution and
+non-endorsement sentence in `packages/core/data/SOURCES.md`; the WHO
+permission question stays open for any paid tier (section 21). CDC's 2022
+extended BMI-for-age files matter only if the child chapter ever reports
+BMI past age 2. Because acog.org, cdc.gov, ecfr.gov and the FDA review
+PDFs refuse non-browser clients, every clinical and regulatory quote the
+product relies on is vendored in `SOURCES.md` with its date, never fetched
+at build time. Feeding, diaper and sleep counts are shown against
 the published AAP and AASM ranges as context, never as alarms, and no sleep
 target is shown before four months.
 
@@ -864,7 +872,7 @@ made deliberately, not by drift.
 | Washington MHMDA | Yes (home state) | Consent as the Act defines it (section 7.4); respond to any rights request within 45 days, one 45-day extension; delete from live tables at closure and from Neon history within 7 days (the statute allows up to six months for backups); notify processors; a separate `/health-privacy` page containing only the RCW 19.373.020 items, linked from every public page as "Consumer Health Data Privacy Policy"; the rights and appeal path in section 11; no sale; no geofencing; processor contracts |
 | Other states (NV, CT, CA, VA, CO, TX, MD) | Mostly yes | Building to MHMDA covers them; California's CMIA needs counsel review before public launch. New York's health information privacy bill (S9269/A10357) passed both houses in June 2026 but had not been delivered to the governor as of 2026-10-04, so nothing applies yet; section 21 tracks it. No US or EU rule requires a consent banner for strictly necessary storage (session, theme, sound, offline cache), and `/privacy` lists each stored item with that basis                                                                                                                                                          |
 | COPPA | No as designed | Adults only, attested at sign-up (section 8.4); never give children logins; a minor's account is closed on discovery; child data is still health data |
-| FDA device software | General wellness only | No contraception, conception-planning, infertility or pregnancy-detection claims anywhere (21 CFR 884.5370 makes contraception software a class II device; the General Wellness guidance exempts only software unrelated to a disease or condition). Every fertile-window element carries "An estimate from your logged dates. Not a form of contraception." Checked against the claims register at the Phase 2 copy audit |
+| FDA device software | General wellness only | No contraception, conception-planning, infertility or pregnancy-detection claims anywhere. 21 CFR 884.5370 makes contraception software a class II device with special controls (clinical performance testing of contraceptive effectiveness, a human factors study, labeling that another method must be used on specified days), and at least two products hold that authorization (Natural Cycles, De Novo DEN170052, 2018; Clue Birth Control, 510(k) K193330, 2021), which is the concrete reason Tidefern copy never presents fertile or non-fertile days as contraceptive advice. The General Wellness guidance (issued 2026-01-06) exempts only software unrelated to a disease or condition and says nothing about cycle tracking, so the posture rests on copy. Every fertile-window element carries "An estimate from your logged dates. Not a form of contraception." Checked against the claims register at the Phase 2 copy audit |
 | Apple and Google (Phase 3)                | Yes                                                     | In-app and web account deletion, privacy labels and Data safety matching real behavior, no iCloud storage of health data                                                                                                                            |
 
 Attorney review of consent flows, the privacy policy and vendor terms is a
