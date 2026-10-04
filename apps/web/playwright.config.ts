@@ -20,8 +20,12 @@ export default defineConfig({
     reducedMotion: "reduce",
     trace: "retain-on-failure",
     screenshot: "only-on-failure",
+    // The second header asks Vercel to set the bypass as a cookie so in-browser requests stay authorized.
     extraHTTPHeaders: process.env.VERCEL_AUTOMATION_BYPASS_SECRET
-      ? { "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET }
+      ? {
+          "x-vercel-protection-bypass": process.env.VERCEL_AUTOMATION_BYPASS_SECRET,
+          "x-vercel-set-bypass-cookie": "true",
+        }
       : {},
     // Optional: point at an already installed Chromium instead of downloading one.
     launchOptions: {

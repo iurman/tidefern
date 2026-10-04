@@ -251,5 +251,52 @@ tests green.
   third-party recipients as a human-only decision.
 
 Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
-tests green. Remaining: the research completeness critic, then the final
-regeneration of `docs/research/RESEARCH.md`.
+tests green.
+
+### Completeness pass (2026-10-04)
+
+The research workflow finished (8 dimensions, 7 skeptic verifications, a
+completeness critic; `docs/research/RESEARCH.md` regenerated with a status
+preface saying the repository wins where a snippet disagrees). The critic's
+findings and what changed:
+
+- Turborepo strict environment mode would have hidden every Phase 1 secret
+  from `turbo run build` and `turbo run test`: `turbo.json` now declares
+  hash-affecting variables in `globalEnv`, every secret and test switch in
+  `globalPassThroughEnv`, and `.env*` as build inputs; 17.1 explains the
+  rule and the "add the variable to `turbo.json` in the same change" duty.
+- The Vercel build command ran a root script from `apps/web` and would
+  have applied destructive migrations automatically: it is now
+  `pnpm -w db:migrate && next build`, the runner refuses destructive SQL
+  without `MIGRATE_DESTRUCTIVE=1`, and an owner-triggered
+  `migrate-production.yml` workflow is task B12.
+- Neon's Vercel integration forks previews from the default branch, not
+  from a chosen `staging`: `staging` becomes the Neon default branch,
+  production a protected non-default branch, previews reuse the staging
+  KEK and are not seeded at build; `withActor()` runs `SET LOCAL ROLE`
+  unconditionally because the injected role can bypass RLS; B10 checks
+  both environments; A4 records the mapping.
+- CI cannot run authenticated browser tests without a database: task B11
+  adds the `postgres:18.6` service, migrate and seed steps, test env and
+  the rule that `@smoke` never authenticates; `TIDEFERN_FAKE_NOW` freezes
+  "today" outside production.
+- Code: `global-error.tsx`, `instrumentation.ts` recording only route
+  pattern, type and digest, the HSTS header with `includeSubDomains`
+  (asserted in the browser suite), `outputFileTracingRoot` at the repo
+  root, the protection-bypass cookie header for Playwright, manifest
+  `scope` and `id`, the `retry` prop name, `postgres:18.6` in compose, a
+  pull-request gate that rejects commit messages with an em dash.
+- Record: direct-to-R2 uploads are mandatory under Vercel's 4.5 MB body
+  limit and photo display uses unoptimized presigned URLs; the error hook
+  and the named exclusion of Vercel Analytics and Speed Insights; one WAF
+  rate-limit rule on Hobby; CAA must authorize `letsencrypt.org`; previews
+  never hold a Resend key; Hobby's single concurrent deployment and
+  rollback mechanics with the undo step; KEK escrow; the household
+  non-commercial reasoning for staying on Hobby until the attorney or the
+  first outside user says otherwise; offline means `navigator.onLine` plus
+  pending states; J2 names the Lighthouse and bundle tooling; J5 compares
+  the deployed commit with `main`; `AGENTS.md` names the Phase 1 packages.
+
+Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
+tests green. The research workflow and the review workflow are both
+complete; nothing is still running.

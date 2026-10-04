@@ -65,6 +65,7 @@ test("security headers and no indexing on previews", async ({ request }) => {
   const api = (await request.get("/api/v1/health")).headers()["content-security-policy"] ?? "";
   expect(api).toContain("default-src 'none'");
   expect(headers["x-content-type-options"]).toBe("nosniff");
+  expect(headers["strict-transport-security"]).toBe("max-age=63072000; includeSubDomains");
   if (process.env.EXPECT_INDEXABLE !== "true") {
     expect(headers["x-robots-tag"]).toContain("noindex");
   }

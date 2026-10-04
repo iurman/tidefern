@@ -19,7 +19,13 @@ which only the owner performs.
    Set a usage alert in the team's billing settings.
 4. Deployment Protection: keep Vercel Authentication on for previews.
    Create a Protection Bypass for Automation secret and store it in GitHub
-   as the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`.
+   as the repository secret `VERCEL_AUTOMATION_BYPASS_SECRET`; regenerating
+   it later invalidates earlier deployments, so redeploy after a rotation.
+   Firewall: add the one WAF rate-limit rule Hobby allows, on `/api/auth/*`
+   keyed by IP (a window of 60 seconds is enough), as defense in depth.
+   Escrow: store `TIDEFERN_KEK_V1` and `BETTER_AUTH_SECRET` in the owner's
+   password manager at the moment they are generated; Vercel cannot show a
+   sensitive variable again, and a lost KEK is every encrypted note lost.
 5. Environment variables: `SITE_INDEXABLE=false` everywhere for now. Phase
    1 adds the variables in `.env.example`, each scoped to the right
    environment and marked sensitive where the comment says so.
@@ -27,6 +33,14 @@ which only the owner performs.
    Git). The `Verify deployment` workflow should run on the first preview.
 
 ### Neon
+
+Default branch: the Neon default branch is `staging` (seeded synthetic
+data), because the Vercel integration forks every preview from the default
+branch and production data must never reach a preview. Production is a
+protected, non-default branch; if the integration cannot point production
+variables at it, set `DATABASE_URL` and `DATABASE_URL_UNPOOLED` in
+Vercel's production scope by hand and let the integration manage previews
+only. Record which it was in the progress log (task A4).
 
 1. Create the project on Postgres 18 in `us-east-1` (next to Vercel `iad1`).
 2. Branches: `production` (default), `staging` (from production, before any
@@ -85,7 +99,8 @@ which only the owner performs.
 1. Add the domain to the Vercel project; copy the exact records Vercel
    shows into Cloudflare as DNS-only (grey cloud).
 2. Enable DNSSEC and publish the DS record at Namecheap. Add a CAA record
-   for the authorities Vercel lists.
+   that authorizes `letsencrypt.org`; Vercel issues through Let's Encrypt
+   and a CAA record without it breaks issuance and renewal.
 3. Verify HTTPS on apex and `www`, and that `www` redirects to the apex.
    Keep `SITE_INDEXABLE=false` until the owner has reviewed the public
    pages and the privacy policy.
@@ -121,10 +136,18 @@ Design routes and the API stay noindex everywhere.
 
 ## Rollback
 
-Vercel: promote the previous production deployment. Database: migrations
-roll forward only and are written expand-then-contract, so the previous
-code keeps working against the new schema; a problem gets a corrective
-migration. Never rewrite history on `main`.
+Vercel Instant Rollback on Hobby goes back only to the immediately previous
+production deployment. After a rollback Vercel stops assigning the
+production domains to new deployments, so later merges build green but do
+not go live until you choose "Undo Rollback" or run `vercel promote`; cron
+jobs revert to the rolled-back deployment's schedule and environment
+variable changes are not applied. The `deploy-verify` production check
+compares the deployed commit with `main` and fails loudly while a rollback
+is in effect. Database: migrations roll forward only and are written
+expand-then-contract, so the previous code keeps working against the new
+schema; a problem gets a corrective migration; destructive steps run only
+through the owner-triggered migration workflow. Never rewrite history on
+`main`.
 
 ## Restore (task J7, then quarterly)
 

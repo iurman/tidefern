@@ -30,6 +30,9 @@ jobs:
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history on pull requests so the commit-message gate and future contract diffs can see the base.
+          fetch-depth: ${{ github.event_name == 'pull_request' && 0 || 1 }}
 
       - name: Set up pnpm from packageManager
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
@@ -48,6 +51,20 @@ jobs:
 
       - name: Skills gate (spec frontmatter, symlinks resolve)
         run: pnpm skills:check
+
+      - name: Commit messages carry no em dash (pull requests)
+        if: github.event_name == 'pull_request'
+        run: |
+          git fetch --no-tags --depth=1 origin "${{ github.base_ref }}"
+          git log --format=%B "origin/${{ github.base_ref }}..HEAD" | node -e '
+            let text = "";
+            process.stdin.on("data", (chunk) => (text += chunk)).on("end", () => {
+              if (text.includes(String.fromCharCode(0x2014))) {
+                console.error("A commit message in this pull request contains an em dash.");
+                process.exit(1);
+              }
+              console.log("commit messages passed");
+            });'
 
       - name: Generated files are current (tokens, brand copies, OpenAPI)
         run: |

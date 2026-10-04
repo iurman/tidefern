@@ -1,16 +1,16 @@
 "use client";
 
 export default function ErrorPage({
-  reset,
+  retry,
 }: {
   error: Error & { digest?: string };
-  reset: () => void;
+  retry: () => void;
 }) {
   return (
     <section className="section wrap narrow">
       <h1>Something went wrong.</h1>
       <p>Nothing you entered was lost on the server. You can try again.</p>
-      <button className="action" type="button" onClick={() => reset()}>
+      <button className="action" type="button" onClick={() => retry()}>
         Try again
       </button>
     </section>

@@ -5,8 +5,11 @@ built as a pnpm + Turborepo monorepo: a Next.js app in `apps/web` that mounts
 the framework-neutral Hono API from `packages/api` at `/api/v1`, with shared
 `packages/core` (domain math and the `can()` policy), `packages/schemas`
 (Zod), `packages/design-tokens` (tokens and brand vectors) and
-`packages/config`. Read `docs/ARCHITECTURE.md` before changing anything
-structural; it records the decisions and their evidence.
+`packages/config`. Phase 1 adds `packages/db`, `packages/auth`,
+`packages/crypto` and `packages/api-client`, which the ESLint boundaries
+and the architecture record already name. Read `docs/ARCHITECTURE.md`
+before changing anything structural; it records the decisions and their
+evidence.
 
 ## Start here
 

@@ -161,7 +161,7 @@ and the lockfile as global, deploying every connected project.
 | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Framework preset                        | Next.js                                                                                                                                                       |
 | Root Directory                          | `apps/web` (Include source files outside of the Root Directory stays on, which is the default)                                                                |
-| Build command | `pnpm db:migrate && next build` once `packages/db` exists (Phase 1); until then default. Migrations run in every Vercel environment against that environment's direct database URL, so previews and production migrate themselves |
+| Build command | `pnpm -w db:migrate && next build` once `packages/db` exists (Phase 1); until then default. The `-w` matters because Root Directory is `apps/web` and the script lives at the workspace root. Migrations run in every Vercel environment against that environment's direct database URL, so previews and production migrate themselves, but only additive ones: the runner refuses a migration containing `DROP`, `RENAME`, `ALTER COLUMN ... TYPE` or `TRUNCATE` unless `MIGRATE_DESTRUCTIVE=1`, which only the owner-triggered `migrate-production.yml` workflow sets (task B12). A docs-only commit still builds (Vercel treats it as a global change) and runs the additive step harmlessly |
 | Node.js version                         | 24.x (from `engines.node` at the root)                                                                                                                        |
 | Skip deployment for unaffected projects | On (default for GitHub-connected pnpm workspaces)                                                                                                             |
 | Deployment protection                   | Vercel Authentication on for previews; a Protection Bypass for Automation secret stored as `VERCEL_AUTOMATION_BYPASS_SECRET` in GitHub for the smoke workflow |
@@ -173,8 +173,10 @@ and the lockfile as global, deploying every connected project.
 Namecheap stays the registrar. Cloudflare stays the authoritative zone.
 Records for Vercel are DNS-only (grey cloud): `@` and `www` for the site,
 and later `api` if the API is split out. Enable DNSSEC in Cloudflare and
-publish the DS record at Namecheap. Add a CAA record limiting issuance to
-the authorities Vercel lists. Email authentication records (SPF, DKIM,
+publish the DS record at Namecheap. Add a CAA record that authorizes
+`letsencrypt.org` (Vercel issues through Let's Encrypt with HTTP-01, so a
+CAA record without it breaks issuance and renewal). `/.well-known` is
+reserved on Vercel and is never redirected or rewritten. Email authentication records (SPF, DKIM,
 DMARC) for Resend live in the same zone. Deployment and DNS steps are in
 `docs/LAUNCH_RUNBOOK.md`.
 
@@ -372,7 +374,7 @@ app.all("/auth/*", (c) => auth.handler(c.req.raw));
 | TOTP | `twoFactor()` from `better-auth/plugins` with single-use backup codes; `trustDevice` stays off, because a 30-day remembered device on a shared household computer defeats the second factor; passkeys are the convenient path | Optional for everyone, prompted for anyone who grants partner access. Keep `session.cookieCache` off until the 2FA interaction with it is re-verified (an April 2026 advisory, fixed in 1.4.9, involved cached sessions). |
 | Social sign-in | Not in Phase 1 | Apple and Google arrive with the mobile app; Apple is required by App Store guideline 4.8 once Google exists. |
 | Mobile plugins | Reserved, not enabled: `expo()` from `@better-auth/expo` and `bearer()` arrive in Phase 3 together with the `tidefern://` scheme | Nothing server-side needs to change shape when they do. |
-| Rate limiting | `rateLimit: { enabled: true, storage: "database" }`. Built-in rules limit sign-in, sign-up and credential changes to 3 requests per 10 seconds in any production build, so browser tests sign in once per worker and share a `storageState`; the integration job runs with `NODE_ENV=production` because rate limiting is disabled in development and would otherwise never touch the `rate_limit` table | Memory storage is per instance and useless on serverless. Vercel Firewall rules on auth, invite and upload paths once on Pro. |
+| Rate limiting | `rateLimit: { enabled: true, storage: "database" }`. Built-in rules limit sign-in, sign-up and credential changes to 3 requests per 10 seconds in any production build, so browser tests sign in once per worker and share a `storageState`; the integration job runs with `NODE_ENV=production` because rate limiting is disabled in development and would otherwise never touch the `rate_limit` table | Memory storage is per instance and useless on serverless. Vercel WAF rate limiting is available on every plan (Hobby: one rule per project, IP or JA4 key), so one rule on `/api/auth/*` ships in Phase 1 as defense in depth and the rest arrive with Pro. |
 | Sessions               | 7-day expiry, 1-day `updateAge`; "Devices" screen backed by `listSessions`, `revokeSession`, `revokeOtherSessions`                                                                                        | Short enough for health data; revocation is a Phase 1 feature.                                                                                                                                                            |
 | Plugins not enabled    | organization, SSO, OIDC provider, MCP, device authorization, anonymous, admin, SCIM                                                                                                                       | Not needed; several carried 2026 advisories. Smaller surface, fewer advisories that apply.                                                                                                                                |
 | Bot protection | Cloudflare Turnstile on sign-up, reset and invite acceptance at the Phase 2 gate | Works without proxying traffic. Its script is the one documented CSP exception, allowed only on those three unauthenticated routes, and it joins the processor list. |
@@ -429,7 +431,11 @@ authenticated route is ever statically rendered or ISR-cached.
   migration must run correctly under the previous deployment's code,
   because "promote the previous deployment" restores code, not schema; a
   contract step (dropping or renaming) ships in a later release after the
-  code that needed the old shape is gone.
+  code that needed the old shape is gone, and it never runs from a Vercel
+  build: the migration runner scans each pending file for `DROP`, `RENAME`,
+  `ALTER COLUMN ... TYPE` and `TRUNCATE` and refuses to apply it unless
+  `MIGRATE_DESTRUCTIVE=1`, which only the owner-triggered
+  `migrate-production.yml` workflow sets after a backup point is noted.
 
 ### 7.2 Row level security from the first migration
 
@@ -461,8 +467,14 @@ such membership, and the app never connects as a role that can bypass RLS:
   editor and stores that role's pooled URL as `DATABASE_URL`. Child branches
   inherit the role and password. The owner role's URLs are used only by
   migrations (`DATABASE_URL_UNPOOLED`) and the job runner. So every app
-  query already runs as a role that cannot bypass RLS, whether or not it is
-  inside the actor wrapper.
+  query should already run as a role that cannot bypass RLS. Correctness
+  never depends on which URL an integration injected, though: Neon's Vercel
+  integration builds connection strings from a console role (a
+  `neon_superuser` member with `BYPASSRLS`), so `withActor()` runs
+  `SET LOCAL ROLE tidefern_app` unconditionally on every transaction,
+  `withSystem()` is the only owner-role path, and task B10 records
+  `current_user` and `rolbypassrls` on a preview branch as well as on
+  production.
 - Every user-data table is created with `.enableRLS()` and also `ALTER
   TABLE ... FORCE ROW LEVEL SECURITY`, which binds the table owner to the
   policies as well. Because of that, every read or write outside a request
@@ -544,12 +556,15 @@ idempotency keys.
 | Environment      | Database                                                                                                                                                                             | Secrets                                             | Data                                   |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------- | -------------------------------------- |
 | Local            | PGlite in tests; a personal Neon branch or local Postgres 18 for `pnpm dev`                                                                                                          | `.env.local`, never real keys                       | Seeded synthetic data (`pnpm db:seed`) |
-| Preview (per PR) | A Neon branch per preview deployment, created and injected (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`) by Neon's Vercel integration from the `staging` branch, never from production, and deleted when the preview is; migrated and seeded by the build command | Preview-scoped Vercel variables, a preview KEK, console email transport | Seeded synthetic data only, so a leaked preview secret reaches nothing real |
-| Staging          | Separate Neon branch (or project at Scale)                                                                                                                                           | Staging credentials and KEK                         | Seeded synthetic data                  |
+| Preview (per PR) | A Neon branch per preview deployment, created and injected (`DATABASE_URL`, `DATABASE_URL_UNPOOLED`) by Neon's Vercel integration. The integration branches from the project's default branch, so `staging` is the Neon default branch (seeded synthetic data) and production is a protected, non-default branch whose URLs are set in Vercel's production scope by hand if the integration cannot point production at a non-default branch (A3 and A4 verify which). Previews are deleted with the deployment; the build command migrates them and does not seed, because they fork an already seeded `staging` | Preview-scoped Vercel variables; the staging KEK value, because the forked ciphertext was wrapped under it and `kek_version` must stay meaningful; console email transport, no Resend key | Seeded synthetic data only, so a leaked preview secret reaches nothing real |
+| Staging | The Neon default branch (or a project at Scale), seeded once with `pnpm db:seed` after each schema change; "reset from parent" is never run against it from production | Staging credentials and the KEK previews share | Seeded synthetic data |
 | Production       | Neon production branch, pooled connections, 7-day history                                                                                                                            | Production credentials and KEK, R2 bucket (Phase 2) | Real users                             |
 
 Preview deployments stay behind Vercel Authentication. Production data never
-leaves production; "reset from parent" refreshes the shared dev branch. A
+leaves production, which is exactly why production is not the default
+branch: Neon's integrations (both the Vercel-managed and the Neon-managed
+variant, checked 2026-10-04) fork previews from the default branch with no
+parent selection. The shared dev branch is refreshed from `staging`. A
 GitHub Actions workflow cannot create the preview branch in time for a
 Git-triggered Vercel build, which is why the Neon integration owns it.
 
@@ -783,10 +798,20 @@ deletion through the public inbox.
 - Phase 2 photos: `POST /api/v1/uploads` with `{ purpose, contentType,
   byteLength }` returns `{ uploadId, url, method, headers, expiresAt }`,
   and `POST /api/v1/photos` finalizes with `{ uploadId, subjectId,
-  caption }`. The browser upload needs `connect-src` to gain exactly one
-  R2 origin and the bucket's CORS to allow `PUT` from the site origin only;
-  if that is unwanted, uploads proxy through the API and the CSP stays
-  unchanged.
+  caption }`. The browser uploads straight to R2 with a presigned `PUT`
+  (one R2 origin added to `connect-src`, bucket CORS allowing `PUT` from
+  the site origin only); proxying through the API is not an option,
+  because Vercel Functions cap request and response bodies at 4.5 MB and
+  phone photos routinely exceed it. The same limit is why the on-demand
+  export streams. Photo display uses short-lived presigned `GET` URLs with
+  `next/image` set to `unoptimized`, since variants are generated
+  server-side and a changing URL would defeat Vercel's image cache.
+- Server errors are reported through `instrumentation.ts`'s
+  `onRequestError`, which records only the route pattern, route type and
+  error digest, never `request.path` (it carries the query string) or
+  headers (they carry cookies). `@vercel/analytics` and
+  `@vercel/speed-insights` are excluded by name, not only "third-party
+  analytics": they record URL, path, referrer and location per data point.
 - Every SDK and vendor is a processor. `docs/LAUNCH_RUNBOOK.md` keeps the
   list of vendors, what each receives and the terms that cover it.
 
@@ -862,7 +887,7 @@ made deliberately, not by drift.
 
 | Vendor     | Receives                                                          | Terms                  |
 | ---------- | ----------------------------------------------------------------- | ---------------------- |
-| Vercel | Runs the application: processes all data in plaintext in memory, holds the Phase 1 KEK and every other secret, stores allowlisted logs (1 hour on Hobby) | Vercel DPA, self-serve, but it covers Pro and Enterprise only and Hobby is non-commercial, so the Phase 2 gate (anyone outside the household) means Pro |
+| Vercel | Runs the application: processes all data in plaintext in memory, holds the Phase 1 KEK and every other secret, stores allowlisted logs (1 hour on Hobby) | Vercel DPA, self-serve, but it covers Pro and Enterprise only and Hobby is non-commercial. Phase 1 is a two-person household deployment with no payment, advertising or paid development, which is inside Hobby's fair use and is the owner's own data; the record treats that as not conducting business, and the attorney confirms or rejects that reading at the Phase 2 gate. Pro arrives before the first person outside the household, or earlier if the attorney says so |
 | Neon | The database (free text encrypted) | Neon is a Databricks product: the Neon Product Specific Schedule sits under the Databricks Master Cloud Services Agreement, which incorporates the Databricks DPA; record Databricks, Inc. as the contracting party in the processor register |
 | GitHub | Source code, CI logs (no secrets, no user data; fixtures are synthetic) | GitHub terms and DPA |
 | Resend | Email addresses, generic subjects and bodies | Resend DPA, self-serve; its subprocessor list names AI providers, so every email stays generic and the owner checks the account for AI features that read content (section 21) |
@@ -1014,7 +1039,10 @@ Authenticated (dynamic, `no-store`, neutral names):
 
 ### 12.2 States and rules for every screen
 
-Loading, empty, error and offline states are designed, not implied. Every
+Loading, empty, error and offline states are designed, not implied; in
+Phase 1 offline means `navigator.onLine` plus honest pending states, not a
+service worker (installability needs only the manifest and HTTPS; a
+service worker would need its own CSP treatment). Every
 list has an honest empty state with the next action. Every mutation shows
 pending and failure states and never pretends success. Essential content
 renders on the server; client components exist only where interaction
@@ -1488,7 +1516,13 @@ already-verified users and a mail capture endpoint that exists only when
 `E2E_MAIL_CAPTURE=true`, which Vercel production never sets. Each
 Playwright worker signs in once and shares its `storageState`, because
 Better Auth's built-in production rule allows three sign-ins per ten
-seconds; tests never relax the rate limit.
+seconds; tests never relax the rate limit. `@smoke` tests never
+authenticate, because the production deployment they also run against has
+no seeded users. Dates in seeds and assertions are relative to
+`TIDEFERN_FAKE_NOW`, which `todayIn()` honors outside production, so
+prediction copy does not drift with the calendar. CI runs the browser
+suite against a `postgres:18.6` service container that is migrated and
+seeded before `pnpm build` (task B11); PGlite serves unit tests only.
 
 Rules: tests protect behavior at real boundaries; no giant snapshots, no
 constant-matching assertions, no fake successful integrations. A failing
@@ -1501,7 +1535,7 @@ separately from an application defect.
 
 | Workflow                           | Trigger                                                           | Does                                                                                                                                                                                                  |
 | ---------------------------------- | ----------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `ci.yml` | push to `main`, pull requests, `workflow_dispatch` for a pre-pull-request run | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
+| `ci.yml` | push to `main`, pull requests, `workflow_dispatch` for a pre-pull-request run; on pull requests it also rejects commit messages that contain an em dash; from task B11 it starts a `postgres:18.6` service and migrates and seeds it before the build | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
 | `deploy-verify.yml`                | `deployment_status` success (sent by Vercel for every deployment) | curl the deployed home page and `/api/v1/health` with the protection bypass header, then the `@smoke` Playwright subset against the deployment URL; failure shows on the pull request                 |
 | `codeql.yml`                       | push, pull requests, weekly                                       | CodeQL security-and-quality for JavaScript and TypeScript                                                                                                                                             |
 | `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` pinned by digest (`b9325c9e0a27ab65b0da3b766522cedec6be81dc`, v0.1.18) against the base branch's `openapi/v1.json`, `fail-on: ERR`, and `review: false` because the default uploads both specs to oasdiff.com; the job keeps `contents: read` and reads the result from the job summary |
@@ -1552,20 +1586,36 @@ what, why, checks run, evidence, build-plan task ids.
 | `SITE_URL`                              | optional               | Absolute origin for canonical URLs; Vercel's `VERCEL_PROJECT_PRODUCTION_URL` and `VERCEL_URL` are used when unset |
 | `SITE_INDEXABLE`                        | production only        | Must be exactly `true` to index; previews never index                                                             |
 | `DATABASE_URL`                          | all                    | Pooled Neon string for the app                                                                                    |
-| `DATABASE_URL_UNPOOLED` | Vercel build only (production and preview); never GitHub | Owner role's direct string for migrations and the job runner |
+| `DATABASE_URL_UNPOOLED` | production and preview (build and runtime; Vercel has no build-only scope); never GitHub | Owner role's direct string for migrations and the job runner |
 | `BETTER_AUTH_SECRET` | all | Session signing |
 | `BETTER_AUTH_URL` | production only | Auth base URL; previews derive theirs from `VERCEL_URL` |
 | `TIDEFERN_KEK_V1` | all, sensitive | Phase 1 key encryption key, base64 of 32 random bytes; different per environment; the suffix is the `kek_version` stored in `subject_keys` |
 | `LOG_HMAC_SECRET` | all, sensitive | Keys the HMAC of user ids in log lines |
 | `E2E_MAIL_CAPTURE` | local and CI only | Exposes a test-only endpoint that returns the last verification link; never set on Vercel |
-| `RESEND_API_KEY`, `EMAIL_FROM`          | preview and production | Transactional email; local uses the console transport                                                             |
+| `RESEND_API_KEY`, `EMAIL_FROM` | production only | Transactional email; previews and local use the console transport, so a preview can never send real mail from a seeded persona |
+| `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
+| `BETTER_AUTH_TELEMETRY` | all, value `0` | Keeps Better Auth's opt-in telemetry off explicitly |
+| `MIGRATE_DESTRUCTIVE` | the owner-triggered migration workflow only | Lets the runner apply a contract migration (section 3.4) |
 | `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset |
 | `R2_*`                                  | Phase 2                | Private bucket credentials scoped to one bucket                                                                   |
 | `VERCEL_AUTOMATION_BYPASS_SECRET`       | GitHub only            | Lets the smoke workflow reach protected previews                                                                  |
 
 Production secrets exist only in Vercel's production scope. Previews use
 preview-scoped values and seeded data. `.env.example` lists every variable
-with a comment; `.env.local` is ignored.
+with a comment; `.env.local` is ignored. Vercel variables apply to both
+the build step and the functions of their environment; there is no
+build-only scope, so the owner role's direct URL is present at runtime too
+and is used only by the job runner. Turborepo 2.11 runs tasks in strict
+environment mode: a variable that is not in `globalEnv`, `env`,
+`globalPassThroughEnv` or `passThroughEnv` in `turbo.json` is invisible to
+`turbo run build` and `turbo run test`, and a task that tolerates its
+absence can hit cache with the wrong configuration. Hash-affecting
+variables (site URL, indexing, Vercel URLs) sit in `globalEnv`; every
+secret and test switch sits in `globalPassThroughEnv`; the build task
+declares `.env*` as inputs. Add a variable to `turbo.json` in the same
+change that introduces it. The KEK is escrowed in the owner's password
+manager (`docs/LAUNCH_RUNBOOK.md`), because a sensitive Vercel variable
+cannot be read back and losing it loses every encrypted note.
 
 ### 17.2 Local development
 
@@ -1624,6 +1674,14 @@ has a case.
   calendar year ends, media for 500 or more residents of one state, with
   the 318.6 content (what happened and when, data types, steps to take,
   what we are doing, two contact methods), then review.
+- Hobby mechanics that shape the build: one concurrent deployment, so
+  parallel pull requests from subagents queue behind each other and
+  `deploy-verify` runs serialize; 100 deployments a day; Instant Rollback
+  only to the immediately previous deployment, after which Vercel stops
+  auto-assigning production domains until "Undo Rollback" or `vercel
+  promote`, cron jobs revert with the deployment and variable changes are
+  not applied, so `deploy-verify` compares the deployed commit with `main`
+  (task J5) and the runbook carries the undo step.
 - Cost: Phase 1 on Hobby is free at Vercel; Neon Launch bills usage
   (compute per CU-hour, storage and retained history per GB-month, ten
   branches included and a fee per extra branch-month), which at household
