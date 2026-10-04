@@ -177,13 +177,13 @@ an hour once production exists, modeled on the owner's Aviune repository.
 
 ## Vendors and processors
 
-| Vendor           | Receives                                                      | Terms |
-| ---------------- | ------------------------------------------------------------- | ----- |
-| Vercel           | Opaque request paths, allowlisted logs, environment variables | DPA   |
-| Neon             | The database; free text encrypted                             | DPA   |
-| GitHub           | Source, CI logs                                               | Terms |
-| Resend (Phase 1) | Email addresses, generic subjects and bodies                  | DPA   |
-| Cloudflare       | DNS; R2 objects in Phase 2                                    | Terms |
+| Vendor | Receives | Terms | Subprocessor list to watch |
+| ------ | -------- | ----- | -------------------------- |
+| Vercel | Opaque request paths, allowlisted logs, environment variables | DPA (Pro and Enterprise only) | security.vercel.com |
+| Neon (Databricks, Inc. is the contracting party) | The database; free text encrypted | Databricks MCSA and DPA; Grafana Labs is an extra subprocessor | databricks.com/legal/databricks-subprocessors |
+| GitHub | Source, CI logs, never user data | GitHub DPA (October 2025) | github.com/subprocessors |
+| Resend (Phase 1) | Email addresses, generic subjects and bodies | Resend DPA; AI features on the account to be checked | resend.com/legal/subprocessors |
+| Cloudflare | DNS; R2 objects in Phase 2 | Self-serve agreement incorporating the Customer DPA v6.4 | cloudflare.com/gdpr/subprocessors |
 
 ## Owner inputs still missing
 
