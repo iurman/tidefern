@@ -25,6 +25,8 @@ Deliver through branches and pull requests. Run pnpm check and pnpm test:e2e bef
 
 Do not create paid services, change DNS, enable analytics or send real email. If the Vercel project or the Neon project is not connected yet, write the exact owner steps at the top of the progress log, mark those tasks blocked, and build everything else against PGlite and seeded data.
 
+Connected services: this session has the Vercel, Neon, Cloudflare and Resend connectors, and the GitHub tools. The Vercel project (tidefern, team iurman's projects, Pro plan), the Neon project (tidefern, Postgres 18, connected to Vercel through the Neon-managed integration) and the repository ruleset already exist, and the production, preview and development secrets are set in Vercel. Use the connectors for the tasks that need them (A2 to A4, B10, Resend, the deployment checks) instead of writing owner steps, and verify a service only when a task touches it; do not audit the whole setup first. Do not buy, upgrade or change any plan; everything in Phase 1 runs on what exists, and the plan upgrade questions wait for the owner.
+
 Begin with Stage 0 of docs/BUILD_PROMPT.md now: intake, checks, screenshots, version confirmation, and the first progress log entry.
 ```
 

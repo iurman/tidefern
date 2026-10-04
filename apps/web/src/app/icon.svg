@@ -1,22 +1,21 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img" aria-labelledby="title">
   <title id="title">Tidefern app icon</title>
   <rect width="512" height="512" rx="112" fill="#F7F5EF"/>
-  <g transform="translate(56 40) scale(0.78)">
-    <g fill="none" stroke="#2F4F46" stroke-width="16" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M262 352 C258 272 284 216 310 176 C332 144 326 112 302 106 C280 102 266 122 280 136 C294 148 312 138 306 122"/>
+  <g transform="translate(36 30) scale(0.86)">
+    <path fill="#6EA7A0" d="M52 376 C92 292 198 274 268 316 C300 336 326 352 362 350 C384 348 402 352 414 372 C404 426 336 468 238 468 C142 468 68 434 52 376 Z"/>
+    <path fill="none" stroke="#F7F5EF" stroke-opacity="1" stroke-width="13" stroke-linecap="round" d="M84 384 C124 322 206 308 266 346 C290 362 310 372 334 372"/>
+    <g>
+      <path fill="#4E7A6B" transform="translate(303.9 354.8) rotate(-19.7)" d="M0 0 C11.8 -29.2 76.4 -31.1 98 0 C76.4 31.1 11.8 29.2 0 0 Z"/>
+      <path fill="#B7C9B1" transform="translate(304.9 323.3) rotate(-109.2)" d="M0 0 C9 -22.3 58.8 -23.7 75.3 0 C58.8 23.7 9 22.3 0 0 Z"/>
+      <path fill="#4E7A6B" transform="translate(317.3 291.9) rotate(-37)" d="M0 0 C9.5 -23.6 61.8 -25.2 79.3 0 C61.8 25.2 9.5 23.6 0 0 Z"/>
+      <path fill="#B7C9B1" transform="translate(308.7 259.7) rotate(-127.1)" d="M0 0 C7.1 -17.4 45.9 -18.5 58.9 0 C45.9 18.5 7.1 17.4 0 0 Z"/>
+      <path fill="#4E7A6B" transform="translate(310.9 227) rotate(-55.5)" d="M0 0 C7.2 -17.8 46.7 -19 59.8 0 C46.7 19 7.2 17.8 0 0 Z"/>
+      <path fill="#B7C9B1" transform="translate(292.7 200.6) rotate(-147)" d="M0 0 C5.1 -12.5 33.1 -13.3 42.4 0 C33.1 13.3 5.1 12.5 0 0 Z"/>
+      <path fill="#4E7A6B" transform="translate(285.1 172.4) rotate(-76.7)" d="M0 0 C4.9 -12.3 32.1 -13 41.1 0 C32.1 13 4.9 12.3 0 0 Z"/>
+      <path fill="#B7C9B1" transform="translate(263.8 160.1) rotate(-167.6)" d="M0 0 C3.4 -8.4 22.2 -9 28.4 0 C22.2 9 3.4 8.4 0 0 Z"/>
+      <path fill="#4E7A6B" transform="translate(241.9 100.8) rotate(-20.9)" d="M0 0 C2.9 -7.4 18.7 -7.9 24 0 C18.7 7.9 2.9 7.4 0 0 Z"/>
+      <path fill="#B7C9B1" transform="translate(286.8 85.3) rotate(6.6)" d="M0 0 C2.9 -7.4 18.7 -7.9 24 0 C18.7 7.9 2.9 7.4 0 0 Z"/>
     </g>
-    <g fill="#B7C9B1">
-      <path transform="translate(284 300) rotate(-34)" d="M0 0 C22 -20 54 -20 76 0 C54 16 22 16 0 0 Z"/>
-      <path transform="translate(298 256) rotate(-40)" d="M0 0 C20 -18 48 -18 66 0 C48 14 20 14 0 0 Z"/>
-      <path transform="translate(312 216) rotate(-46)" d="M0 0 C18 -16 42 -16 58 0 C42 12 18 12 0 0 Z"/>
-      <path transform="translate(322 184) rotate(-54)" d="M0 0 C14 -12 32 -12 44 0 C32 10 14 10 0 0 Z"/>
-    </g>
-    <g fill="#6F8A7A">
-      <path transform="translate(268 318) rotate(214)" d="M0 0 C20 -18 48 -18 66 0 C48 14 20 14 0 0 Z"/>
-      <path transform="translate(280 272) rotate(220)" d="M0 0 C18 -16 42 -16 58 0 C42 12 18 12 0 0 Z"/>
-      <path transform="translate(296 230) rotate(226)" d="M0 0 C14 -12 32 -12 44 0 C32 10 14 10 0 0 Z"/>
-    </g>
-    <path fill="#6EA7A0" d="M32 356 C112 296 200 296 258 336 C318 378 410 378 480 326 L480 428 C446 466 358 484 256 484 C154 484 70 466 32 428 Z"/>
-    <path fill="none" stroke="#F7F5EF" stroke-width="12" stroke-linecap="round" d="M56 382 C128 332 206 332 262 364 C318 396 396 394 456 354"/>
+    <path fill="none" stroke="#2F4F46" stroke-width="17" stroke-linecap="round" stroke-linejoin="round" d="M292 372 C330 296 318 196 256 148 L252.1 145 L248.6 141.7 L245.6 138.1 L243 134.4 L240.9 130.5 L239.2 126.5 L237.9 122.4 L237.2 118.4 L236.8 114.4 L236.8 110.5 L237.3 106.7 L238.1 103.1 L239.2 99.6 L240.6 96.4 L242.4 93.4 L244.3 90.7 L246.5 88.2 L248.9 86.1 L251.4 84.2 L254 82.7 L256.7 81.4 L259.4 80.5 L262.1 79.9 L264.9 79.5 L267.5 79.5 L270.1 79.7 L272.6 80.2 L275 80.9 L277.2 81.8 L279.3 82.9 L281.2 84.2 L282.9 85.6 L284.4 87.2 L285.8 88.8 L286.9 90.6 L287.8 92.4 L288.5 94.2 L289 96.1 L289.3 97.9 L289.4 99.7 L289.3 101.5 L289 103.2 L288.6 104.9 L288 106.4 L287.3 107.8 L286.5 109.2 L285.5 110.4 L284.5 111.5 L283.4 112.4 L282.2 113.2 L281 113.8 L279.8 114.4 L278.5 114.7 L277.3 115 L276 115.1 L274.8 115.1 L273.6 114.9 L272.5 114.7 L271.5 114.3 L270.5 113.9 L269.5 113.3 L268.7 112.7 L267.9 112 L267.3 111.3 L266.7 110.5 L266.2 109.7 L265.8 108.9 L265.6 108 L265.4 107.2 L265.3 106.3 L265.2 105.5 L265.3 104.7 L265.5 103.9"/>
   </g>
 </svg>
