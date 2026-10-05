@@ -11,7 +11,7 @@ or React. The React client arrives with task C3.
 
 | Entry                     | Exports                                                                                                                                                                                                                                         |
 | ------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `@tidefern/auth`          | `Mailer`, `MailMessage`, `ConsoleMailer`, `CaptureMailer`; `verificationEmail(url)`, `passwordResetEmail(url)`; `resolveHosts`, `hostFactsFromEnvironment`, `teamSlugFromDeploymentHost`, `previewHostPattern`, `apexOf`; the `Auth` and `Session` types |
+| `@tidefern/auth`          | `Mailer`, `MailMessage`, `ConsoleMailer`, `CaptureMailer`, `ResendMailer`, `ResendError`; `chooseMailer(env)`, `chooseMailTransport(env)`; `capturedMail()`, `clearCapturedMail()`, `linkIn(text)`, `setCaptureMailer(mailer)`; `verificationEmail(url)`, `passwordResetEmail(url)`, `reminderEmail(url, firstName?)`, `securityNoticeEmail(url, firstName?)`; `resolveHosts`, `hostFactsFromEnvironment`, `teamSlugFromDeploymentHost`, `previewHostPattern`, `apexOf`; the `Auth` and `Session` types |
 | `@tidefern/auth/server`   | `createAuth(options)` and the module-scope `auth`                                                                                                                                                                                              |
 
 Importing `@tidefern/auth` never builds the database pool; only the
@@ -25,12 +25,44 @@ connects to a database at import; the pool opens on the first query.
 
 ### Mail
 
-`Mailer` is one method, `send({ to, subject, text, html? })`. The default
-is `ConsoleMailer`, which prints to stdout; `CaptureMailer` keeps the last
-messages in memory for the `E2E_MAIL_CAPTURE` endpoint task C5 wires. Resend
-is wired in C5 behind the same interface and never here. The two templates
-carry the generic subjects from section 10.2 ("Confirm your email", "Reset
-your Tidefern password"), the link, and nothing about health.
+`Mailer` is one method, `send({ to, subject, text, html? })`, and three
+transports implement it, all in `src/mailer.ts` and `src/mail/`:
+
+| Transport       | What it does                                                                                                                                                                                                                                                                     |
+| --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ConsoleMailer` | Prints the recipient, the subject and the body to stdout so a developer can click the link. The default for `createAuth()`.                                                                                                                                                      |
+| `CaptureMailer` | Keeps the last 20 messages in memory. `capturedMail()` returns them as `{ to, subject, link }` (the link is the first https URL in the body) and `clearCapturedMail()` forgets them; the `E2E_MAIL_CAPTURE` endpoint in `packages/api` (task C2) calls those two and nothing else. |
+| `ResendMailer`  | `POST https://api.resend.com/emails` through `fetch` with a bearer key and a 10 second timeout; no `resend` package. A refusal throws `ResendError` with the HTTP status and Resend's error name only; the recipient, the body and the message id Resend returns are never logged. |
+
+`chooseMailer(env)` picks one from facts and never reads `process.env`
+itself (the module-scope `auth` passes the real environment, tests pass an
+object):
+
+- `ResendMailer` only when `VERCEL_ENV` is `production` and both
+  `RESEND_API_KEY` and `EMAIL_FROM` are set. One without the other on
+  production throws, because the alternative is verification links in the
+  production logs.
+- `CaptureMailer` when `E2E_MAIL_CAPTURE` is exactly `true` and `VERCEL_ENV`
+  is not `production`. Setting it on production throws at import, the same
+  rule as `TIDEFERN_FAKE_NOW` (architecture 15 and 17.1).
+- `ConsoleMailer` otherwise: local, previews and CI. Previews never hold a
+  Resend key (architecture 7.5), so a seeded persona can never receive real
+  mail, and CI never sends.
+
+`chooseMailTransport(env)` returns the same decision as a name (`resend`,
+`capture` or `console`) for a log line or a test.
+
+The four templates in `src/mail/templates.ts` are functions of a link and,
+for two of them, a first name: `verificationEmail`, `passwordResetEmail`,
+`reminderEmail` and `securityNoticeEmail`. Every subject is one of the
+generic strings from section 10.2 ("Confirm your email", "Reset your
+Tidefern password", "Your Tidefern reminder", "A security notice for your
+Tidefern account") and every body says what to do and nothing about health:
+Resend sees addresses, subjects and bodies and lists AI providers among its
+subprocessors (architecture 9.5), so the no-health-words rule is a unit test
+in `templates.test.ts` that checks each template against a word list
+(period, cycle, pregnancy, pregnant, fertile, ovulation, baby, child,
+symptom) and requires every link to be an https URL on the apex.
 
 ### Hosts
 
@@ -65,8 +97,13 @@ Read only by the module-scope `auth` in `src/auth.ts`, through
 | `VERCEL_ENV`, `VERCEL_URL`, `VERCEL_PROJECT_PRODUCTION_URL` | Set by Vercel; pick the production host and the team slug |
 | `BETTER_AUTH_TELEMETRY`         | `0` everywhere; the config also sets `telemetry.enabled: false`             |
 
-`RESEND_API_KEY`, `EMAIL_FROM` and `E2E_MAIL_CAPTURE` belong to task C5's
-transport, not to this package.
+And by `chooseMailer(process.env)` on the same instance:
+
+| Variable           | Scope             | Purpose                                                                                                   |
+| ------------------ | ----------------- | --------------------------------------------------------------------------------------------------------- |
+| `RESEND_API_KEY`   | production only   | The bearer key for `POST https://api.resend.com/emails`                                                   |
+| `EMAIL_FROM`       | production only   | The sender, an address or `Tidefern <hello@example>`, on the one domain authenticated in Cloudflare DNS   |
+| `E2E_MAIL_CAPTURE` | local and CI only | `true` turns on `CaptureMailer` for the browser suite; refused when `VERCEL_ENV` is `production`          |
 
 ## Regenerating the schema
 

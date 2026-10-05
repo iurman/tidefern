@@ -10,9 +10,10 @@ import { twoFactor } from "better-auth/plugins";
 import { db as productionDb } from "@tidefern/db/client";
 import * as productionSchema from "@tidefern/db/schema";
 
-import { passwordResetEmail, verificationEmail } from "./email";
 import { hostFactsFromEnvironment, resolveHosts } from "./hosts";
 import type { HostFacts } from "./hosts";
+import { chooseMailer } from "./mail/choose";
+import { passwordResetEmail, verificationEmail } from "./mail/templates";
 import { ConsoleMailer } from "./mailer";
 import type { Mailer } from "./mailer";
 
@@ -113,11 +114,13 @@ export type Session = Auth["$Infer"]["Session"];
 
 /**
  * The instance the Hono app mounts (task C2). This is the one place the
- * package reads the environment: BETTER_AUTH_SECRET, BETTER_AUTH_URL and the
- * Vercel variables. The mailer stays the console transport until task C5
- * swaps in Resend for production.
+ * package reads the environment: BETTER_AUTH_SECRET, BETTER_AUTH_URL, the
+ * Vercel variables, and the mail facts `chooseMailer()` picks the transport
+ * from (Resend on production, capture under E2E_MAIL_CAPTURE, the console
+ * otherwise).
  */
 export const auth: Auth = createAuth({
   hosts: hostFactsFromEnvironment(process.env),
+  mailer: chooseMailer(process.env),
   secret: process.env.BETTER_AUTH_SECRET,
 });
