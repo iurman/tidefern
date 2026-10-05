@@ -833,3 +833,44 @@ calendar's day sheet uses the chips), rerunning each gate after a rebase.
 Then H9 (public pages) and the lead's day sheet and components index;
 then B8 (RLS) and B9 (seed) as subagent tasks now that B2 to B7 are on
 main, D2 after B2, and C2 after C1, B3 and B6.
+
+### State note: session paused at its usage limit (2026-10-05, lead session 061fed2d)
+
+The lead session reached its usage limit with two workflows still
+running; they keep working after this note. Resume with a fresh session
+that reads this entry first.
+
+Running when the session paused:
+
+- Third wave (run `wf_ed8bcdf8-9c7`): G5 groups actions, forms,
+  structure, calendar, marks on `claude/G5-<group>` (ports 3121 to 3125)
+  and G4 on `claude/G4-brand` (PR #21, port 3127); briefs in the session
+  scratchpad `g5/briefs.md`, contract in `docs/design/COMPONENTS.md`.
+  Each task ends with a ready pull request titled `<ID>: ...` and a
+  report with "Review answers".
+- Fourth wave (run `wf_502ba6d5-0ed`): B8 (`claude/B8-rls`, port 3131),
+  D2 (`claude/D2-dek-provisioning`, 3132) and C2 (`claude/C2-auth-mount`,
+  3133) in parallel; I1 (`claude/I1-outbox`, 3134) starts only after the
+  lead merges B8 (the workflow polls origin/main for migration 0007 for up
+  to 180 minutes). Briefs in the scratchpad `wave4/briefs.md`. The plan
+  claims these four rows for subagents of this session.
+
+What the next lead does, in order: for each ready pull request read its
+report's "Review answers", check `gh pr checks`, and for a branch that
+touches `apps/web` run the smoke by hand when Vercel posts no deployment
+event (`gh workflow run "Verify deployment" --ref main -f
+url=https://tidefern-git-<branch-slug>-iurmans-projects.vercel.app -f
+ref=<branch> -f production=false`; package-only branches get a canceled
+preview and rest on the production smoke). Merge by squash with a body
+that carries the gate results; rebase stacked branches; rerun the gate
+after every rebase; then mark the row done with evidence and log it.
+Merge order: G5 actions and forms before structure and calendar; B8
+before I1; D2 and C2 in any order. After the waves: the lead composes the
+day sheet and the `/design/components` index, then H9, B9 (needs D2),
+E1 (needs C2 and B7), B11, then the H routes.
+
+Scratchpad paths above live under
+`/tmp/claude-1000/-var-home-urmani-Documents-Personal-tidefern/061fed2d-057f-48fe-b8fb-f902264944ef/scratchpad/`;
+if that directory is gone, the pull request bodies carry the same
+evidence and the briefs are reconstructible from `COMPONENTS.md` and the
+plan rows.
