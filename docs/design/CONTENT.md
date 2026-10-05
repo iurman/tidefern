@@ -78,12 +78,14 @@ sentence "The message says only that there is something new in Tidefern."
 
 ## Prediction and care copy
 
-The seven templates in architecture 13.10 (estimate, first guess, not
+The eight templates in architecture 13.10 (estimate, first guess, not
 enough regular cycles, ovulation and fertile days, the footer, the deviation
 nudge, pointing to care, milestones) are the only wording those surfaces
-use. The short disclaimer under the estimate sentence on `/today` is "An
-estimate from what you log. Not medical advice, and not a form of birth
-control." followed by the full footer at the end of the page.
+use. The short disclaimer under the estimate sentence on `/today`
+(`RESEARCH.md` decision 6) reuses the tail of the ovulation template, "An
+estimate from your logged dates. Not a form of contraception.", so no new
+wording enters; the compositions in `DESIGN.md` show it. The full footer
+still closes the page.
 
 ## Owner inputs still missing
 

@@ -19,12 +19,14 @@ in the session scratch directory and are not product code).
 
 ### 1.1 Marketing home
 
-Two compositions were rendered at 1440 light and dark and at 390 light.
+Two compositions were rendered at 1440 px and 390 px in both themes. The
+dark captures changed nothing in the comparison: both compositions hold in
+dark with the semantic tokens and no per-theme adjustment.
 
 | | A: two statements, one action | B: editorial column with the mark beside it |
 | --- | --- | --- |
 | Shape | A split hero: a warmth panel carrying the tagline as the H1 and a one-line lede, beside a surface panel carrying the privacy promise as a second statement, the lede and the single action. The mark sits in the warmth panel. Then the tide line, the three chapters in a row, the tide line, four promises in two columns | One column: eyebrow, tagline H1, lede, action, with the mark in a surface tile to the right; a numbered chapter list; the promises in a panel reading column (the foundation's current page, refined) |
-| Evidence | `research/g2-home-a-desktop-light.jpg`, `g2-home-a-desktop-dark.jpg`, `g2-home-a-phone-light.jpg` | `research/g2-home-b-desktop-light.jpg`, `g2-home-b-phone-light.jpg` |
+| Evidence | `research/g2-home-a-desktop-light.jpg`, `g2-home-a-desktop-dark.jpg`, `g2-home-a-phone-light.jpg`, `g2-home-a-phone-dark.jpg` | `research/g2-home-b-desktop-light.jpg`, `g2-home-b-desktop-dark.jpg`, `g2-home-b-phone-light.jpg`, `g2-home-b-phone-dark.jpg` |
 | What works | Answers the two visitor questions at once ("what is this" and "is it private") with one action; the warmth panel gives the mark a place without a decorative orb; the two statements read as a conversation, which is the brand's "together" | Calm, reads like a document, the chapter list with serif numerals is already a signature; the mark tile with the tide fill is the sheet's own composition |
 | What fails | At 390 px the first version put the mark behind the headline; fixed by stacking the mark above the statement inside the panel (second capture). The second statement must stay short or the panels fall out of balance | The hero leaves the privacy promise for the third screen; the mark tile is decoration without a job; the page reads as a template for any product until the chapter list |
 
@@ -42,7 +44,7 @@ The chapter row's serif eyebrow numerals move into the list.
 | | A: ring-led | B: strip-led |
 | --- | --- | --- |
 | Shape | App shell (rail from 1024 px, tab bar below). The cycle ring at 260 px on the left, and on the right the date eyebrow, the cycle day as a display numeral beside a serif label, the estimate sentence in Newsreader italic, the ovulation sentence with the contraception line, and a "How this is estimated" disclosure. Tide line. Then the quick log card (flow, symptoms, mood, note) beside the partner card and the week card on warmth. The prediction footer at the end | A seven-day strip across the top with today on warmth and predicted days dashed, then "Day 12 of about 28" with the estimate sentences, a small ring to the right, the tide line, the same cards, and a floating "Log today" button on phones |
-| Evidence | `research/g2-today-a-desktop-light.jpg`, `g2-today-a-desktop-dark.jpg`, `g2-today-a-phone-light.jpg` | `research/g2-today-b-desktop-light.jpg`, `g2-today-b-phone-light.jpg` |
+| Evidence | `research/g2-today-a-desktop-light.jpg`, `g2-today-a-desktop-dark.jpg`, `g2-today-a-phone-light.jpg`, `g2-today-a-phone-dark.jpg` | `research/g2-today-b-desktop-light.jpg`, `g2-today-b-desktop-dark.jpg`, `g2-today-b-phone-light.jpg`, `g2-today-b-phone-dark.jpg` |
 | What works | The ring is the one thing on the screen that could only be Tidefern (frond curl, dashed uncertainty); the numeral beside the serif label is signature move 4; the estimate sentence sits exactly where the eye lands after the ring; on phones the ring then the numeral is a natural stack | The strip answers "what is today" quickly and carries the predicted-day texture; the floating button keeps logging one tap away |
 | What fails | Nothing structural; the ring prototype needs the progress arc inside the track and a larger curl (section 6.1) | The ring at 150 px cannot carry the curl or the dashed bands; the floating button collides with the card headings; two time scales (strip and ring) compete for the same fact |
 
@@ -125,13 +127,35 @@ Step indicator: 1 Time zone  2 Stage  3 Dates  4 Consent  5 Passkey
 +------------------------------------------------------------+
 Step 2: four option cards (cycle, pregnancy, postpartum, here for someone
 else); step 3 asks only the body questions core returns for the stage
-(last period start; due date and how it was dated; birth date and a period
-since), each a segmented date input with an example line; step 4 is the
+(last period start; due date and how it was dated, or weeks and days as of
+a date; birth date and a period since), each a segmented date input with an
+example line; step 4 is the
 collection consent: the categories collected, purposes and uses, the
 processors by name, the withdrawal sentence, one unchecked control, a
 separate terms acceptance beneath it; step 5 offers a passkey with "Not now".
-Phone: the same column; the indicator collapses to "Step 3 of 5".
 ```
+
+```text
+Phone (step 3, pregnancy)
++------------------+
+| Step 3 of 5      |
+| Your dates       |
+| Due date         |
+| [DD] [MM] [YYYY] |
+| for example      |
+| 03 04 2027       |
+| How was it dated?|
+| ( ) last period  |
+| ( ) a scan       |
+| ( ) weeks and    |
+|     days as of   |
+|     a date       |
+| [Back] [Continue]|
++------------------+
+```
+
+The same column at every width; the indicator collapses to "Step 3 of 5"
+on phones and the two actions sit in one row at the foot.
 
 ### 3.3 `/today` (cycle stage; the chosen composition)
 
@@ -170,13 +194,13 @@ Desktop (month view)                                 Phone (list view)
 +------+---------------------------------------+     +------------------+
 | rail | [Month] [List]        < October 2026 >|     | [Month] [List]   |
 |      | Mo Tu We Th Fr Sa Su                  |     | week strip (today|
-|      |  .  .  1  2  3  4  5  <- period: solid|     |   on warmth)     |
-|      |  6  7  8  9 10 11 12  <- fertile:     |     | Sun Oct 5 (w)    |
-|      |      ~~~~~~today~~~~~    dashed pill  |     |  light, cramps   |
+|      |  .  .  1  2  3  4  5  <- period: solid|     |   on warmth (w)) |
+|      |  6  7  8  9 10 11 12  <- fertile:     |     | Today, Sun Oct 5 |
+|      |      ~~~~~~today~~~~~    dotted pill  |     |  light, cramps   |
 |      | 13 14 15 16 17 18 19                  |     | Sat Oct 4        |
 |      | 20 21 22 23 24 25 26  <- predicted    |     |  nothing logged  |
 |      | 27 28 29 30 31        period: dashed  |     | ...              |
-|      | legend: logged solid, predicted dashed|     | [Today]          |
+|      | legend: solid, dashed, dotted         |     | [Today]          |
 |      | [Today]                               |     | tabs             |
 +------+---------------------------------------+     +------------------+
 ```
@@ -187,6 +211,26 @@ period toggle (one tap logs, the same tap unlogs), flow scale, symptom
 chips, mood selector, a private note field with the explicit "Share this
 note with..." action, Save and Cancel; the keyboard model is the APG date
 picker dialog (`RESEARCH.md` decision 2).
+
+```text
+Desktop (dialog over /calendar)                      Phone (bottom sheet)
++------+---------------------------------------+     +------------------+
+| rail |  scrim                                |     | scrim            |
+|      |  +-------------------------------+    |     +------------------+
+|      |  | < Sunday, Oct 5 >          [x]|    |     | ==== [x]         |
+|      |  | [Period: logged]              |    |     | < Sunday, Oct 5 >|
+|      |  | Flow  [None][Spot][Light]...  |    |     | [Period: logged] |
+|      |  | Symptoms chips ... [More]     |    |     | Flow chips       |
+|      |  | Mood  [Low][Steady][Bright]   |    |     | Symptom chips    |
+|      |  | Private note                  |    |     | Mood chips       |
+|      |  | [Share this note with...]     |    |     | Private note     |
+|      |  | [Cancel]           [Save]     |    |     | [Share note...]  |
+|      |  +-------------------------------+    |     | [Cancel] [Save]  |
++------+---------------------------------------+     +------------------+
+```
+
+The sheet has no warmth surface of its own; the calendar beneath keeps
+the one on the screen.
 
 ### 3.5 `/journey`
 
@@ -202,6 +246,31 @@ picker dialog (`RESEARCH.md` decision 2).
 |      | [Add an appointment] [Add a milestone]              |
 |      | Something changed? [My pregnancy ended]             |
 +------+---------------------------------------+
+```
+
+```text
+Phone
++------------------+
+| logo      [name] |
++------------------+
+| (w) Week 24 and  |
+|     3 days       |
+|     2nd trimester|
+|     [===|===|---]|
+|     110 days to  |
+|     go  Apr 3    |
+|     dating: last |
+|     period       |
+~~~~ this week ~~~~~
+| Week 25  Mar 12  |
+|  scan     [edit] |
+| Week 26 ...      |
+| [Add appointment]|
+| [Add milestone]  |
+| Something        |
+| changed? [ended] |
+| tabs             |
++------------------+
 ```
 
 The ending path opens a dialog that asks the reason (private), lets her
@@ -225,6 +294,33 @@ shows the child's age, no week, no prediction.
                                                 +------+------------------------------+
 ```
 
+```text
+Phone /family                   Phone /family/[childId]
++------------------+            +------------------+
+| logo      [name] |            | < Nora           |
++------------------+            | 4 weeks, 3 days  |
+| Nora             |            | [Timeline][Growth]|
+| 4 weeks, 3 days  |            | [Milestones]     |
+| (w) last feed    |            | Growth           |
+|     2h ago       |            |  chart, band and |
+|     today: 8     |            |  frond curl      |
+|     last sleep   |            |  caption: WHO    |
+|     53m ago      |            |  0 to 24 months, |
+|     last diaper  |            |  approximate     |
+|     4h ago       |            |  under 8 weeks   |
+| [Feed][Sleep]    |            | [kg | lb]        |
+| [Diaper]         |            | [Add measurement]|
+| guardians: Mara, |            | tabs             |
+| Alex  [Add child]|            +------------------+
+| tabs             |
++------------------+
+```
+
+On `/family` the summary card is the warmth surface. On
+`/family/[childId]` the Timeline tab puts its newest row on warmth
+because nothing else on that screen uses it; the Growth and Milestones
+tabs have no warmth surface.
+
 ### 3.7 `/sharing`
 
 ```text
@@ -246,21 +342,139 @@ shows the child's age, no week, no prediction.
 +------+-----------------------------------------------+
 ```
 
+```text
+Phone
++------------------+
+| logo      [name] |
++------------------+
+| People           |
+| Alex  partner    |
+| since Mar 2      |
+|  Cycle status    |
+|  [on ] day of    |
+|  cycle and       |
+|  whether it is a |
+|  fertile window  |
+|  Cycle history   |
+|  [off] ...       |
+|  Symptoms [off]  |
+|  Pregnancy ...   |
+|  Nora [off]      |
+|  Tell Alex when  |
+|  my period starts|
+|  [off]           |
+|  [Remove Alex]   |
+| Invitations      |
+|  Jo, sent Oct 3  |
+|  [Withdraw]      |
+| [Invite partner] |
+| Private notes are|
+| never shared.    |
+| tabs             |
++------------------+
+```
+
+No warmth surface on this route: every grant row is a surface card so no
+one person reads as highlighted.
+
 ### 3.8 `/settings` and `/activity`
+
+```text
+Desktop /settings                                    Phone /settings
++------+---------------------------------------+     +------------------+
+| rail | Settings                              |     | Settings         |
+|      | Profile       name, pronouns, stage   |     | Profile      >   |
+|      | Time zone     Europe/London  [change] |     | Time zone    >   |
+|      | Units         [kg | lb]  [cm | in]    |     | Units        >   |
+|      | Theme         [follow system] [L] [D] |     | Theme        >   |
+|      | Sound         level slider, quiet hrs |     | Sound        >   |
+|      | Notifications detail [generic|named]  |     | Notifications >  |
+|      |   lock-screen preview; email stays    |     | Devices      >   |
+|      |   generic                             |     | Export       >   |
+|      | Devices       this browser, 2 others  |     | Activity     >   |
+|      | Export        [Download my data]      |     | Consent record > |
+|      | Activity      [See activity]          |     | Close account >  |
+|      | Consent record (read-only)            |     | tabs             |
+|      | Close account [Close my account]      |     +------------------+
++------+---------------------------------------+
+
+Desktop /activity                                    Phone /activity
++------+---------------------------------------+     +------------------+
+| rail | < Settings    Activity                |     | < Settings       |
+|      | Oct 5  Signed in     this browser     |     | Activity         |
+|      | Oct 4  Sharing changed  Alex, by you  |     | Oct 5 Signed in  |
+|      | Oct 3  Invitation sent  Jo            |     |  this browser    |
+|      | Oct 1  Export requested  by you       |     | Oct 4 Sharing    |
+|      | [Load more]                           |     |  changed, Alex   |
++------+---------------------------------------+     | ...  [Load more] |
+                                                      +------------------+
+```
 
 Settings is a stacked list of groups (profile, time zone and units, theme
 with follow system, sound level and quiet hours, notification detail with
 the lock-screen preview and the sentence that email stays generic, devices,
 export, close account), each toggle with one line of help beneath it.
 Activity is a cursor-paginated list of audit rows (what, who, when) with
-no health content and a "Load more" control.
+no health content and a "Load more" control. On phones each settings
+group opens its own screen with a back link; neither route has a warmth
+surface.
 
 ### 3.9 `/design`
+
+```text
+Desktop (hub, then a chapter)                        Phone (chapter)
++----------------------------------------------+     +------------------+
+| public header                                |     | public header    |
+| Design system                                |     +------------------+
+| H1 statement        lede                     |     | eyebrow          |
+| [Copy CSS] [Download JSON]                   |     | H1               |
+| [Color] [Type and space] [Components] ...    |     | > In this chapter|
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~     |   (disclosure)   |
+| chapter rail | section                       |     | section          |
+| anchors      | specimens at final state      |     | specimens        |
+|              | ...                           |     | ...              |
+|              | Previous / Next chapter       |     | Previous / Next  |
+| footer                                       |     | footer           |
++----------------------------------------------+     +------------------+
+```
 
 Overview with the chapter cards and exports; each chapter one column with a
 disclosure listing its anchors at the top on phones and a rail from 1024
 px, previous and next at the foot, every section rendered at its final
-state on the server.
+state on the server. No warmth surface except inside specimens that
+demonstrate it.
+
+### 3.10 Public documents and `/account/delete`
+
+```text
+Desktop (/privacy, /health-privacy, /terms, /accessibility)   Phone
++----------------------------------------------+     +------------------+
+| public header                                |     | public header    |
+| eyebrow: Policy                              |     +------------------+
+| H1 in Title Case          Updated Oct 5, 2026|     | eyebrow          |
+| contents | reading column, 45 to 68 chars    |     | H1               |
+| (sticky) | sections with H2 anchors          |     | Updated ...      |
+|          | contact: [OWNER] inbox            |     | > Contents       |
+| footer                                       |     | reading column   |
++----------------------------------------------+     | footer           |
+                                                      +------------------+
+
+/account/delete (signed out)                         (signed in)
++----------------------------------------------+     +------------------+
+| H1: Delete your account                      |     | H1               |
+| what deletion does, the 7 day window, the    |     | the same text    |
+| backups sentence                             |     | [Close my account]|
+| [Sign in to continue]                        |     | (opens the       |
++----------------------------------------------+     |  confirm dialog) |
+                                                      +------------------+
+```
+
+The four policy pages share one document layout: a contents list that is
+sticky from 1024 px and a disclosure on phones, one reading column, the
+updated date, and the owner's inbox where the policy names a contact.
+`/account/delete` is the same layout with one action that depends on the
+session; the destructive confirmation is the dialog in section 4 with the
+copy in `CONTENT.md`. No warmth surface on any of them.
 
 ## 4. Components and their states
 
@@ -270,9 +484,9 @@ appears in `/design/components`. The rows below add what each one must do.
 
 | Component | Notes beyond the eight states |
 | --- | --- |
-| Logo and mark | Light and dark variants swap by theme; mono variant under `forced-colors`; small variant under 32 px rendered size |
+| Logo and mark | Light and dark variants swap by theme; mono variant under `forced-colors`; small variant under 48 px rendered size (13.2; the G4 plan row says 32 px and is corrected to 48 when G4 is claimed) |
 | Header (public) | Primary navigation, native disclosure menu on phones (Escape closes and returns focus), sound and theme toggles, sign in |
-| Tab bar and rail | Five destinations by stage; `aria-current="page"`; the quick-log button on Today; safe-area padding |
+| Tab bar and rail | Four to six destinations by stage (Today, Calendar, Sharing and Settings always; Journey and Family when the stage or a child calls for them); `aria-current="page"`; the quick-log button on Today; safe-area padding |
 | Footer | Closing line, Privacy, Consumer Health Data Privacy Policy, Design system, API contract, the storage note |
 | Text link and button | primary, secondary, quiet, destructive; 48 px primary, 44 px others; loading keeps width and shows text ("Saving") |
 | Inline and toast feedback | Success is short; an error names the next step; never two for one action; `aria-live="polite"`; the cue plays only with visible text |
@@ -285,11 +499,11 @@ appears in `/design/components`. The rows below add what each one must do.
 | Mood selector | Three values, single select |
 | Measurement input with unit toggle | SI stored, display converted at the edge; the toggle is a segmented control |
 | Segmented control | Swaps content in place, never navigates |
-| Calendar month grid and list | Seven columns, two-letter headers, greyed neighbours, logged solid, predicted dashed pills, today's row underlined by the tide line, `today` as a prop, per-day accessible label |
+| Calendar month grid and list | Seven columns, two-letter headers, greyed neighbours, logged solid, predicted dashed and estimated dotted pills, today's row underlined by the tide line, `today` as a prop, per-day accessible label |
 | Day sheet | Bottom sheet on phones, dialog on desktop; see 3.4 |
 | Cycle ring | Section 6.1 |
 | Pregnancy week card | Section 6.4 |
-| Timeline | Vertical, date-led rows; newest on warmth; dashed connector for expected items |
+| Timeline | Vertical, date-led rows; the newest row on warmth only on `/family/[childId]`, where nothing else uses it (on `/journey` the week card is the warmth and every row is plain); dashed connector for expected items |
 | Measurement chart with band | Section 6.5 |
 | Person and grant cards | Plain description per category before it can be turned on; revoke in one step |
 | Invitation card | Pending with sent date, withdraw action; accepted only after sign-in by POST |
@@ -339,25 +553,35 @@ resources link, and a single confirm. `/today` then shows the quiet card.
 
 ## 6. Geometry and drawing rules
 
+Line vocabulary, from `RESEARCH.md` decision 1: a logged fact is solid; a
+prediction, meaning a dated expectation such as the next period, is
+dashed; an estimate, meaning a modelled window such as the fertile window
+or the ovulation band, is dotted. Color never changes with certainty. The
+`use` note on the `data-fertile` token in `tokens.json` still says
+"predicted windows are dashed" and G5 corrects it to dotted when it draws
+the cell and the ring.
+
 ### 6.1 The cycle ring
 
-- 260 px on desktop, 220 px on phones; track stroke 14 px in `soft-border`;
+- 260 px on desktop, 220 px on phones; track stroke 14 px in the
+  `soft-border` token (the functional separator in `tokens.json`);
   day 1 at the top, clockwise; the ring represents the estimated cycle
   length (default 28) so day positions stay stable within a cycle.
 - Logged period days: solid arc in `data-period`. Predicted period (the
   next period, from `nextPeriodStart` minus `uncertaintyDays` to the ring's
   end): dashed arc in `data-period` with no fill. Fertile window
-  (`fertileWindow.start` to `end`): dashed arc in `data-fertile`. Ovulation:
+  (`fertileWindow.start` to `end`): dotted arc in `data-fertile`. Ovulation:
   a small outlined dot in the text role at `ovulation`, with the band drawn
-  as a lighter dashed arc of plus or minus `ovulationBandDays`.
+  as a lighter dotted arc of plus or minus `ovulationBandDays`.
 - Progress: a 3 px arc in `accent` on a radius 12 px inside the track from
   day 1 to today, ending in the frond curl (a spiral of about 16 px that
   turns inward, taken from the mark). Today: a 7 px `action` dot with a 3
   px page-colored halo on the track.
-- The uncertainty is drawn as the dashed arcs; a wider `uncertaintyDays`
-  makes the dashed period arc longer, never a different color. First guess:
-  the dashed arcs only, with the first-guess copy. Not enough regular
-  cycles: track and logged arcs only, no dashed arcs, with that copy.
+- The uncertainty is drawn as the dashed and dotted arcs; a wider
+  `uncertaintyDays` makes the dashed period arc longer, never a different
+  color. First guess: the dashed and dotted arcs only, with the first-guess
+  copy. Not enough regular cycles: track and logged arcs only, no dashed or
+  dotted arcs, with that copy.
 - Accessible name: "Cycle day 12 of about 28"; the sentences beside the
   ring carry every fact; the ring is `role="img"`.
 - Reduced motion: no arc animation; otherwise the progress arc settles in
@@ -367,7 +591,7 @@ resources link, and a single confirm. `/today` then shows the quiet card.
 
 44 px minimum; the number in Figtree with tabular figures; logged period
 days a solid `data-period` pill behind consecutive days; the fertile
-window a dashed `data-fertile` pill; predicted period a dashed
+window a dotted `data-fertile` pill; predicted period a dashed
 `data-period` pill; ovulation a small outlined dot under the number; today
 underlined by a 1 px tide line across the row; a logged day shows a 4 px
 text-colored dot. Each predicted day carries its own accessible label.
@@ -376,7 +600,8 @@ text-colored dot. Each predicted day carries its own accessible label.
 
 A week strip (seven cells with the same textures, today on warmth) above a
 list of days, newest first, each row the date, what was logged in words
-and a chevron to the sheet. The empty state follows `CONTENT.md`.
+and a chevron to the sheet. The strip is the screen's one warmth surface;
+the row for today is a plain surface row labelled "Today". The empty state follows `CONTENT.md`.
 
 ### 6.4 Pregnancy week card
 

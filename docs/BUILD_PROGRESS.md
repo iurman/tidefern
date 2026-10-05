@@ -18,6 +18,9 @@ findings and the next concrete action. Resume from the last entry and
    a plaintext repository variable until 2026-10-04.
 3. Set a Vercel usage alert and record the team plan on task A2 (stated as
    Pro; not readable through the connector).
+4. Dependabot alerts are disabled on the repository (the API answers 404 for
+   vulnerability alerts); enable them under Settings, Code security, so the
+   lockfile pins get advisories. The lead cannot change this setting.
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -611,3 +614,52 @@ Second wave running as one workflow: C1 and B12 in parallel, then B2 and
 C5, then B3 to B7 on one branch (one generated migration per task, in
 order). The lead claims G2 once this branch merges and writes
 `docs/design/DESIGN.md`, `CONTENT.md` and `ASSETS.md`.
+
+### G2 closed, B12 merged (2026-10-05, lead session 061fed2d)
+
+Production smoke after the G1 merge (`a53ca5e`): Verify deployment
+succeeded at 16:56 UTC. B12 (PR #12, migration safety gate) merged by
+squash as `37ba2cf` after its fix pass (dollar-quoted bodies scanned as
+one token); CI verify and CodeQL green, the Vercel preview skipped as not
+affected (package-only change), production smoke on `37ba2cf` succeeded
+at 17:06 UTC.
+
+A5 verified by reading the settings: the main ruleset requires the
+`verify` and `CodeQL` checks and a pull request, and forbids force pushes
+and deletion; secret scanning and push protection are on; the
+`VERCEL_AUTOMATION_BYPASS_SECRET` secret and the `PRODUCTION_URL` variable
+exist. Dependabot alerts are off, which only the owner can change (owner
+action 4).
+
+G2 (PR #13): `docs/design/DESIGN.md` (compositions compared with sixteen
+captures of two home and two `/today` compositions in both themes at 1440
+and 390 px, the page map, desktop and phone sketches for every 12.1 route,
+component notes, interaction models, geometry, motion and sound, theming),
+`docs/design/CONTENT.md` (per-route content inventory, voice, empty
+states, owner inputs marked) and `docs/design/ASSETS.md` (fonts, vectors
+with dimensions, icons, raster set, data tables). Decisions: home
+composition A (two statements, one action) with B's numbered chapter list;
+`/today` composition A (ring-led), the strip moves to the calendar list
+header; line vocabulary solid, dashed, dotted from research decision 1; the
+small mark threshold is 48 px per 13.2 and the G4 plan row is corrected
+when G4 is claimed; the `/today` disclaimer reuses the 13.10 ovulation
+tail so no new prediction wording enters.
+
+A fresh-context review found two majors (phone sketches missing for six
+routes and no sketch at all for seven; dark captures missing for both B
+compositions and all phone captures) and ten minors (a non-13.10
+disclaimer sentence, a template count, the missing "weeks and days" dating
+input, dashed used where decision 1 says dotted, warmth used twice on two
+screens, the 32 versus 48 px mark threshold, an unnamed track token,
+vectors and icons without dimensions, a five-tab count that can be six,
+and no progress entry). All twelve were fixed in the branch before the
+merge; the capture script gained `--phone-dark` and `--jpeg`.
+
+Commands: `pnpm prose:check` passed across 161 files; `pnpm check` and
+`pnpm test:e2e` results are in the PR and the merge commit.
+
+### Next action
+
+Fix the nine G3 review findings on `claude/G3-type` (PR #15), rebase it on
+main, mark G3 done, merge. Then merge C1 when its review answers arrive so
+the second wave workflow continues with B2 and C5.
