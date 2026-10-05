@@ -17,6 +17,9 @@ let harness: Awaited<ReturnType<typeof createTestDatabase>>;
 // Synthetic ids only; nothing here is a real person.
 const ANNA = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f10";
 const CHILD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f11";
+// A subject with no key row yet, so the refused insert below cannot hit the
+// primary key first: the only thing standing in its way is RLS.
+const NEWCOMER = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f12";
 const ATTESTED_AT = new Date("2026-10-04T18:30:00Z");
 
 /** 1 version byte, 12 IV bytes, 16 tag bytes, 32 wrapped key bytes. */
@@ -310,7 +313,7 @@ describe("row level security", () => {
         ANNA,
         (tx) =>
           tx.insert(schema.subjectKeys).values({
-            subjectId: ANNA,
+            subjectId: NEWCOMER,
             kind: "user",
             wrappedDek: WRAPPED_DEK,
             kekProvider: "env",
