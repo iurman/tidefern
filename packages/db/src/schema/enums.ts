@@ -6,8 +6,10 @@ import { pgEnum } from "drizzle-orm/pg-core";
 // own; replacing a check constraint needs a DROP first, which the runner
 // refuses outside the owner-triggered workflow. The values mirror the Zod
 // enums in packages/schemas, which the API validates against before a row
-// is written; this package does not depend on schemas, so the list is
-// written out here on purpose and schema.test.ts pins it.
+// is written. The lists are written out here rather than imported so that
+// drizzle-kit never has to load zod to read the schema; this package depends
+// on schemas only for the vocabulary seed (src/seed/vocabulary.ts) and the
+// tests that pin every list below to its Zod twin.
 
 /** Mirrors `Stage` in packages/schemas. */
 export const stageValues = ["none", "cycle", "pregnancy", "postpartum"] as const;
@@ -24,3 +26,53 @@ export const notificationDetailEnum = pgEnum("notification_detail", notification
 /** Who a `subject_keys` row belongs to: a user or a child. */
 export const subjectKindValues = ["user", "child"] as const;
 export const subjectKindEnum = pgEnum("subject_kind", subjectKindValues);
+
+/** Household roles of architecture record 7.4. Membership grants nothing by itself. */
+export const householdRoleValues = ["owner", "partner", "guardian"] as const;
+export const householdRoleEnum = pgEnum("household_role", householdRoleValues);
+
+/** A membership is active until the person leaves or is removed. */
+export const membershipStatusValues = ["active", "ended"] as const;
+export const membershipStatusEnum = pgEnum("membership_status", membershipStatusValues);
+
+/**
+ * Mirrors `ShareCategory` in packages/schemas: what a grant can name.
+ * `journal.private` is absent on purpose; it can never be granted.
+ */
+export const shareCategoryValues = [
+  "cycle.status",
+  "cycle.history",
+  "cycle.symptoms",
+  "pregnancy.overview",
+  "pregnancy.photos",
+  "child",
+] as const;
+export const shareCategoryEnum = pgEnum("share_category", shareCategoryValues);
+
+/**
+ * Mirrors `Category` in packages/core: every category data can be filed
+ * under, the private journal included. Consents and audit events use it,
+ * because collection is consented to and read for every category.
+ */
+export const dataCategoryValues = [
+  "cycle.status",
+  "cycle.history",
+  "cycle.symptoms",
+  "journal.private",
+  "pregnancy.overview",
+  "pregnancy.photos",
+  "child",
+] as const;
+export const dataCategoryEnum = pgEnum("data_category", dataCategoryValues);
+
+/** Mirrors `ShareLevel` in packages/schemas. */
+export const shareLevelValues = ["summary", "read", "contribute"] as const;
+export const shareLevelEnum = pgEnum("share_level", shareLevelValues);
+
+/**
+ * The legal basis of a consent row (architecture record 7.4): `necessary`
+ * for data the person asked the product to hold in order to work, `consent`
+ * for anything collected for a specified purpose beyond that.
+ */
+export const consentBasisValues = ["necessary", "consent"] as const;
+export const consentBasisEnum = pgEnum("consent_basis", consentBasisValues);

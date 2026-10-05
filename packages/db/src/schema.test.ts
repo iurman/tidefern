@@ -63,6 +63,7 @@ describe("the journal", () => {
     expect(journal.entries.map((entry) => entry.tag)).toEqual([
       "0000_create_app_role",
       "0001_identity_and_profiles",
+      "0002_relationships",
     ]);
 
     const files = readMigrationFiles(migrationConfig);
@@ -82,6 +83,11 @@ describe("the journal", () => {
     );
     expect(tables.map((row) => row.table_name)).toEqual([
       "account",
+      "consents",
+      "grants",
+      "household_members",
+      "households",
+      "invitations",
       "passkey",
       "profiles",
       "rate_limit",
@@ -257,6 +263,11 @@ describe("row level security", () => {
     );
     expect(flags).toEqual([
       { relname: "account", relrowsecurity: false, relforcerowsecurity: false },
+      { relname: "consents", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "grants", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "household_members", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "households", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "invitations", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "passkey", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "profiles", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "rate_limit", relrowsecurity: false, relforcerowsecurity: false },
