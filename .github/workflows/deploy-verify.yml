@@ -7,6 +7,23 @@ name: Verify deployment
 # if preview deployments use Vercel deployment protection.
 on:
   deployment_status:
+  # Manual fallback for when Vercel's Git integration does not post a
+  # deployment status for a preview: run the same smoke test against a URL.
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "Deployment URL to smoke test (a preview alias or the production domain)"
+        required: true
+        type: string
+      ref:
+        description: "Commit or branch the deployment was built from"
+        required: true
+        type: string
+      production:
+        description: "Treat the URL as production (expects indexable pages)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -19,19 +36,20 @@ env:
 jobs:
   smoke:
     name: Smoke test ${{ github.event.deployment.environment }}
-    if: github.event.deployment_status.state == 'success'
+    if: github.event_name == 'workflow_dispatch' || github.event.deployment_status.state == 'success'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
       # Production is checked on its public domain (repository variable PRODUCTION_URL) when one is set,
       # because a deployment's unique URL sits behind Vercel Authentication and needs the bypass secret.
-      DEPLOY_URL: ${{ (github.event.deployment.environment == 'Production' && vars.PRODUCTION_URL) || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      DEPLOY_URL: ${{ inputs.url || (github.event.deployment.environment == 'Production' && vars.PRODUCTION_URL) || github.event.deployment_status.environment_url || github.event.deployment_status.target_url }}
+      IS_PRODUCTION: ${{ (github.event_name == 'workflow_dispatch' && inputs.production) || github.event.deployment.environment == 'Production' }}
       VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
     steps:
       - name: Check out the deployed commit
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.deployment.sha }}
+          ref: ${{ inputs.ref || github.event.deployment.sha }}
 
       - name: The home page and the API answer
         run: |
@@ -70,7 +88,7 @@ jobs:
       - name: Browser smoke tests against the deployment
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.DEPLOY_URL }}
-          EXPECT_INDEXABLE: ${{ github.event.deployment.environment == 'Production' && 'true' || 'false' }}
+          EXPECT_INDEXABLE: ${{ env.IS_PRODUCTION == 'true' && 'true' || 'false' }}
         run: pnpm test:e2e --grep "@smoke"
 
       - name: Keep the Playwright report when something fails
