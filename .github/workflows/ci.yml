@@ -66,12 +66,13 @@ jobs:
               console.log("commit messages passed");
             });'
 
-      - name: Generated files are current (tokens, brand copies, OpenAPI)
+      - name: Generated files are current (tokens, brand copies, OpenAPI, growth data)
         run: |
           pnpm tokens:check
           pnpm tokens:contrast
           pnpm --filter web brand:check
           pnpm openapi:check
+          pnpm growth:check
 
       - name: Formatting
         run: pnpm format:check
