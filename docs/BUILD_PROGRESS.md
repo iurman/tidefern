@@ -5,6 +5,23 @@ what changed, the commands and their results, decisions with reasons, open
 findings and the next concrete action. Resume from the last entry and
 `git status`.
 
+## Owner actions pending (kept current by the lead; details in the newest entry)
+
+1. Vercel connector: the MCP connection is authorized for the personal scope
+   only and answers 403 for the `iurman's projects` team. Re-authorize it at
+   team scope so A2, A4 and the deployment checks can use it. Until then the
+   lead uses the logged-in Vercel CLI for read-only inspection.
+2. Rotate the Protection Bypass for Automation value in the Vercel project
+   (Settings, Deployment Protection) and store the new value with
+   `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`; the current value sat in
+   a plaintext repository variable until 2026-10-04.
+3. Set a Vercel usage alert and record the team plan on task A2 (stated as
+   Pro; not readable through the connector).
+4. The machine's safe-chain guard blocks any lockfile pin published within
+   its minimum package age; when that recurs, run
+   `pnpm install --frozen-lockfile --safe-chain-skip-minimum-package-age`
+   yourself from the session prompt.
+
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
 Started from the empty repository (commit `32e1123`, README only).
@@ -300,3 +317,179 @@ findings and what changed:
 Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
 tests green. The research workflow and the review workflow are both
 complete; nothing is still running.
+
+## 2026-10-04, lead session 8517de27 (Phase 1 intake, task A1)
+
+Started from commit `43f34d0` on `main` (clean tree). Branch
+`claude/A1-intake`, draft pull request titled `A1: repository intake`.
+
+### Read
+
+`AGENTS.md`, `humanize.md`, `README.md`, `docs/ARCHITECTURE.md` end to end,
+`docs/BUILD_PLAN.md`, this log, `docs/research/SOURCE_ANALYSIS.md`, the
+`site-build` skill with all six references, the brand sheet image. Ten
+reader subagents mapped `docs/research/RESEARCH.md` (four ranges), the
+`humanize-writing` and `humanize-code` skills with their references, the
+token file and brand package, the web shell code, the API, core and
+schemas packages, and the CI workflows and runbook; a completeness critic
+spot-checked their citations. Their findings are recorded below under
+"Reader maps" once the run finished.
+
+### Commands and results
+
+| Command | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | first run failed: `ERR_PNPM_FETCH_403` on `hono-4.13.13.tgz`, blocked by safe-chain's minimum package age (hono 4.13.13 was published 2026-10-04T03:53Z and the lockfile pins it); pnpm exited 0 but linked nothing. The owner then ran it with `--safe-chain-skip-minimum-package-age`: 422 packages, done in 9.1s, engine warning for local Node 26.7.0 (expected). One build script ignored (`unrs-resolver`), which the previous session saw too. |
+| `pnpm --filter web exec playwright install chromium` | passed; Chromium 1243 already present (Playwright prints a fallback-build notice for this OS) |
+| `pnpm check` | passed: prose 117 files, skills 4, tokens, contrast 96 pairings, brand 5 files, OpenAPI, Prettier, then `turbo run lint typecheck test build` with 13 of 13 tasks successful; 37 unit tests (core 32, api 5) |
+| `pnpm test:e2e` | first run could not bind port 3000: a three-day-old `next-server` from another checkout (`~/.codex/worktrees/0a53/crm`) holds it and answers 500; left untouched. Rerun in external mode against `pnpm start --port 3100`: `12 passed (6.5s)` |
+| `node apps/web/scripts/capture.mjs` (against port 3100) | 8 screenshots of `/` and `/design` in both themes at 1440 and 390 px, written to the session scratchpad and inspected: the mark swaps to its dark variant, the warm panel reads in both themes, nothing clips or overflows at 390 px, the header navigation link is hidden on phones (known, G5). Not committed; J3 owns `docs/design/qa/` |
+| Version confirmation (`npm view`, 2026-10-04) | see the table below |
+| `gh auth status` | logged in as `iurman`; no open pull requests; remote branches `main` and the merged `claude/friendly-johnson-lrt79s` |
+| `gh run list` | CI and CodeQL green on `main` (37250792049, 37250792077); `Verify deployment` red on every deployment since the project was connected |
+| `vercel project inspect tidefern --scope iurmans-projects` (read only) | project `prj_9KHWVBhkBPNa3sgbkPs8IzOwqXUA`, team `iurman's projects`, root `apps/web`, Node 24.x, Next.js preset, default build command (A4 sets the migrate step later) |
+| `curl https://tidefern.app/` and `/api/v1/health` | 200 and 200; the domain resolves through Cloudflare name servers; deployment URLs (`*-iurmans-projects.vercel.app`) answer 302 to Vercel's SSO page |
+
+Versions in architecture section 4.2 against the registry on 2026-10-04:
+
+| Package | Pinned | Registry latest | Drift |
+| --- | --- | --- | --- |
+| turbo | 2.11.7 | 2.11.7 | none |
+| next, eslint-config-next | 16.3.8 | 16.3.8 | none |
+| react, react-dom | 19.2.8 | 19.3.0 | newer minor exists; not bumped (the pair `create-next-app` installs with 16.3.8 stays) |
+| typescript | 6.0.3 | 7.0.2 | expected, recorded in 4.2 |
+| eslint | 10.12.0 (9.39.5 in web) | 10.12.0 | none |
+| typescript-eslint | 8.71.0 | 8.71.0 | none |
+| tailwindcss | 4.3.3 | 4.3.3 | none |
+| hono, @hono/zod-openapi, zod | 4.13.13, 1.6.3, 4.6.5 | same | none |
+| vitest | 5.0.3 | 5.0.3 | none |
+| playwright, @playwright/test, @axe-core/playwright | 1.63.0, 1.63.0, 4.13.0 | same | none |
+| sharp | 0.35.5 | 0.35.5 | none |
+| pnpm | 10.34.6 | 12.9.1 | expected, recorded in 4.2 |
+| Node | 24.x, `.nvmrc` 24.21.0 | 24.21.0 is the current 24 line; 26.10.0 is current | none; this machine runs Node 26.7.0, so the engine warning is expected |
+| Not yet installed (Phase 1): drizzle-orm 0.45.3, drizzle-kit 0.31.11, pg 8.23.1, better-auth 1.7.7, @better-auth/passkey 1.7.7, @better-auth/drizzle-adapter 1.7.7, @electric-sql/pglite 0.5.8, openapi-typescript 7.13.0, openapi-fetch 0.17.0, react-day-picker 10.0.2, @vercel/functions 3.9.11 | as in 4.2 | same | none |
+
+### The red deployment check
+
+`deploy-verify.yml` failed on all nine deployments because of two GitHub
+settings, not the application:
+
+1. The repository variable meant to be `PRODUCTION_URL` was named
+   `PRODUCTION_URLPRODUCTION_URL`, so production smoke tests ran against the
+   deployment's unique URL, which sits behind Vercel Authentication and
+   redirects to SSO; the workflow's 401 check never fires on that 302, so
+   the first `curl | grep "Tidefern"` failed. Fixed: `PRODUCTION_URL` set to
+   `https://tidefern.app`, the misnamed variable deleted, run 37250822707
+   rerun: green. `Testing https://tidefern.app`, the home page and the
+   API answered, and the browser smoke subset reported `3 passed (3.1s)`
+   against Chromium 1243. That run is the passing `Verify deployment` the
+   build prompt names as A2's confirmation for production.
+2. `VERCEL_AUTOMATION_BYPASS_SECRET` exists only as a repository variable,
+   so `secrets.VERCEL_AUTOMATION_BYPASS_SECRET` is empty and previews cannot
+   be reached. This session is not permitted to write repository secrets;
+   owner action 2 above.
+
+Follow-up for J5: the workflow should treat a redirect to
+`vercel.com/sso-api` as "protected" and say so, instead of following it and
+failing on the content check.
+
+### A2 and A3 status
+
+A2: the Vercel project is connected and deploys every push; production
+serves at `https://tidefern.app` and its `Verify deployment` run is green
+(above). Previews stay unverified until owner action 2. The team's plan is
+stated by the owner as Pro and could not be read through the connector
+(scope); recorded as stated, not verified. The usage alert is an owner
+setting. The GitHub `deployment` payloads Vercel sends carry
+`environment` exactly `Production` and `Preview` (read once from
+`gh api repos/iurman/tidefern/deployments`), which answers the open
+question in architecture section 21 and matches the workflow's filter.
+A2 is marked `blocked` in the plan on the preview secret and the usage
+alert, with production done. A3: no database URL is present
+locally (`.env.local` does not exist); the Neon side is checked when B1 and
+B10 touch it. A4 is checked when `packages/db` exists.
+
+### Decisions
+
+- The safe-chain age guard is the owner's security control; the lead does
+  not bypass it. Everything that needs `node_modules` waits for owner
+  action 1; reading, version confirmation, GitHub settings and the plan
+  bookkeeping proceeded.
+- The A1 branch was pushed without a local `pnpm check` or `pnpm test:e2e`
+  (both blocked by the install); it changes only `docs/`, and CI runs the
+  same gates on the pull request. This exception is recorded here and not
+  repeated for code changes.
+- Commit messages carry no model names, per the architecture record, so
+  no co-author trailer is added.
+
+### Reader maps (ten readers, one critic; 11 agents, 0 errors, 138 tool calls)
+
+The maps are evidence for the lead, not decisions. Where a research
+snippet disagrees with the architecture record, the record wins
+(`docs/research/RESEARCH.md` line 3 says so itself). What the critic
+confirmed by reading the cited lines, grouped by what it changes:
+
+Code follow-ups found in the foundation (not fixed in A1; each belongs
+to the task named):
+
+- `packages/api/src/problem.ts` lists six problem codes while
+  `packages/schemas` lists eight; `conflict` and `upgrade_required`
+  cannot be emitted although 409 and 426 are accepted. E1.
+- `packages/schemas` `CalendarDate` checks shape only; `packages/core`
+  `isCalendarDate` rejects impossible dates with a `RangeError`, so an
+  invalid date in a request would become a 500. Refine at the boundary. E3.
+- `apps/web/src/app/global-error.tsx` renders light colors only. G5.
+- The header link is hidden under 600 px with no replacement and never
+  carries `aria-current`; the app shell in G5 replaces it.
+- Page colors `#F7F5EF` and `#0F1A17` are repeated by hand in five
+  files; `tokens.css` is the generated source. G5.
+- `apps/web/src/app/api/[[...route]]/route.ts` comments on a 300 s
+  Hobby ceiling; the owner states Pro. Correct the comment with A2.
+- `scripts/brand/generate-icons.mjs` named by G4 does not exist yet.
+
+Document follow-ups:
+
+- `docs/LAUNCH_RUNBOOK.md` contradicts itself on the Neon default branch
+  (staging at lines 43 to 49, production at line 52); the record's
+  section 7.5 says staging. It also claims `deploy-verify` compares the
+  deployed commit with `main` (not built yet, J5), says the foundation is
+  unmerged (stale since pull request #3), and reasons from Hobby limits
+  while the owner states Pro. J4 rewrites it.
+- `docs/BUILD_PROMPT.md` section 7 names tasks E1 to E10; the plan ends
+  at E9. The plan lists A6 as an owner task but group A has only A1 to A5.
+- `packages/design-tokens/brand/README.md` says the tagline uses the
+  "Sea Glass accent color", but `tide` (`#6EA7A0`) is never text in the
+  token file; the text role is `accent`. G4 settles the wording. The
+  mono and small mark variants exist on disk but have no documented use.
+- Research snippets use `app.user_id`, `packages/db/src/schema/auth.ts`,
+  `DATABASE_URL_DIRECT`, a stored idempotency `response_body`, pnpm 12
+  and a `pgRole(...).existing()` role; the record and the plan say
+  `app.actor_id`, `packages/db/src/auth-schema.ts`,
+  `DATABASE_URL_UNPOOLED`, no stored bodies, pnpm 10.34.6 and a role the
+  first migration creates. B1, C1 and E1 follow the record.
+- The envelope snippet's AAD is `userId:table.column:rowId`; the record
+  and D1 say `table:column:row_id`. D1 follows the record.
+- `.github/renovate.json` uses `matchCurrentVersion "!/^0/"` for the
+  0.x rule; the critic asks that it be checked against Renovate's docs
+  before anyone relies on it.
+- `humanize.md` sets `register: warm, plain, calm`, which the skill's
+  calibration grammar does not define (it accepts casual, neutral,
+  formal). Harmless; the project rules carry the meaning.
+
+Two reader claims were wrong and are not carried forward: the pull
+request template exists (`.github/PULL_REQUEST_TEMPLATE.md`), and
+`packages/api/scripts/emit-openapi.ts` exists. Three line citations were
+off by one; the content was right.
+
+### Owner actions resolved in this session
+
+Owner action 1 (install) and owner action 2 (the bypass secret) were run
+by the owner from the session prompt; the plaintext variable was deleted
+afterwards (`gh variable list` shows only `PRODUCTION_URL`). Rotation of
+the bypass value in Vercel is still recommended because it sat in a
+repository variable. Owner action 3 (connector scope) stays open.
+
+### Next action
+
+A1 closes with this entry. Next: claim G1 (design research record) on
+`claude/G1-research`.
