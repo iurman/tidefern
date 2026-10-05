@@ -773,3 +773,63 @@ fresh-context review, then launch the G4 and G5 workflow (five component
 groups and the brand script, each implement, review, fix on its own
 branch), review each group's captures in both themes, merge in order, and
 compose the day sheet and the `/design/components` index.
+
+### Second wave closed, G5 scaffolding merged, third wave launched (2026-10-05, lead session 061fed2d)
+
+Merged by squash, in order: B2 (PR #16, `a3c8e0d`), C5 (PR #17,
+`4e2b0c8`), B3 to B7 (PR #19, `f78d2a8`, five migrations in one branch
+because the drizzle journal is ordered), the G5 scaffolding (PR #18,
+`73912c3`). The plan marks C1, B12, B2, C5 and B3 to B7 done with their
+evidence. The second wave workflow ran 17 agents with no error: each task
+implemented in its own worktree, reviewed fresh and fixed. Reviews found
+nothing on C1, one minor on B2, three minors on C5 and one major plus
+three minors on B3 to B7 (a stale base, fixed by rebasing); every answer
+is in the pull request bodies, which carry the commands and results.
+
+Decisions recorded from the reports: the Resend transport throws on a
+half configuration in production rather than printing links into the
+production log; Better Auth's generated timestamps stay `timestamp`
+without time zone because the generated file is byte-checked, and the
+hand-written tables use `timestamptz`, a difference C2 and B8 must keep
+in view; four tables carry no `updated_at` by design (`subject_keys`,
+`vocabulary`, `due_date_changes`, `audit_events`) and a catalog test pins
+that list; the 72 hour invitation expiry is the API's rule (E7), not a
+check constraint; `rateLimit.enabled: true` also limits the dev server,
+and the architecture prose that says otherwise is reconciled in C2 or
+B11.
+
+Deployment checks this wave: Vercel cancels the preview and production
+builds of package-only merges as not affected, so B2, C5 and B3 to B7
+have no smoke run of their own; production kept serving the G3 build,
+whose smoke succeeded. The manual dispatch added to `deploy-verify.yml`
+(PR #20, `a9d79a0`) ran the smoke against the G3 preview (run
+37351505881, success) and the G5 contract preview (runs 37355883648 and
+the earlier one, success). The contract's last two commits (the
+verification residues, one icon path, and the db test timeout) got no
+preview build of their own from Vercel before the merge; the smoke that
+covers them is the production run after `73912c3`. Latest
+deployment-triggered smoke runs at the time of writing: 73912c3:completed:success ba72c6d:completed:success a9d79a0:completed:success c364415:completed:success.
+
+CI flake turned fix: the db migration test timed out at Vitest's 5 s
+default twice on the contract branch, each time right after the new web
+unit tests ran alongside it on the two-core runner; `packages/db`
+vitest config now allows 30 s for tests and hooks (the PGlite boot), and
+the suite passed on the next run. Labelled as an environment failure,
+not an application defect.
+
+Third wave launched as one workflow of up to 18 agents: the five G5
+component groups (actions, forms, structure, calendar, marks) and G4, each
+implement in a worktree on its own branch, fresh review, fix; briefs in
+the session scratchpad (`g5/briefs.md`), binding contract in
+`docs/design/COMPONENTS.md`. The lead merges each group after reading its
+captures in both themes, then composes the day sheet and the
+`/design/components` index.
+
+### Next action
+
+Merge the third wave's pull requests in the order they become ready
+(actions and forms first, since structure's cards use buttons and
+calendar's day sheet uses the chips), rerunning each gate after a rebase.
+Then H9 (public pages) and the lead's day sheet and components index;
+then B8 (RLS) and B9 (seed) as subagent tasks now that B2 to B7 are on
+main, D2 after B2, and C2 after C1, B3 and B6.
