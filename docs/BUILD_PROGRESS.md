@@ -383,7 +383,10 @@ settings, not the application:
    redirects to SSO; the workflow's 401 check never fires on that 302, so
    the first `curl | grep "Tidefern"` failed. Fixed: `PRODUCTION_URL` set to
    `https://tidefern.app`, the misnamed variable deleted, run 37250822707
-   rerun (result recorded below).
+   rerun: green. `Testing https://tidefern.app`, the home page and the
+   API answered, and the browser smoke subset reported `3 passed (3.1s)`
+   against Chromium 1243. That run is the passing `Verify deployment` the
+   build prompt names as A2's confirmation for production.
 2. `VERCEL_AUTOMATION_BYPASS_SECRET` exists only as a repository variable,
    so `secrets.VERCEL_AUTOMATION_BYPASS_SECRET` is empty and previews cannot
    be reached. This session is not permitted to write repository secrets;
@@ -396,11 +399,16 @@ failing on the content check.
 ### A2 and A3 status
 
 A2: the Vercel project is connected and deploys every push; production
-serves at `https://tidefern.app`. Per the build prompt A2 counts as
-confirmed by a passing `Verify deployment` run, which depends on the rerun
-above for production and on owner action 2 for previews. The team's plan is
+serves at `https://tidefern.app` and its `Verify deployment` run is green
+(above). Previews stay unverified until owner action 2. The team's plan is
 stated by the owner as Pro and could not be read through the connector
-(scope); recorded as stated, not verified. A3: no database URL is present
+(scope); recorded as stated, not verified. The usage alert is an owner
+setting. The GitHub `deployment` payloads Vercel sends carry
+`environment` exactly `Production` and `Preview` (read once from
+`gh api repos/iurman/tidefern/deployments`), which answers the open
+question in architecture section 21 and matches the workflow's filter.
+A2 is marked `blocked` in the plan on the preview secret and the usage
+alert, with production done. A3: no database URL is present
 locally (`.env.local` does not exist); the Neon side is checked when B1 and
 B10 touch it. A4 is checked when `packages/db` exists.
 
