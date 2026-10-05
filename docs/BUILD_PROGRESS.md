@@ -10,17 +10,14 @@ findings and the next concrete action. Resume from the last entry and
 1. Vercel connector: the MCP connection is authorized for the personal scope
    only and answers 403 for the `iurman's projects` team. Re-authorize it at
    team scope so A2, A4 and the deployment checks can use it. Until then the
-   lead uses the logged-in Vercel CLI for read-only inspection.
+   lead uses the logged-in Vercel CLI (`--scope iurmans-projects`) for
+   read-only inspection.
 2. Rotate the Protection Bypass for Automation value in the Vercel project
    (Settings, Deployment Protection) and store the new value with
    `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`; the current value sat in
    a plaintext repository variable until 2026-10-04.
 3. Set a Vercel usage alert and record the team plan on task A2 (stated as
    Pro; not readable through the connector).
-4. The machine's safe-chain guard blocks any lockfile pin published within
-   its minimum package age; when that recurs, run
-   `pnpm install --frozen-lockfile --safe-chain-skip-minimum-package-age`
-   yourself from the session prompt.
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -493,3 +490,124 @@ repository variable. Owner action 3 (connector scope) stays open.
 
 A1 closes with this entry. Next: claim G1 (design research record) on
 `claude/G1-research`.
+
+## 2026-10-05, lead session 061fed2d (Phase 1 build, Stage 1 onward)
+
+Started from commit `8f8cadd` on `main` (clean tree; A1 merged as pull
+request #4). Lead branch `claude/G1-research`. The owner suspended the
+session-boundary rule for this run: the session continues past commits and
+merges until the plan is finished or every open task waits on the owner.
+
+### Read
+
+`docs/BUILD_PROGRESS.md`, `docs/BUILD_PLAN.md`, `git log --oneline -n 30`,
+`docs/ARCHITECTURE.md` end to end, `docs/BUILD_PROMPT.md`, the four skills
+under `.agents/skills` with their references, `humanize.md`,
+`docs/research/RESEARCH.md` end to end (all eight dimensions, the skeptic
+verdicts and the completeness critique), and the existing code in
+`apps/web/src`, `packages/api/src`, `packages/core/src`,
+`packages/schemas/src`, `packages/design-tokens`.
+
+### Commands and results
+
+| Command | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | passed in 578 ms (store already warm; one build script ignored, `unrs-resolver`, as before) |
+| `pnpm check` | passed: prose, skills, tokens, contrast, brand, OpenAPI, Prettier, then `turbo run lint typecheck test build` 13 of 13 tasks (all cache hits against `8f8cadd`) |
+| `pnpm --filter web start --port 3100` then `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 pnpm test:e2e` | `12 passed (7.4s)`; port 3000 is still held by the unrelated three-day-old server and was left alone |
+
+### Decisions
+
+- Claims. G1 is claimed by the lead. F1, F4, F2, F3 and D1 are claimed in
+  this same commit for subagents of this session, so the plan shows the
+  tasks as taken before any branch exists; each subagent opens its own draft
+  pull request titled with its id, works in its own git worktree and on its
+  own `claude/<id>-<topic>` branch from `origin/main`, and never edits the
+  plan or this log. The lead merges each pull request after a fresh-context
+  review, then records `done` with evidence and the log entry in its own
+  small commit. This keeps five parallel branches off the two files every
+  task would otherwise collide on.
+- Subagent pull requests touch only their group's paths. The core tasks
+  each insert one export line into `packages/core/src/index.ts` at a
+  distinct position (after `cycle`, `pregnancy`, `units` and `policy`
+  respectively) so the four merges do not conflict.
+- Each parallel checkout runs the browser suite against its own production
+  server on ports 3101 to 3105, because 3000 is held and 3100 is the lead's.
+- The owner-actions block at the top was reduced to what is still open:
+  the install workaround is no longer needed (the owner authorized the
+  `--safe-chain-skip-minimum-package-age` flag for this run and the store
+  is warm) and the bypass secret is stored.
+
+### Next action
+
+Launch the F1, F4, F2, F3 and D1 workflow (implement, fresh-context review,
+fix), then start G1: the gallery and product research record.
+
+### First wave merged (2026-10-05, lead session 061fed2d)
+
+Fifteen subagents (five implementers, five fresh-context reviewers, five
+fix passes) ran as one workflow for F1, F4, F2, F3 and D1, three more for
+B1, and twelve for the G1 research (six researchers, six skeptics). Every
+pull request was merged by the lead with squash after its review answers
+were read and its diff inspected.
+
+| Task | Pull request | Merge | Unit tests | Notes |
+| --- | --- | --- | --- | --- |
+| F2 | #6 | `68833ab` | 14 in `stages.test.ts` | review added an ending-before-day-0 guard and `changedAt` validation |
+| F3 | #9 | `7c30535` | 16 in `policy-filters.test.ts` | review added the first-grant-wins dedupe; a unique partial index on grants goes to B3 |
+| D1 | #8 | `981e0ed` | 13 in `packages/crypto` | review added `kekProvider` on wrapped keys and canonical base64 checks on the KEK |
+| F1 | #11 | `24719a3` | 18 in `growth.test.ts` | review measured up to 9 percentile points of error in the first weeks from monthly WHO rows; the fix flags percentiles under 56 days as approximate; new task F5 vendors the daily tables after the owner's WHO decision |
+| F4 | #10 | `8c86782` | 7 in `milestones.test.ts` | rebased after F1; the two branches both exported `DAYS_PER_MONTH`, so milestones now imports the growth engine's constant |
+| B1 | #7 | `56be184` | 8 PGlite tests | rebased twice (D1 and F1 moved `pnpm-lock.yaml` and the root scripts); review added notice logging to the migration runner |
+
+Checks on every merged head: `pnpm check` green in the subagent's worktree
+and in CI (`verify`), CodeQL green, and the preview smoke test green where
+Vercel built a preview. Vercel skipped the previews for the D1 and B1 fix
+heads as "Not affected" (neither package is a dependency of `apps/web`), so
+those merges rest on the previous head's preview smoke test plus CI; the
+production smoke test after each merge passed (runs on `68833ab`,
+`7c30535`, `24719a3` and later heads all `success`).
+
+Process notes:
+
+- The harness creates subagent worktrees under `.claude/worktrees/`, which
+  Prettier walked in the lead checkout; `.gitignore` and `.prettierignore`
+  now exclude it.
+- GitHub refuses a draft pull request with no commits, so every subagent
+  branch starts with one real or empty commit; squash merges remove it.
+- Killing the `pnpm start` wrapper leaves `next-server` on its port; the
+  briefs now say to kill the listener found with `ss -ltnp`.
+- One lead mistake, corrected: the rebased F4 branch was pushed before its
+  gate result was read, and the gate had failed on the duplicate constant.
+  The fix was pushed within minutes with a green gate; no merge happened
+  in between.
+- A force push after a rebase did not retrigger the pull request checks on
+  B1 while the pull request was still conflicting; an empty commit after
+  the second rebase did.
+
+### G1 closed
+
+`docs/design/RESEARCH.md` records fifteen gallery and documentation
+observations with committed captures under `docs/design/research/`
+(23 JPEGs, 1.3 MB), the trend galleries as
+counter-signals, eight product references grouped by surface, fifteen
+decisions handed to G2, G5, G6, G7, E7, H1 to H7 and J3, the pinned
+guidelines skill, the `react-day-picker` 10.0.2 pin decision, and the
+inaccessible and licence tables. The skeptics confirmed or partially
+confirmed every observation the record keeps; the one correction (the
+size of Natural Cycles' first-cycle buffer) was applied. A fresh-context
+review of the pull request then found two gaps (the Apple legend clip
+missed the legend; the empty-state and progress-indicator indexes were not
+rows) and four smaller ones; all six were fixed before the merge. The pinned
+Vercel guidelines audit skill lives in `.agents/skills/web-design-guidelines`.
+
+Owner question surfaced by F1: whether Tidefern may vendor WHO's own daily
+expanded tables (task F5); until then the first eight weeks of a growth
+percentile are labelled approximate.
+
+### Next action
+
+Second wave running as one workflow: C1 and B12 in parallel, then B2 and
+C5, then B3 to B7 on one branch (one generated migration per task, in
+order). The lead claims G2 once this branch merges and writes
+`docs/design/DESIGN.md`, `CONTENT.md` and `ASSETS.md`.
