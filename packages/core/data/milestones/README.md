@@ -45,7 +45,10 @@ cdc.gov answers plain HTTP clients with 403:
 - https://www.cdc.gov/act-early/milestones/key-points.html
 
 The per-age pages said "last reviewed on May 15, 2026" and the key points page
-"Feb. 16, 2026" on the capture date. On each age page the items sit under the
+"Feb. 16, 2026" in the Chromium capture. A second, text-only fetch of the 2
+months and 5 years pages later on 2026-10-05 showed "Reviewed: May 16, 2026"
+with the item text unchanged, so the day-later date is a page metadata change
+and not a content revision. On each age page the items sit under the
 heading "What most babies do by ..." or "What most children do by ...", one
 `h3` per domain. The item count per page matches the 159 total that Zubler et
 al. 2022 (Pediatrics 149(3) e2021052138) report for the revision.
