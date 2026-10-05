@@ -140,3 +140,45 @@ export const sexEnum = pgEnum("sex", sexValues);
 /** What a child event records (architecture record 8.2): milestones, feeds, sleep, diapers. */
 export const childEventKindValues = ["milestone", "feed", "sleep", "diaper"] as const;
 export const childEventKindEnum = pgEnum("child_event_kind", childEventKindValues);
+
+/** Mirrors `NoteCategory` in packages/schemas: where a note is filed decides who can read it. */
+export const noteCategoryValues = [
+  "journal.private",
+  "cycle.symptoms",
+  "pregnancy.overview",
+] as const;
+export const noteCategoryEnum = pgEnum("note_category", noteCategoryValues);
+
+/** A photo's category follows its subject (architecture record 8.2). */
+export const photoCategoryValues = ["pregnancy.photos", "child"] as const;
+export const photoCategoryEnum = pgEnum("photo_category", photoCategoryValues);
+
+/** Upload lifecycle: finalized rows start `pending` until the variants exist. */
+export const photoStatusValues = ["pending", "ready", "failed"] as const;
+export const photoStatusEnum = pgEnum("photo_status", photoStatusValues);
+
+/** The server-generated renditions of a photo. */
+export const photoVariantKindValues = ["thumbnail", "preview", "full"] as const;
+export const photoVariantKindEnum = pgEnum("photo_variant_kind", photoVariantKindValues);
+
+/** Outbox job states (architecture record 10.1); `dead` after five attempts. */
+export const jobStatusValues = ["queued", "running", "done", "failed", "dead"] as const;
+export const jobStatusEnum = pgEnum("job_status", jobStatusValues);
+
+/** Idempotency row states (architecture record 5.3). */
+export const idempotencyStateValues = ["in_flight", "done"] as const;
+export const idempotencyStateEnum = pgEnum("idempotency_state", idempotencyStateValues);
+
+/** The data rights of architecture record 11 that run as state machines. */
+export const dataRequestKindValues = ["export", "closure", "access", "deletion"] as const;
+export const dataRequestKindEnum = pgEnum("data_request_kind", dataRequestKindValues);
+
+/** Where a data request stands; `cancelled` is a closure undone inside its window. */
+export const dataRequestStateValues = [
+  "requested",
+  "in_progress",
+  "completed",
+  "cancelled",
+  "refused",
+] as const;
+export const dataRequestStateEnum = pgEnum("data_request_state", dataRequestStateValues);

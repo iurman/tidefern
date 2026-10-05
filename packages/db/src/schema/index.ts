@@ -11,3 +11,4 @@ export * from "./relationships";
 export * from "./cycle";
 export * from "./pregnancy";
 export * from "./children";
+export * from "./platform";
