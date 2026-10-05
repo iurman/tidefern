@@ -52,6 +52,9 @@ jobs:
       - name: Skills gate (spec frontmatter, symlinks resolve)
         run: pnpm skills:check
 
+      - name: Stylesheet rules (no transition all, no raw color or removed outline in a module)
+        run: pnpm css:check
+
       - name: Commit messages carry no em dash (pull requests)
         if: github.event_name == 'pull_request'
         run: |

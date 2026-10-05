@@ -709,3 +709,67 @@ Merge G3 after CI, record the production smoke results for `0a90568`,
 start once the workflow sees the C1 merge). The lead's next own task is
 G4 (brand assets) once G5's component work is scheduled, or the review of
 B2 when it arrives.
+
+### G5 contract and G4 claimed (2026-10-05, lead session 061fed2d)
+
+Production smoke: `0a90568` (G2) and `c364415` (C1) both succeeded. The
+second wave workflow saw the C1 merge and started B2 and C5.
+
+The lead claimed G5 (and G4 on its own branch, `claude/G4-brand`, with a
+draft pull request) and wrote the shared scaffolding that the
+component groups build on, so five builders can work at once without
+touching the same file: `docs/design/COMPONENTS.md` (file layout, the
+eight states, the rules that hold everywhere, the specimen shape, the
+five groups with their branches and ports, what the lead reviews);
+`apps/web/src/lib/motion-tokens.ts` (durations and easings read from the
+token file; the app and `/design/motion` import the same module, as 13.6
+asks); `apps/web/src/components/ui/specimen.ts` and `specimen-frame.tsx`
+(the eight-state, two-theme frame with the width control, source link,
+keyboard note and usage snippet); `apps/web/src/components/icons.tsx`
+(the navigation, control and calendar icons on the 24 px grid; symptom
+and mood icons follow). Component unit tests run with Vitest 5.0.3 in
+jsdom 30.1.1 through Testing Library (react 16.3.3, user-event 14.6.7,
+jest-dom 7.0.1) and `@vitejs/plugin-react` 6.1.1, all resolved from the
+registry and pinned exactly; `apps/web` gained a `test` script so
+`pnpm check` runs them. Two tests prove the harness: the motion tokens
+parse and order correctly, and the frame renders every state once per
+theme and forces only the pseudo-class states.
+
+Decisions: CSS Modules per component with tokens only (no Tailwind
+utilities; the import stays for the `@theme` bridge); native elements so
+the sound provider's delegation covers every control; the frame forces
+hover, focus-visible and active through a `data-specimen-state` wrapper that each
+module mirrors on the same selector list as the pseudo-class; the day
+sheet is composed by the lead after the wave merges; G4 is delegated as a
+bounded script task under the lead's review of the rendered assets.
+
+Gate on this branch: `pnpm check` exit 0 (web 6 unit tests, auth 30,
+db 23, core 87, crypto 13, api 5); `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3126
+pnpm test:e2e` 12 passed. A fresh-context review found six majors
+(transition rule stricter than the design contract, no settle easing in
+the token file, logo, header and footer assigned to no group, the e2e
+route array as a five-way merge hazard, the forced-state selector
+reaching every descendant, no gate behind the "lint forbids transition:
+all" sentence) and six minors; all twelve were fixed before the merge:
+`ease-settle` joined the token file, `apps/web/tests/e2e/axe.ts` holds
+the shared axe check and each group gets its own spec, the frame uses
+`data-specimen-state` with the child combinator, `scripts/check-css.mjs`
+runs in `pnpm check` and CI, the width control owns its wrapper, the
+icons were corrected, and the motion module fails loudly on a missing
+token.
+
+Open finding: since about 17:16 UTC Vercel has posted only "inactive"
+statuses for preview deployments (B2, C5) and no GitHub deployment at
+all for the G3 branch, so the smoke workflow stopped firing for previews
+although the deployments are Ready; production deployments still report.
+`deploy-verify.yml` gained a `workflow_dispatch` trigger (PR #20, "A5:
+manual smoke test dispatch") so the lead can run the same smoke test
+against a preview alias by hand until Vercel's integration recovers.
+
+### Next action
+
+Merge G3 once its preview smoke reports. Merge this contract after a
+fresh-context review, then launch the G4 and G5 workflow (five component
+groups and the brand script, each implement, review, fix on its own
+branch), review each group's captures in both themes, merge in order, and
+compose the day sheet and the `/design/components` index.

@@ -50,6 +50,7 @@
   --duration-settle: 600ms;
   --duration-tide: 9s;
   --ease-interface: cubic-bezier(0.2, 0.8, 0.2, 1);
+  --ease-settle: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-disclosure: ease;
   --ease-tide: ease-in-out;
   --sound-master-gain: 0.3;
