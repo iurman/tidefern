@@ -30,7 +30,11 @@ them; never edit the journal by hand and never run `drizzle-kit up`.
 
 The Vercel build command runs `pnpm -w db:migrate` before `next build`, so
 every environment migrates itself. Migrations are expand then contract: a
-migration must run correctly under the previous deployment's code.
+migration must run correctly under the previous deployment's code. The
+runner prints every `RAISE NOTICE` a migration emits as a `migration
+notice` line, so a non-fatal problem (the first migration raises one when
+the `GRANT ... WITH SET TRUE` fails) shows in the build log instead of
+surfacing later as a runtime error from `withActor`.
 
 ## The role model
 

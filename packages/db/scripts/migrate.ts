@@ -13,6 +13,16 @@ if (!url) {
 }
 
 const pool = new Pool({ connectionString: url, max: 1 });
+
+// Migrations report non-fatal problems with RAISE NOTICE (the first one does
+// when the GRANT ... WITH SET TRUE fails). node-postgres only emits them, so
+// print each to the build log where it would otherwise go unseen.
+pool.on("connect", (client) => {
+  client.on("notice", (notice) => {
+    console.warn(`migration notice (${notice.severity ?? "NOTICE"}): ${notice.message}`);
+  });
+});
+
 const db = drizzle({ client: pool });
 
 try {
