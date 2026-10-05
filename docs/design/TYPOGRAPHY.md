@@ -31,9 +31,9 @@ with `noindex`, like the rest of the design reference.
 
 | Section                 | Specimen                                                                                            | What it proves                                                                                                      |
 | ----------------------- | --------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
-| Wordmark and tagline    | The mark beside "Tidefern" in Newsreader 500 with the tracked Figtree tagline; a small panel lockup | The lockup reads at 96 px and at 48 px; the tagline survives on the warmth surface                                  |
+| Wordmark and tagline    | The mark beside "Tidefern" in Newsreader 500 with the tracked Figtree tagline, on the surface tier and again on the panel tier at 48 px | The lockup reads at 96 px and at 48 px; the tagline keeps its accent contrast on both tiers                          |
 | The scale               | One row per token from `type-display` to `type-caption`, each with its clamp and its use            | The seven steps are distinct at desktop and at 390 px without a size collapsing into its neighbour                  |
-| Body and reading width  | An editable paragraph at the body size, the estimate sentence, and a caption                        | Reading width stays inside 45 to 68 characters; the estimate italic is readable at the intro size and nowhere smaller |
+| Body and reading width  | The footer sentence at the body size and reading width, the estimate sentence, and a caption        | Reading width stays inside 45 to 68 characters; the estimate italic is readable at the intro size and nowhere smaller |
 | Navigation and controls | Six navigation labels with a current item, a primary action, a quiet action and two chip buttons    | Figtree 600 at the small size carries labels and chips in both themes with the measured contrast of the roles        |
 | Numerals                | The same four values set proportional and tabular, then display numerals beside a serif label        | Tabular figures align in a column where proportional ones drift; the numeral-beside-label move (signature move 4)    |
 | Provenance              | The four font files with family, axes, size and licence                                             | Everything the page uses is self-hosted and OFL                                                                      |
@@ -71,9 +71,10 @@ in both themes: `docs/design/research/g3-type-desktop-light.jpg`,
 - Every scale row is legible and distinct in both themes. The display
   line at 1440 px sits at the top of its clamp, the heading one step
   below, and the caption row is still readable at 13 px.
-- At 390 px the display line wraps to two lines without a widow and the
-  scale rows stack their token meta above the specimen, so nothing is
-  clipped and the page has no horizontal scroll.
+- At 390 px the display line breaks after "flows", leaving "together."
+  alone on the second line; that is the break the statement wants and it
+  is kept. The scale rows stack their token meta above the specimen, so
+  nothing is clipped and the page has no horizontal scroll.
 - The estimate sentence in Newsreader italic reads cleanly at the intro
   size in both themes. It is deliberately the only italic in the product,
   because the same face at the small size loses the counters.
@@ -88,18 +89,22 @@ in both themes: `docs/design/research/g3-type-desktop-light.jpg`,
 
 - The plan row for G3 names an outlined wordmark. The chapter sets the
   wordmark as live Newsreader at weight 500 because the outlined lockup
-  (`tidefern-lockup.svg` and its dark variant) is a G4 deliverable, as
-  `docs/design/ASSETS.md` records. When G4 lands, the lockup specimen
-  swaps the live text for the vector and this record gains the file row.
+  (`tidefern-lockup.svg` and its dark variant) is a G4 deliverable:
+  architecture 13.2 says live text stands in until the lockup vector
+  lands, the G4 plan row owns the vector, and `docs/design/ASSETS.md`
+  lists it as a G4 asset. When G4 lands, the lockup specimen swaps the
+  live text for the vector and this record gains the file row.
 
 ## Rules this chapter enforces by example
 
 - Title Case is for page titles only; labels, actions and headings are
   sentence case.
 - Counters, dates and tables set `font-variant-numeric: tabular-nums`
-  through the shared `.tabular` class; nothing else does.
+  through the shared `.tabular` class, which this chapter introduces; the
+  chapter's own numeral rules set the same value, and no other selector
+  does.
 - The estimate sentence is Newsreader italic at the intro size and never
   appears at the small or caption size.
 - The wordmark is never a styled `<span>` in product chrome once the
-  outlined vector exists; until then it is the `Mark` component's live
-  text.
+  outlined vector exists; until then it is the `Logo` component's
+  wordmark span beside the `Mark` image.

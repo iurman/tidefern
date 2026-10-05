@@ -185,18 +185,27 @@ test("the type chapter renders the specimens in both faces", async ({ page }) =>
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Two faces, each with one job.");
   const wordmark = page.locator(".specimen-wordmark").first();
   await expect(wordmark).toHaveText("Tidefern");
-  const families = await page.evaluate(() => {
+  const families = await page.evaluate(async () => {
+    await document.fonts.ready;
     const family = (selector: string) =>
       getComputedStyle(document.querySelector(selector) as Element).fontFamily;
+    const loaded = (pattern: RegExp) =>
+      Array.from(document.fonts).some(
+        (face) => pattern.test(face.family) && face.status === "loaded",
+      );
     return {
       wordmark: family(".specimen-wordmark"),
       body: family(".specimen-reading"),
       numeric: getComputedStyle(document.querySelector(".numeral-column.tabular") as Element)
         .fontVariantNumeric,
+      newsreaderLoaded: loaded(/newsreader/i),
+      figtreeLoaded: loaded(/figtree/i),
     };
   });
   expect(families.wordmark).toMatch(/newsreader/i);
   expect(families.body).toMatch(/figtree/i);
+  expect(families.newsreaderLoaded).toBe(true);
+  expect(families.figtreeLoaded).toBe(true);
   expect(families.numeric).toBe("tabular-nums");
   await expect(page.getByRole("link", { name: "Previous: Design system" })).toBeVisible();
 });

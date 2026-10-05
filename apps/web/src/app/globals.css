@@ -594,6 +594,12 @@ img {
 .specimen-tagline {
   margin: 8px 0 0;
 }
+.caption {
+  font-size: var(--type-caption);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
 .scale-list {
   list-style: none;
   margin: 0;

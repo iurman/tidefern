@@ -50,7 +50,10 @@ export default function TypePage() {
         </div>
         <div className="specimen lockup lockup-panel">
           <Mark size={48} />
-          <p className="specimen-wordmark small">Tidefern</p>
+          <div>
+            <p className="specimen-wordmark small">Tidefern</p>
+            <p className="eyebrow specimen-tagline">Life flows together</p>
+          </div>
         </div>
       </section>
 
@@ -92,10 +95,10 @@ export default function TypePage() {
       <section className="design-section" aria-labelledby="body">
         <h2 id="body">Body and reading width</h2>
         <p className="muted-note">
-          Reading passages sit between 45 and 68 characters. This paragraph is editable so a
-          sentence of your own can be tried at the real size.
+          Reading passages sit between 45 and 68 characters. The paragraph below is the footer
+          sentence the product uses, at the real size and width.
         </p>
-        <p className="specimen-reading" contentEditable suppressContentEditableWarning>
+        <p className="specimen-reading">
           Tidefern gives estimates from what you log. It does not provide medical advice, diagnosis
           or treatment, and is not a form of birth control. Talk with your doctor or midwife before
           making health decisions.
