@@ -425,6 +425,65 @@ B10 touch it. A4 is checked when `packages/db` exists.
 - Commit messages carry no model names, per the architecture record, so
   no co-author trailer is added.
 
+### Reader maps (ten readers, one critic; 11 agents, 0 errors, 138 tool calls)
+
+The maps are evidence for the lead, not decisions. Where a research
+snippet disagrees with the architecture record, the record wins
+(`docs/research/RESEARCH.md` line 3 says so itself). What the critic
+confirmed by reading the cited lines, grouped by what it changes:
+
+Code follow-ups found in the foundation (not fixed in A1; each belongs
+to the task named):
+
+- `packages/api/src/problem.ts` lists six problem codes while
+  `packages/schemas` lists eight; `conflict` and `upgrade_required`
+  cannot be emitted although 409 and 426 are accepted. E1.
+- `packages/schemas` `CalendarDate` checks shape only; `packages/core`
+  `isCalendarDate` rejects impossible dates with a `RangeError`, so an
+  invalid date in a request would become a 500. Refine at the boundary. E3.
+- `apps/web/src/app/global-error.tsx` renders light colors only. G5.
+- The header link is hidden under 600 px with no replacement and never
+  carries `aria-current`; the app shell in G5 replaces it.
+- Page colors `#F7F5EF` and `#0F1A17` are repeated by hand in five
+  files; `tokens.css` is the generated source. G5.
+- `apps/web/src/app/api/[[...route]]/route.ts` comments on a 300 s
+  Hobby ceiling; the owner states Pro. Correct the comment with A2.
+- `scripts/brand/generate-icons.mjs` named by G4 does not exist yet.
+
+Document follow-ups:
+
+- `docs/LAUNCH_RUNBOOK.md` contradicts itself on the Neon default branch
+  (staging at lines 43 to 49, production at line 52); the record's
+  section 7.5 says staging. It also claims `deploy-verify` compares the
+  deployed commit with `main` (not built yet, J5), says the foundation is
+  unmerged (stale since pull request #3), and reasons from Hobby limits
+  while the owner states Pro. J4 rewrites it.
+- `docs/BUILD_PROMPT.md` section 7 names tasks E1 to E10; the plan ends
+  at E9. The plan lists A6 as an owner task but group A has only A1 to A5.
+- `packages/design-tokens/brand/README.md` says the tagline uses the
+  "Sea Glass accent color", but `tide` (`#6EA7A0`) is never text in the
+  token file; the text role is `accent`. G4 settles the wording. The
+  mono and small mark variants exist on disk but have no documented use.
+- Research snippets use `app.user_id`, `packages/db/src/schema/auth.ts`,
+  `DATABASE_URL_DIRECT`, a stored idempotency `response_body`, pnpm 12
+  and a `pgRole(...).existing()` role; the record and the plan say
+  `app.actor_id`, `packages/db/src/auth-schema.ts`,
+  `DATABASE_URL_UNPOOLED`, no stored bodies, pnpm 10.34.6 and a role the
+  first migration creates. B1, C1 and E1 follow the record.
+- The envelope snippet's AAD is `userId:table.column:rowId`; the record
+  and D1 say `table:column:row_id`. D1 follows the record.
+- `.github/renovate.json` uses `matchCurrentVersion "!/^0/"` for the
+  0.x rule; the critic asks that it be checked against Renovate's docs
+  before anyone relies on it.
+- `humanize.md` sets `register: warm, plain, calm`, which the skill's
+  calibration grammar does not define (it accepts casual, neutral,
+  formal). Harmless; the project rules carry the meaning.
+
+Two reader claims were wrong and are not carried forward: the pull
+request template exists (`.github/PULL_REQUEST_TEMPLATE.md`), and
+`packages/api/scripts/emit-openapi.ts` exists. Three line citations were
+off by one; the content was right.
+
 ### Next action
 
 After owner action 1: `pnpm install --frozen-lockfile`, `pnpm check`,
