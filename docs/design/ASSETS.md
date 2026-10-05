@@ -46,11 +46,11 @@ Inline SVG in the component library; no icon font, no third-party set.
 
 | Icon | Used by | Status |
 | --- | --- | --- |
-| today, calendar, journey, family, sharing, settings | tab bar and rail | Drawn as prototypes on 2026-10-05 (scratch), final in G5 |
-| sound on, sound off, theme light, theme dark | header and settings toggles | Exist in the foundation (`apps/web/src/components`) |
-| period drop, ovulation dot, today marker | calendar and ring | G5 |
+| today, calendar, journey, family, sharing, settings | tab bar and rail | Drawn in `apps/web/src/components/icons.tsx` (G5 scaffolding, 2026-10-05) |
+| sound on, sound off, theme light, theme dark | header and settings toggles | In `icons.tsx`; the two toggles switch to `<Icon>` when the actions group moves them |
+| period drop, ovulation dot, today marker | calendar and ring | In `icons.tsx` |
 | symptom set (19 codes in `packages/schemas`) and three moods | chips | G5; listed here when drawn |
-| chevrons, close, plus, undo, check | controls | G5 |
+| chevrons, close, plus, undo, check | controls | In `icons.tsx` (chevron left, right and down) |
 
 ## Raster set and social card (G4)
 

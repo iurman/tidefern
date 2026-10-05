@@ -1,5 +1,5 @@
 import { expect, test } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
+import { expectNoAxeViolations } from "./axe";
 
 test("home renders the brand and links to the design system @smoke", async ({ page }) => {
   await page.goto("/");
@@ -74,14 +74,7 @@ test("security headers and no indexing on previews", async ({ request }) => {
 for (const theme of ["light", "dark"] as const) {
   test(`home and design pages have no axe violations in ${theme} mode`, async ({ page }) => {
     for (const path of ["/", "/design", "/design/type"]) {
-      await page.goto(path);
-      await page.evaluate((value) => {
-        document.documentElement.dataset.theme = value;
-      }, theme);
-      const results = await new AxeBuilder({ page })
-        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-        .analyze();
-      expect(results.violations, `${path} in ${theme}`).toEqual([]);
+      await expectNoAxeViolations(page, path, theme);
     }
   });
 }
