@@ -23,6 +23,18 @@ export const libraryRules = {
   "@typescript-eslint/no-unused-vars": ["error", { argsIgnorePattern: "^_" }],
 };
 
+/**
+ * A no-restricted-imports path entry for packages that talk to the database.
+ * The raw db and pool live behind "@tidefern/db/client"; route code reaches
+ * them only through withActor() and withSystem(). Task E1 adds this to the
+ * api package's rule; packages/db/README.md shows the composition.
+ */
+export const dbClientRestriction = {
+  name: "@tidefern/db/client",
+  message:
+    'Route code goes through withActor() and withSystem() from "@tidefern/db"; the raw db and pool stay inside packages/db.',
+};
+
 export function libraryConfig({ allowReact = false } = {}) {
   const rules = { ...libraryRules };
   if (allowReact) {
