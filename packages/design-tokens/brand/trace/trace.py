@@ -1,7 +1,7 @@
 from PIL import Image, ImageFilter
 import numpy as np, colorsys, potrace, json
 SRC='../../../../assets/brand/reference/tidefern-mark-reference.png'
-UP=6
+UP=8
 im=Image.open(SRC).convert('RGBA')
 bg=Image.new('RGBA',im.size,(247,245,239,255)); im=Image.alpha_composite(bg,im).convert('RGB')
 im=im.resize((im.width*UP, im.height*UP), Image.LANCZOS)
@@ -29,11 +29,14 @@ light=(sat<0.12)&(mx>0.85)
 highlight=closed & ~teal & light & ~green
 highlight=frommask(tomask(highlight).filter(ImageFilter.MedianFilter(5)))
 wave=teal|highlight
-def smooth(mask, r=UP*0.9):
-    img=tomask(mask).filter(ImageFilter.GaussianBlur(r)); return np.array(img)>127
-wave=smooth(frommask(tomask(wave).filter(ImageFilter.MedianFilter(7))))
-highlight=smooth(highlight)
-green=smooth(frommask(tomask(green).filter(ImageFilter.MedianFilter(5))))
+def smooth(mask, r=UP*1.6, level=124):
+    # a wide blur then a threshold rounds every lump the raster edge left behind, like sanding a cut edge
+    img=tomask(mask).filter(ImageFilter.GaussianBlur(r)); return np.array(img)>level
+wave=smooth(frommask(tomask(wave).filter(ImageFilter.MedianFilter(7))), r=UP*2.2)
+# keep the highlight band inside the wave so it never notches the outline
+inset=frommask(tomask(wave).filter(ImageFilter.MinFilter(int(UP*2.5)|1)))
+highlight=smooth(highlight & inset, r=UP*1.4)
+green=smooth(frommask(tomask(green).filter(ImageFilter.MedianFilter(5))), r=UP*1.25)
 print('teal',teal.sum(),'highlight',highlight.sum(),'green',green.sum())
 # sample colors
 def med(mask): px=(a[mask]*255); return '#%02X%02X%02X'%tuple(np.median(px,axis=0).astype(int))
@@ -44,9 +47,9 @@ print('bbox',x0,x1,y0,y1,'img',W,H)
 # fit into 512 with margin
 margin=28; bw,bh=x1-x0+1,y1-y0+1; s=(512-2*margin)/max(bw,bh)
 ox=(512-bw*s)/2-x0*s; oy=(512-bh*s)/2-y0*s
-def trace(mask, turd=300):
+def trace(mask, turd=500, tol=1.0):
     bm=potrace.Bitmap(((~mask).astype(np.uint8))*255)
-    path=bm.trace(turdsize=turd, turnpolicy=potrace.POTRACE_TURNPOLICY_MINORITY, alphamax=1.3, opticurve=True, opttolerance=0.3)
+    path=bm.trace(turdsize=turd, turnpolicy=potrace.POTRACE_TURNPOLICY_MINORITY, alphamax=1.33, opticurve=True, opttolerance=tol)
     parts=[]
     def P(p): return f"{p.x*s+ox:.1f} {p.y*s+oy:.1f}"
     for curve in path.curves:
@@ -56,6 +59,6 @@ def trace(mask, turd=300):
             else: d.append(f"C{P(seg.c1)} {P(seg.c2)} {P(seg.end_point)}")
         d.append('Z'); parts.append(' '.join(d))
     return ' '.join(parts)
-paths={'wave':trace(wave),'highlight':trace(highlight,turd=200),'frond':trace(green,turd=200)}
+paths={'wave':trace(wave,tol=1.3),'highlight':trace(highlight,turd=400,tol=1.2),'frond':trace(green,turd=400,tol=0.9)}
 json.dump({'paths':paths,'colors':{'wave':med(teal),'green':med(green)}},open('paths.json','w'))
 for k,v in paths.items(): print(k,len(v),'chars', v.count('M'),'subpaths')

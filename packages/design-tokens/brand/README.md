@@ -10,9 +10,9 @@ The vectors are a color-separated trace of the owner's reference image
 (`assets/brand/reference/tidefern-mark-reference.png`): `trace/trace.py`
 upsamples the image six times, separates the sea glass wave, the mist
 highlight and the green frond by hue, smooths each mask and traces it with
-potrace into cubic paths; `trace/build.py` assembles the five variants from
-those three paths (Python 3 with numpy, pillow and potracer; run both from
-this folder, then `pnpm --filter web brand:sync`). Nothing is drawn by hand,
+potrace into cubic paths; `trace/smooth.py` resamples each outline, runs a Gaussian along it (wide for the wave, gentle for the frond so leaflet necks stay crisp) and refits smooth cubics; `trace/build.py` assembles the five variants from
+those three paths (Python 3 with numpy, pillow and potracer; run the three in that order from
+this folder, copy the SVGs up one level, then `pnpm --filter web brand:sync`). Nothing is drawn by hand,
 so the mark is the reference, not an interpretation of it. The colors of the
 light variant are the medians sampled from the image.
 
