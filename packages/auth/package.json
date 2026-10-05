@@ -1,0 +1,32 @@
+{
+  "name": "@tidefern/auth",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./server": "./src/auth.ts"
+  },
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "generate": "npx -y auth@1.7.7 generate --config src/auth.ts --output ../db/src/auth-schema.ts -y"
+  },
+  "dependencies": {
+    "@better-auth/drizzle-adapter": "1.7.7",
+    "@better-auth/passkey": "1.7.7",
+    "@tidefern/db": "workspace:*",
+    "better-auth": "1.7.7"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@tidefern/config": "workspace:*",
+    "@types/node": "24.19.1",
+    "drizzle-kit": "0.31.11",
+    "drizzle-orm": "0.45.3",
+    "eslint": "10.12.0",
+    "typescript": "6.0.3",
+    "vitest": "5.0.3"
+  }
+}
