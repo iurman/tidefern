@@ -161,6 +161,28 @@ describe("ResendMailer failures", () => {
     }
   });
 
+  test("a refusal whose error body stalls is bounded by the same timeout", async () => {
+    vi.useFakeTimers();
+    try {
+      const stalled = new ReadableStream<Uint8Array>({ start() {} });
+      const { fetch } = fetchAnswering(() => new Response(stalled, { status: 500 }));
+      const pending = mailer(fetch, { log: () => {}, timeoutMs: 50 })
+        .send(MESSAGE)
+        .catch((e: unknown) => e);
+      await vi.advanceTimersByTimeAsync(49);
+      await vi.advanceTimersByTimeAsync(2);
+
+      const error = (await pending) as ResendError;
+      expect(error).toBeInstanceOf(ResendError);
+      expect(error.kind).toBe("response");
+      expect(error.status).toBe(500);
+      expect(error.code).toBeUndefined();
+      expect(error.message).toBe("Resend answered 500");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   test("the default timeout is ten seconds", () => {
     expect(DEFAULT_RESEND_TIMEOUT_MS).toBe(10_000);
   });

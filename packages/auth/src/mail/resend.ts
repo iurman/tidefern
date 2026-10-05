@@ -56,13 +56,27 @@ function describe(kind: ResendFailure, status?: number, code?: string): string {
 // value), so only a token-shaped name reaches the thrown error.
 const ERROR_NAME = /^[a-z_]{1,64}$/;
 
-async function errorNameOf(response: Response): Promise<string | undefined> {
+function whenAborted(signal: AbortSignal): Promise<never> {
+  return new Promise((_resolve, reject) => {
+    if (signal.aborted) {
+      reject(signal.reason as Error);
+      return;
+    }
+    signal.addEventListener("abort", () => reject(signal.reason as Error), { once: true });
+  });
+}
+
+// The body read is raced against the same signal as the request, so a
+// refusal whose body stalls is bounded by the one timeout even when the
+// injected fetch does not tie the body stream to the signal itself.
+async function errorNameOf(response: Response, signal: AbortSignal): Promise<string | undefined> {
   try {
-    const body: unknown = await response.json();
+    const body: unknown = await Promise.race([response.json(), whenAborted(signal)]);
     if (typeof body !== "object" || body === null) return undefined;
     const name = (body as { name?: unknown }).name;
     return typeof name === "string" && ERROR_NAME.test(name) ? name : undefined;
   } catch {
+    void response.body?.cancel().catch(() => undefined);
     return undefined;
   }
 }
@@ -91,31 +105,36 @@ export class ResendMailer implements Mailer {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    let response: Response;
+    // The timer runs until the request and, on a refusal, the error body
+    // read are both over, so neither can outlive the timeout.
     try {
-      response = await this.fetch(RESEND_SEND_URL, {
-        method: "POST",
-        headers: {
-          authorization: `Bearer ${this.options.apiKey}`,
-          "content-type": "application/json",
-        },
-        body: JSON.stringify({
-          from: this.options.from,
-          to: message.to,
-          subject: message.subject,
-          text: message.text,
-          ...(message.html !== undefined ? { html: message.html } : {}),
-        }),
-        signal: controller.signal,
-      });
-    } catch {
-      throw new ResendError(controller.signal.aborted ? "timeout" : "network");
+      let response: Response;
+      try {
+        response = await this.fetch(RESEND_SEND_URL, {
+          method: "POST",
+          headers: {
+            authorization: `Bearer ${this.options.apiKey}`,
+            "content-type": "application/json",
+          },
+          body: JSON.stringify({
+            from: this.options.from,
+            to: message.to,
+            subject: message.subject,
+            text: message.text,
+            ...(message.html !== undefined ? { html: message.html } : {}),
+          }),
+          signal: controller.signal,
+        });
+      } catch {
+        throw new ResendError(controller.signal.aborted ? "timeout" : "network");
+      }
+
+      if (!response.ok) {
+        const code = await errorNameOf(response, controller.signal);
+        throw new ResendError("response", response.status, code);
+      }
     } finally {
       clearTimeout(timer);
-    }
-
-    if (!response.ok) {
-      throw new ResendError("response", response.status, await errorNameOf(response));
     }
     this.log(`mail sent request=${requestId}`);
   }

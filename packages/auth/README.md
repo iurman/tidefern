@@ -32,7 +32,7 @@ transports implement it, all in `src/mailer.ts` and `src/mail/`:
 | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `ConsoleMailer` | Prints the recipient, the subject and the body to stdout so a developer can click the link. The default for `createAuth()`.                                                                                                                                                      |
 | `CaptureMailer` | Keeps the last 20 messages in memory. `capturedMail()` returns them as `{ to, subject, link }` (the link is the first https URL in the body) and `clearCapturedMail()` forgets them; the `E2E_MAIL_CAPTURE` endpoint in `packages/api` (task C2) calls those two and nothing else. |
-| `ResendMailer`  | `POST https://api.resend.com/emails` through `fetch` with a bearer key and a 10 second timeout; no `resend` package. A refusal throws `ResendError` with the HTTP status and Resend's error name only; the recipient, the body and the message id Resend returns are never logged. |
+| `ResendMailer`  | `POST https://api.resend.com/emails` through `fetch` with a bearer key and a 10 second timeout that also bounds the read of an error body; no `resend` package. A refusal throws `ResendError` with the HTTP status and Resend's error name only; the recipient, the body and the message id Resend returns are never logged. |
 
 `chooseMailer(env)` picks one from facts and never reads `process.env`
 itself (the module-scope `auth` passes the real environment, tests pass an
