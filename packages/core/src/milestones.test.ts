@@ -1,7 +1,7 @@
+import { DAYS_PER_MONTH } from "./growth";
 import { describe, expect, it } from "vitest";
 import {
   CDC_MILESTONES_ATTRIBUTION,
-  DAYS_PER_MONTH,
   MILESTONES_VERSION,
   NOT_A_SCREENING_TOOL,
   checklistFor,

@@ -1,4 +1,5 @@
 import checklists from "../data/milestones/2022.json";
+import { DAYS_PER_MONTH as GROWTH_DAYS_PER_MONTH } from "./growth";
 
 /**
  * CDC "Learn the Signs. Act Early." milestone checklists, 2022 revision, as
@@ -55,11 +56,11 @@ export const milestoneAges: readonly { months: number; label: string }[] = data.
 );
 
 /**
- * Days in a checklist month. CDC's growth chart conventions use 365.25 / 12
- * days per month, and a checklist age is "by" that age, so a child becomes
- * eligible for the 2 month list on day 61 of life.
+ * A checklist month is the growth engine's month (365.25 / 12 days, the CDC
+ * growth chart convention), and a checklist age is "by" that age, so a child
+ * becomes eligible for the 2 month list on day 61 of life.
  */
-export const DAYS_PER_MONTH = 365.25 / 12;
+const DAYS_PER_MONTH = GROWTH_DAYS_PER_MONTH;
 
 export interface ChecklistOptions {
   /**
