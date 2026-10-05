@@ -1249,9 +1249,10 @@ it).
 Motion contract (task G5 exports it from one `motion-tokens` module that
 both the app and `/design/motion` import):
 
-- Two easings only: an interface curve for small controlled movement and a
-  settle curve for a view arriving after navigation, both already named
-  in `tokens.json`; `transition: all` is forbidden by lint.
+- Four easings, all named in `tokens.json`: an interface curve for small
+  controlled movement, a settle curve for a view arriving after
+  navigation, the disclosure ease for expansion, and the decorative tide's
+  ease-in-out; `transition: all` is forbidden by `pnpm css:check`.
 - Durations: 180 ms feedback, 280 ms disclosure, 600 ms settle, a 9 s
   decorative tide on the marketing page only.
 - One orchestrated entrance per page with named beats, limited to content

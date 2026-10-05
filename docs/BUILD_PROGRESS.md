@@ -738,7 +738,7 @@ theme and forces only the pseudo-class states.
 Decisions: CSS Modules per component with tokens only (no Tailwind
 utilities; the import stays for the `@theme` bridge); native elements so
 the sound provider's delegation covers every control; the frame forces
-hover, focus-visible and active through a `data-state` wrapper that each
+hover, focus-visible and active through a `data-specimen-state` wrapper that each
 module mirrors on the same selector list as the pseudo-class; the day
 sheet is composed by the lead after the wave merges; G4 is delegated as a
 bounded script task under the lead's review of the rendered assets.

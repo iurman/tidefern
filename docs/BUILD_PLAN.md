@@ -36,7 +36,8 @@ touches `packages/db/`; C touches `packages/auth/` and
 `packages/api/`, `packages/schemas/`, `packages/api-client/`,
 `openapi/`; F touches `packages/core/`; G touches `packages/design-tokens/`,
 `apps/web/src/app/design/`, `apps/web/src/components/`,
-`apps/web/src/app/globals.css`, `docs/design/`; H touches the named route
+`apps/web/src/app/globals.css`, `apps/web/tests/e2e/design-*.spec.ts`,
+`docs/design/`; H touches the named route
 directories under `apps/web/src/app/`; I touches `packages/api/src/jobs/`
 and `packages/db/src/schema/jobs.ts`; J touches `apps/web/tests/`,
 `docs/design/QA.md`, `docs/LAUNCH_RUNBOOK.md`, `.github/workflows/`.

@@ -9,9 +9,8 @@ import type { SVGProps } from "react";
  */
 
 const paths = {
-  /* Navigation: today is a ring with a centre point, distinct from the light-theme sun */
-  today:
-    "M12 4.5a7.5 7.5 0 1 0 0 15 7.5 7.5 0 0 0 0-15ZM12 10.5a1.5 1.5 0 1 0 0 3 1.5 1.5 0 0 0 0-3Z",
+  /* Navigation: today is a sunrise over a horizon, a shape no calendar mark or theme toggle uses */
+  today: "M4 17h16M7.5 14a4.5 4.5 0 0 1 9 0M12 5.5V8M6.5 8.5 8 10M17.5 8.5 16 10",
   calendar:
     "M5 7.5A1.5 1.5 0 0 1 6.5 6h11A1.5 1.5 0 0 1 19 7.5v10a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 17.5v-10ZM5 10.5h14M8.5 4v4M15.5 4v4",
   journey:

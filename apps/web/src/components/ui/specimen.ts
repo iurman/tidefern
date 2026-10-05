@@ -3,7 +3,8 @@ import type { ReactNode } from "react";
 /**
  * The eight states every shared component documents (architecture 13.7). A
  * specimen renders its component in each one; the frame forces the first
- * three through a `data-state` wrapper and the rest arrive as real props.
+ * three through a `data-specimen-state` wrapper whose child combinator
+ * reaches only the component root, and the rest arrive as real props.
  */
 export const componentStates = [
   "default",
