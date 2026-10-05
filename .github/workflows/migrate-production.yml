@@ -1,0 +1,94 @@
+name: Migrate production
+
+# The one path that applies a contract migration (DROP, RENAME, ALTER COLUMN
+# ... TYPE, TRUNCATE) to the production database. Vercel builds run additive
+# migrations on their own and the runner refuses anything else, so this
+# workflow is the only place MIGRATE_DESTRUCTIVE is set. It runs only when the
+# repository owner dispatches it, inside the production-migrations environment,
+# whose required reviewer and DATABASE_URL_UNPOOLED secret the owner adds by
+# hand (docs/LAUNCH_RUNBOOK.md, GitHub section). Ordinary CI never holds the
+# credential. Nothing here prints the connection string.
+on:
+  workflow_dispatch:
+    inputs:
+      migration:
+        description: Journal tag of the contract migration to apply (for example 0007_drop_legacy_columns)
+        required: true
+        type: string
+      restore_point:
+        description: The Neon restore point noted before this run (snapshot name or timestamp)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# One migration at a time; a queued run waits rather than cancelling.
+concurrency:
+  group: migrate-production
+  cancel-in-progress: false
+
+env:
+  TURBO_TELEMETRY_DISABLED: 1
+  NEXT_TELEMETRY_DISABLED: 1
+  DO_NOT_TRACK: 1
+  CI: true
+
+jobs:
+  migrate:
+    name: migrate
+    if: github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: production-migrations
+    steps:
+      - name: Record what the owner noted in the job summary
+        env:
+          MIGRATION: ${{ inputs.migration }}
+          RESTORE_POINT: ${{ inputs.restore_point }}
+        run: |
+          {
+            echo "## Production migration"
+            echo ""
+            echo "| Field | Value |"
+            echo "| --- | --- |"
+            echo "| Migration | \`${MIGRATION}\` |"
+            echo "| Restore point | \`${RESTORE_POINT}\` |"
+            echo "| Dispatched by | ${GITHUB_ACTOR} |"
+            echo "| Commit | ${GITHUB_SHA} |"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Check out
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up pnpm from packageManager
+        uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0
+
+      - name: Set up Node from .nvmrc
+        uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - name: Install from the lockfile
+        run: pnpm install --frozen-lockfile
+
+      - name: The named migration is in the committed journal
+        env:
+          MIGRATION: ${{ inputs.migration }}
+        run: |
+          node -e '
+            const { readFileSync } = require("node:fs");
+            const journal = JSON.parse(readFileSync("packages/db/drizzle/meta/_journal.json", "utf8"));
+            const tag = process.env.MIGRATION;
+            if (!journal.entries.some((entry) => entry.tag === tag)) {
+              console.error(`No journal entry is tagged ${tag}; nothing was applied.`);
+              process.exit(1);
+            }
+            console.log(`journal entry ${tag} found`);'
+
+      - name: Apply the pending migrations with the contract step allowed
+        env:
+          MIGRATE_DESTRUCTIVE: "1"
+          DATABASE_URL_UNPOOLED: ${{ secrets.DATABASE_URL_UNPOOLED }}
+        run: pnpm db:migrate

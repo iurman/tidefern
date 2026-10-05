@@ -36,6 +36,30 @@ notice` line, so a non-fatal problem (the first migration raises one when
 the `GRANT ... WITH SET TRUE` fails) shows in the build log instead of
 surfacing later as a runtime error from `withActor`.
 
+### Contract migrations and `MIGRATE_DESTRUCTIVE`
+
+Before it applies anything, `applyMigrations` reads the journal and the
+`created_at` of the newest row in `drizzle.__drizzle_migrations` (a database
+with no such table has nothing applied), and scans every pending SQL file
+for `DROP`, `RENAME`, `ALTER COLUMN ... TYPE` and `TRUNCATE` as keywords,
+case insensitive, after stripping `--` and block comments, string literals
+and quoted identifiers; a `DO` block is scanned like any other statement.
+Any `DROP` counts, including `DROP NOT NULL` and `DROP DEFAULT`. When a
+pending file matches and `MIGRATE_DESTRUCTIVE` is not exactly `1`, the
+runner throws `DestructiveMigrationError`, naming the file and the
+statement kind, and applies nothing, so a Vercel build can never run a
+contract step by accident. Applied files are never rescanned, so a contract
+migration that the owner applied once does not block later builds. The
+only place that sets the variable is `.github/workflows/migrate-production.yml`:
+the owner dispatches it by hand with the journal tag of the contract
+migration and the Neon restore point they noted first, GitHub asks the
+required reviewer of the `production-migrations` environment to approve,
+and the job applies every pending file against that environment's
+`DATABASE_URL_UNPOOLED` secret. Creating the environment, its reviewer and
+its secret is an owner step in `docs/LAUNCH_RUNBOOK.md`; ordinary CI never
+holds the credential. Never set the variable on Vercel or locally against
+a shared branch; `src/migrate.test.ts` proves the refusal on PGlite.
+
 ## The role model
 
 The first migration creates `tidefern_app` by SQL: `NOLOGIN NOBYPASSRLS
