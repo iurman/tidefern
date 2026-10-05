@@ -1,6 +1,6 @@
 import { predictCycle, type CyclePrediction, type PeriodStart } from "./cycle";
-import { isCalendarDate, type CalendarDate } from "./dates";
-import type { DatingMethod } from "./pregnancy";
+import { addDays, compareDates, isCalendarDate, type CalendarDate } from "./dates";
+import { GESTATION_DAYS, type DatingMethod } from "./pregnancy";
 
 /**
  * Stage transitions and the pregnancy-ending rules of architecture 8.4. These
@@ -77,6 +77,11 @@ export function endPregnancy(
   if (pregnancy.endedAt !== null) {
     throw new Error("Pregnancy has already ended");
   }
+  // Day 0 of gestation is the due date minus 280 days; an ending before it
+  // would make every period ever logged count as a post-pregnancy start.
+  if (compareDates(input.endedAt, addDays(pregnancy.dueDate, -GESTATION_DAYS)) < 0) {
+    throw new RangeError("Ending date is before the pregnancy began");
+  }
   const ended: Pregnancy = { ...pregnancy, endedAt: input.endedAt, endedReason: input.reason };
   return {
     pregnancy: ended,
@@ -95,13 +100,22 @@ export interface DueDateChangeInput {
   changedAt: string;
 }
 
+/** An ISO instant the runtime can parse; the history row keeps it verbatim. */
+function isInstant(value: string): boolean {
+  return value.length > 0 && !Number.isNaN(Date.parse(value));
+}
+
 /**
  * Replaces the due date and appends the change to history. The same date
  * again is not a change, so nothing is appended. Week numbers and reminder
  * dates are derived from `dueDate`, so they follow without extra bookkeeping.
+ * An ended pregnancy keeps its dates: nothing week-shaped is generated after
+ * a loss, and a paused partner view must not change under her.
  */
 export function changeDueDate(pregnancy: Pregnancy, input: DueDateChangeInput): Pregnancy {
   if (!isCalendarDate(input.next)) throw new RangeError(`Invalid calendar date: ${input.next}`);
+  if (!isInstant(input.changedAt)) throw new RangeError("Invalid instant for changedAt");
+  if (pregnancy.endedAt !== null) throw new Error("Pregnancy has already ended");
   if (input.next === pregnancy.dueDate && input.method === pregnancy.datingMethod) {
     return pregnancy;
   }

@@ -36,6 +36,15 @@ describe("ending a pregnancy", () => {
       RangeError,
     );
   });
+  it("refuses an ending dated before the pregnancy began", () => {
+    // Due 2026-10-17, so day 0 of gestation is 2026-01-10.
+    expect(() => endPregnancy(active, { endedAt: "2026-01-09", reason: "loss" })).toThrow(
+      /before the pregnancy began/,
+    );
+    expect(endPregnancy(active, { endedAt: "2026-01-10", reason: "loss" }).pregnancy.endedAt).toBe(
+      "2026-01-10",
+    );
+  });
   it("keeps the reason in her own responses and never in a partner's", () => {
     const hers = projectPregnancy(birth.pregnancy, "owner");
     expect(hers.endedReason).toBe("birth");
@@ -55,8 +64,8 @@ describe("ending a pregnancy", () => {
       id: active.id,
       dueDate: "2026-10-17",
     });
-    expect(projectPregnancy(birth.pregnancy, "partner")).toEqual({ status: "paused" });
-    expect(projectPregnancy(loss.pregnancy, "partner")).toEqual({ status: "paused" });
+    expect(projectPregnancy(birth.pregnancy, "partner")).toStrictEqual({ status: "paused" });
+    expect(projectPregnancy(loss.pregnancy, "partner")).toStrictEqual({ status: "paused" });
   });
   it("cancels queued reminders and clears predictions in the same effects, notifying nobody", () => {
     for (const ended of [birth, loss, other]) {
@@ -131,8 +140,31 @@ describe("due date changes", () => {
     });
     expect(same).toBe(active);
     expect(() =>
-      changeDueDate(active, { next: "2026-02-30", method: "manual", changedAt: "" }),
+      changeDueDate(active, {
+        next: "2026-02-30",
+        method: "manual",
+        changedAt: "2026-03-07T10:00:00Z",
+      }),
     ).toThrow(RangeError);
+  });
+  it("refuses an empty or malformed changedAt instant", () => {
+    for (const changedAt of ["", "yesterday", "2026-03-07T25:00:00Z"]) {
+      expect(() =>
+        changeDueDate(active, { next: "2026-10-20", method: "manual", changedAt }),
+      ).toThrow(RangeError);
+    }
+  });
+  it("refuses a due date change once the pregnancy has ended", () => {
+    for (const ended of [birth, loss, other]) {
+      expect(() =>
+        changeDueDate(ended.pregnancy, {
+          next: "2026-10-20",
+          method: "manual",
+          changedAt: "2026-11-01T08:00:00Z",
+        }),
+      ).toThrow(/already ended/);
+      expect(ended.pregnancy.dueDateChanges).toEqual([]);
+    }
   });
 });
 
