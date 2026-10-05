@@ -10,17 +10,14 @@ findings and the next concrete action. Resume from the last entry and
 1. Vercel connector: the MCP connection is authorized for the personal scope
    only and answers 403 for the `iurman's projects` team. Re-authorize it at
    team scope so A2, A4 and the deployment checks can use it. Until then the
-   lead uses the logged-in Vercel CLI for read-only inspection.
+   lead uses the logged-in Vercel CLI (`--scope iurmans-projects`) for
+   read-only inspection.
 2. Rotate the Protection Bypass for Automation value in the Vercel project
    (Settings, Deployment Protection) and store the new value with
    `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`; the current value sat in
    a plaintext repository variable until 2026-10-04.
 3. Set a Vercel usage alert and record the team plan on task A2 (stated as
    Pro; not readable through the connector).
-4. The machine's safe-chain guard blocks any lockfile pin published within
-   its minimum package age; when that recurs, run
-   `pnpm install --frozen-lockfile --safe-chain-skip-minimum-package-age`
-   yourself from the session prompt.
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -493,3 +490,55 @@ repository variable. Owner action 3 (connector scope) stays open.
 
 A1 closes with this entry. Next: claim G1 (design research record) on
 `claude/G1-research`.
+
+## 2026-10-05, lead session 061fed2d (Phase 1 build, Stage 1 onward)
+
+Started from commit `8f8cadd` on `main` (clean tree; A1 merged as pull
+request #4). Lead branch `claude/G1-research`. The owner suspended the
+session-boundary rule for this run: the session continues past commits and
+merges until the plan is finished or every open task waits on the owner.
+
+### Read
+
+`docs/BUILD_PROGRESS.md`, `docs/BUILD_PLAN.md`, `git log --oneline -n 30`,
+`docs/ARCHITECTURE.md` end to end, `docs/BUILD_PROMPT.md`, the four skills
+under `.agents/skills` with their references, `humanize.md`,
+`docs/research/RESEARCH.md` end to end (all eight dimensions, the skeptic
+verdicts and the completeness critique), and the existing code in
+`apps/web/src`, `packages/api/src`, `packages/core/src`,
+`packages/schemas/src`, `packages/design-tokens`.
+
+### Commands and results
+
+| Command | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | passed in 578 ms (store already warm; one build script ignored, `unrs-resolver`, as before) |
+| `pnpm check` | passed: prose, skills, tokens, contrast, brand, OpenAPI, Prettier, then `turbo run lint typecheck test build` 13 of 13 tasks (all cache hits against `8f8cadd`) |
+| `pnpm --filter web start --port 3100` then `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100 pnpm test:e2e` | `12 passed (7.4s)`; port 3000 is still held by the unrelated three-day-old server and was left alone |
+
+### Decisions
+
+- Claims. G1 is claimed by the lead. F1, F4, F2, F3 and D1 are claimed in
+  this same commit for subagents of this session, so the plan shows the
+  tasks as taken before any branch exists; each subagent opens its own draft
+  pull request titled with its id, works in its own git worktree and on its
+  own `claude/<id>-<topic>` branch from `origin/main`, and never edits the
+  plan or this log. The lead merges each pull request after a fresh-context
+  review, then records `done` with evidence and the log entry in its own
+  small commit. This keeps five parallel branches off the two files every
+  task would otherwise collide on.
+- Subagent pull requests touch only their group's paths. The core tasks
+  each insert one export line into `packages/core/src/index.ts` at a
+  distinct position (after `cycle`, `pregnancy`, `units` and `policy`
+  respectively) so the four merges do not conflict.
+- Each parallel checkout runs the browser suite against its own production
+  server on ports 3101 to 3105, because 3000 is held and 3100 is the lead's.
+- The owner-actions block at the top was reduced to what is still open:
+  the install workaround is no longer needed (the owner authorized the
+  `--safe-chain-skip-minimum-package-age` flag for this run and the store
+  is warm) and the bypass secret is stored.
+
+### Next action
+
+Launch the F1, F4, F2, F3 and D1 workflow (implement, fresh-context review,
+fix), then start G1: the gallery and product research record.
