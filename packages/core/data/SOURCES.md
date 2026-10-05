@@ -138,14 +138,75 @@ formula, as does every CDC indicator.
 - The WHO files hosted by CDC are monthly (0 to 24) and, for
   weight-for-length, in half centimetres (45 to 110 cm). WHO's own expanded
   daily tables were not vendored, so the engine interpolates between the
-  monthly rows; the difference from WHO's daily values is far below the one
-  decimal a percentile is shown with.
+  monthly rows. For weight-for-length that costs under 0.1 percentile point;
+  for the age-based indicators it misplaces the first weeks by up to 9.4
+  points, measured below, so the engine marks a WHO assessment under 56 days
+  as approximate.
 - The percentile columns of every file are dropped from the JSON because the
   engine derives any percentile from L, M and S; they remain in the CSV files
   as a check (the tests confirm the hosted 2.3rd and 97.7th columns equal the
   engine's -2 SD and +2 SD values).
 - No BMI table exists for the WHO reference in CDC's hosting, and BMI is not
   reported under age 2; CDC's `bmiagerev` applies from 24 months.
+
+## Monthly rows in the first weeks
+
+A newborn loses weight in the first days and regains it by the second week,
+and length and head circumference grow fastest in the first month. One row
+per month cannot carry that shape: a straight line from the birth row to
+the one month row runs above WHO's weight curve for three weeks (at day 9
+the interpolated median for boys is 3.679 kg where WHO's daily table says
+3.558 kg) and below the length and head curves. To measure the cost, WHO's
+expanded daily z-score tables were fetched on 2026-10-05 from the standard
+pages on https://www.who.int/tools/child-growth-standards/standards/ and
+every daily row from birth to day 730 was placed through the engine's
+interpolation of the monthly rows at -2 SD, the median and +2 SD. The
+largest gap, in percentile points, by age:
+
+| Indicator, sex          | Birth to day 55 | Day 56 on | Day 183 on | Day 366 on |
+| ----------------------- | --------------- | --------- | ---------- | ---------- |
+| Weight-for-age, boys    | 9.3 (day 9)     | 1.6       | 0.3        | under 0.1  |
+| Weight-for-age, girls   | 9.4 (day 7)     | 1.2       | 0.3        | under 0.1  |
+| Length-for-age, boys    | 4.9 (day 14)    | 1.4       | 0.3        | 0.1        |
+| Length-for-age, girls   | 5.8 (day 14)    | 1.3       | 0.3        | 0.1        |
+| Head circumference, boys  | 4.2 (day 15)  | 1.4       | 0.5        | 0.1        |
+| Head circumference, girls | 4.5 (day 15)  | 1.3       | 0.4        | 0.1        |
+
+In z-score terms the largest gap is 0.27 (girls' weight, day 7) and from
+day 56 it stays under 0.045 for every age-based indicator. Weight-for-length
+compared against WHO's 0.1 cm expanded tables over 45 to 110 cm is within
+0.002 z and 0.08 percentile points everywhere, so the half-centimetre rows
+need no mark. The engine therefore sets `approximate` on a WHO assessment of
+weight-for-age, length-for-age or head circumference-for-age under
+`WHO_APPROXIMATE_UNDER_DAYS` (56 days, the age of the two month visit), and
+the UI shows such a percentile as approximate or shows the band alone. The
+CDC reference is never marked: its half-month rows are the ones CDC's own
+program interpolates.
+
+The daily tables were used for this measurement only and are not vendored,
+because `docs/ARCHITECTURE.md` section 8.4 chose CDC's hosting of the WHO
+files over WHO's spreadsheet tables and the WHO permission question above
+is still open. Vendoring them later (the same attribution and permission
+note would apply) removes the mark; the test on day 9 in
+`packages/core/src/growth.test.ts` fails on purpose once the daily median
+lands on the 50th percentile, as a reminder to delete the flag with it. The
+files measured, each fetched with HTTP 200 and the `sfvrsn` token the WHO
+page carried on that day:
+
+| Table                              | URL                                                                                                                                                                                                       | Bytes  | SHA-256                                                          |
+| ---------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------ | ---------------------------------------------------------------- |
+| Weight-for-age, boys, by day       | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-age/expanded-tables/wfa-boys-zscore-expanded-tables.xlsx?sfvrsn=65cce121_10                      | 198984 | b5b4748c6bfa5230e2eddafa1767629c349178b08d457f400b59422b8bfef86c |
+| Weight-for-age, girls, by day      | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-age/expanded-tables/wfa-girls-zscore-expanded-tables.xlsx?sfvrsn=f01bc813_10                     | 197671 | ee3ae12cb96c6c5541cdf43665c03ce6c984f877859a183a5f6104eb06a49a6e |
+| Length-for-age, boys, by day       | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/length-height-for-age/expandable-tables/lhfa-boys-zscore-expanded-tables.xlsx?sfvrsn=7b4a3428_12            | 200151 | c4b1c9029ab9751a5f0888e32f35c7c0287a16d361885cf911ecf23b3f7f6b4f |
+| Length-for-age, girls, by day      | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/length-height-for-age/expandable-tables/lhfa-girls-zscore-expanded-tables.xlsx?sfvrsn=27f1e2cb_10           | 199890 | 6aa2876319449a6b1f4d825848128902114ff53c67b92b86a0c5140846013059 |
+| Head circumference, boys, by day   | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/head-circumference-for-age/expanded-tables/hcfa-boys-zscore-expanded-tables.xlsx?sfvrsn=2ab1bec8_8          | 185962 | 89a657bc466e85f6c8f2e5e7f4635e969bdcf982bb71e519273e43896a1c3314 |
+| Head circumference, girls, by day  | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/head-circumference-for-age/expanded-tables/hcfa-girls-zscore-expanded-tables.xlsx?sfvrsn=3a34b8b0_8         | 186723 | 8eec3770d1027ce1b3b96a7b89fd1e77070558a7791b17b4462cda8a813324a3 |
+| Weight-for-length, boys, 0.1 cm    | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-length-height/expanded-tables/wfl-boys-zscore-expanded-table.xlsx?sfvrsn=d307434f_8              | 74264  | 1a6e9a002d2692d038161bc6572a10f8b9fa0657163808141d2981a2132c59cc |
+| Weight-for-length, girls, 0.1 cm   | https://cdn.who.int/media/docs/default-source/child-growth/child-growth-standards/indicators/weight-for-length-height/expanded-tables/wfl-girls-zscore-expanded-table.xlsx?sfvrsn=db7b5d6b_8             | 73863  | ec116b8e618ad311d34a87231346badf16c75f5c4f82222ec846e05c582bf16a |
+
+Each workbook is one sheet with the columns Day (or Length), L, M, S and
+the SD4neg to SD4 curves; the day 0 rows carry the same L, M and S as the
+month 0 rows in CDC's files.
 
 ## Files
 

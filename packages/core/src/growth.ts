@@ -57,6 +57,18 @@ export const DAYS_PER_MONTH = 30.4375;
 /** First day of age on which the CDC charts replace the WHO standards (24 months, MMWR 2010). */
 export const WHO_UPPER_BOUND_DAYS = 730;
 
+/**
+ * Under this age a WHO percentile is approximate. CDC's hosting of the WHO
+ * standards lists one row per month, and a straight line from the birth row
+ * to the one month row misses the newborn weight dip and regain. Measured
+ * against WHO's own daily tables (SOURCES.md), the percentile at the median is
+ * off by up to 9.4 points in the first three weeks for weight, 5.8 for length
+ * and 4.5 for head circumference; from eight weeks the gap stays under 1.6
+ * points and from six months under 0.5. Weight-for-length is read by length
+ * in half centimetres, where the rows are dense enough (under 0.1 point).
+ */
+export const WHO_APPROXIMATE_UNDER_DAYS = 56;
+
 /** The CDC 2 to 20 year charts begin at this age; under it the CDC infant charts (birth to 36 months) apply. */
 const CDC_CHILD_CHART_START_MONTHS = 24;
 
@@ -233,6 +245,21 @@ export interface GrowthAssessment {
   bands: { low: GrowthBand; median: GrowthBand; high: GrowthBand };
   /** Beyond plus or minus 2 SD; the UI pairs it with the pointing-to-care sentence, never an alarm. */
   farOutsideBand: boolean;
+  /**
+   * True under WHO_APPROXIMATE_UNDER_DAYS on the WHO reference for the
+   * age-based indicators. The UI shows such a percentile as approximate, or
+   * shows the band alone, never as an exact rank. Always false on the CDC
+   * reference, whose half-month rows are the ones CDC's own program
+   * interpolates.
+   */
+  approximate: boolean;
+}
+
+/** The monthly WHO rows are too coarse for the first weeks of the age-based indicators. */
+function isApproximate(reference: GrowthReference, indicator: GrowthIndicator, ageDays: number) {
+  return (
+    reference === "who" && indicator !== "weightForLength" && ageDays < WHO_APPROXIMATE_UNDER_DAYS
+  );
 }
 
 function assertPositive(name: string, value: number | undefined): asserts value is number {
@@ -300,5 +327,6 @@ export function growthAssessment(input: GrowthMeasurement): GrowthAssessment | n
       high: { percentile: 97.7, label: "97.7th", value: toUnit(valueFromZ(BAND_Z, l, m, s)) },
     },
     farOutsideBand: Math.abs(z) > BAND_Z,
+    approximate: isApproximate(reference, indicator, ageDays),
   };
 }

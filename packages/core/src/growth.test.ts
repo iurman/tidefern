@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   DAYS_PER_MONTH,
+  WHO_APPROXIMATE_UNDER_DAYS,
   chooseReference,
   growthAssessment,
   interpolateLms,
@@ -211,6 +212,58 @@ describe("growthAssessment", () => {
     expect(bmi?.measure).toBeCloseTo(16.575, 2);
     expect(Math.abs((bmi?.z ?? 1) - 0)).toBeLessThan(0.05);
     expect(Math.abs((bmi?.bands.median.value ?? 0) - 16.58)).toBeLessThan(0.05);
+  });
+  it("marks the first eight weeks on WHO as approximate, where monthly rows miss the newborn curve", () => {
+    // WHO's daily weight-for-age table for boys (SOURCES.md), day 9: L 0.2711, M 3.5576, S 0.14388.
+    // The monthly rows interpolate a median of 3.679 kg there, so WHO's own median lands near the
+    // 41st percentile. When daily rows are vendored, delete the flag and this assertion with it.
+    const dayNine = growthAssessment({
+      sex: "male",
+      ageDays: 9,
+      indicator: "weightForAge",
+      value: 3558,
+    });
+    expect(dayNine?.approximate).toBe(true);
+    expect(Math.abs((dayNine?.percentile ?? 50) - 50)).toBeGreaterThan(5);
+    expect(Math.abs((dayNine?.percentile ?? 50) - 50)).toBeLessThan(10);
+    // Day 56 is the first unmarked day; its daily row (L 0.2014, M 5.4149, S 0.1252) lands within 2 points.
+    const dayFiftySix = growthAssessment({
+      sex: "male",
+      ageDays: WHO_APPROXIMATE_UNDER_DAYS,
+      indicator: "weightForAge",
+      value: 5415,
+    });
+    expect(dayFiftySix?.approximate).toBe(false);
+    expect(Math.abs((dayFiftySix?.percentile ?? 0) - 50)).toBeLessThan(2);
+    // Day 365 (L 0.0645, M 9.646, S 0.10925) sits on the 12 month row, so the gap closes.
+    const firstBirthday = growthAssessment({
+      sex: "male",
+      ageDays: 365,
+      indicator: "weightForAge",
+      value: 9646,
+    });
+    expect(firstBirthday?.approximate).toBe(false);
+    expect(firstBirthday?.percentile).toBeCloseTo(50, 0);
+    // The day before the cutoff is marked, length and head circumference share the monthly rows,
+    // weight-for-length is read by length and the CDC reference interpolates its own rows.
+    const base = { sex: "female" as const, ageDays: WHO_APPROXIMATE_UNDER_DAYS - 1 };
+    expect(growthAssessment({ ...base, indicator: "weightForAge", value: 4000 })?.approximate).toBe(
+      true,
+    );
+    expect(growthAssessment({ ...base, indicator: "lengthForAge", value: 550 })?.approximate).toBe(
+      true,
+    );
+    expect(
+      growthAssessment({ ...base, indicator: "headCircumferenceForAge", value: 380 })?.approximate,
+    ).toBe(true);
+    expect(
+      growthAssessment({ ...base, indicator: "weightForLength", value: 4000, lengthMm: 550 })
+        ?.approximate,
+    ).toBe(false);
+    expect(
+      growthAssessment({ ...base, indicator: "weightForAge", value: 4000, reference: "cdc" })
+        ?.approximate,
+    ).toBe(false);
   });
   it("flags only measurements beyond plus or minus 2 SD", () => {
     const { l, m, s } = whoBirthWeight;
