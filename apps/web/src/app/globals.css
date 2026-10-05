@@ -547,3 +547,217 @@ img {
     white-space: normal;
   }
 }
+
+/* Design reference: type chapter */
+.chapter-nav {
+  display: flex;
+  gap: 16px;
+  padding-top: var(--space-6);
+  font-size: var(--type-small);
+  font-weight: 600;
+}
+.chapter-nav-foot {
+  padding-block: var(--space-8) var(--space-12);
+  border-top: 1px solid var(--soft-border);
+}
+.muted-note {
+  color: var(--muted);
+  max-width: 68ch;
+}
+.specimen {
+  margin-block: var(--space-6);
+}
+.lockup {
+  display: flex;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-8);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+.lockup-panel {
+  background: var(--panel);
+  border-color: transparent;
+}
+.specimen-wordmark {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 4rem;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  line-height: 1;
+  margin: 0;
+}
+.specimen-wordmark.small {
+  font-size: 2rem;
+}
+.specimen-tagline {
+  margin: 8px 0 0;
+}
+.caption {
+  font-size: var(--type-caption);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.scale-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.scale-list li {
+  display: grid;
+  grid-template-columns: 200px minmax(0, 1fr);
+  gap: var(--space-2) var(--space-6);
+  padding-block: var(--space-6);
+  border-top: 1px solid var(--soft-border);
+}
+.scale-list .caption {
+  grid-column: 2;
+  margin: 0;
+}
+.scale-meta {
+  display: grid;
+  gap: 4px;
+  font-size: var(--type-small);
+}
+.specimen-serif {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-weight: 500;
+  letter-spacing: -0.015em;
+  line-height: 1.1;
+  margin: 0;
+  text-wrap: balance;
+}
+.specimen-sans {
+  margin: 0;
+  line-height: 1.5;
+}
+.specimen-reading {
+  max-width: 62ch;
+  padding: var(--space-6);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+.specimen-reading:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+.estimate {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-style: italic;
+  font-size: var(--type-intro);
+  line-height: 1.45;
+}
+.specimen-estimate {
+  max-width: 44ch;
+}
+.specimen-nav {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.specimen-nav li {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  padding-inline: 16px;
+  border-radius: var(--radius-round);
+  font-size: var(--type-small);
+  font-weight: 600;
+}
+.specimen-nav li[aria-current="page"] {
+  background: var(--panel);
+  color: var(--accent);
+}
+.specimen-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.quiet-action {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-control);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  font-weight: 600;
+}
+.chip-specimen {
+  font: inherit;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-control);
+  padding: 0 14px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  font-size: var(--type-small);
+  font-weight: 600;
+}
+.chip-specimen[aria-pressed="true"] {
+  background: var(--action);
+  color: var(--action-text);
+  border-color: var(--action);
+}
+.numeral-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: var(--space-8);
+}
+.numeral-column {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  width: 8ch;
+  text-align: right;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+.numeral-column li {
+  padding-block: 4px;
+  border-bottom: 1px solid var(--soft-border);
+}
+.numeral-column.proportional {
+  font-variant-numeric: proportional-nums;
+}
+.tabular,
+.numeral-column.tabular,
+.numeral {
+  font-variant-numeric: tabular-nums;
+}
+.specimen-display-numeral {
+  margin: 0 0 8px;
+}
+.specimen-display-numeral .numeral {
+  font-size: 3.5rem;
+  font-weight: var(--weight-numeral);
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.numeral-label {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: 1.5rem;
+  font-weight: 500;
+}
+@media (max-width: 600px) {
+  .scale-list li {
+    grid-template-columns: 1fr;
+  }
+  .scale-list .caption {
+    grid-column: 1;
+  }
+  .specimen-wordmark {
+    font-size: 2.75rem;
+  }
+  .lockup {
+    padding: var(--space-6);
+  }
+}

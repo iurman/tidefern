@@ -663,3 +663,49 @@ Commands: `pnpm prose:check` passed across 161 files; `pnpm check` and
 Fix the nine G3 review findings on `claude/G3-type` (PR #15), rebase it on
 main, mark G3 done, merge. Then merge C1 when its review answers arrive so
 the second wave workflow continues with B2 and C5.
+
+### G3 closed, G2 and C1 merged (2026-10-05, lead session 061fed2d)
+
+G2 (PR #13) merged by squash as `0a90568`; C1 (PR #14, Better Auth server
+config and the generated identity schema, 30 auth tests, review found no
+finding) merged by squash as `c364415`. Both were package-only or
+docs-only changes for Vercel, so their previews were skipped and the
+production smoke results are recorded in the next entry.
+
+G3 (PR #15): `/design/type` sets the wordmark and tagline lockup on the
+surface and panel tiers, the seven-step scale from the tokens, the footer
+sentence at reading width, the Newsreader italic estimate sentence,
+navigation labels, actions and chip buttons, proportional against tabular
+numerals, display numerals beside a serif label, and the provenance table,
+in both themes; `docs/design/TYPOGRAPHY.md` is the decision record citing
+architecture 13.5 with the file sizes, licence, legibility check and what
+G4 still owes (the outlined wordmark). The design hub links the chapter;
+the e2e axe loop covers it and a test asserts that a Newsreader and a
+Figtree face report loaded and that the tabular column uses tabular
+figures.
+
+A fresh-context review found three majors (a citation to a file not yet
+on the branch, a claim about the tagline on the panel that the page did
+not show, and the missing plan row and log entry) and six minors (the
+wordmark attributed to the wrong component, an overstated tabular rule,
+no base caption rule, an editable paragraph with no press cue, a font
+assertion that only checked assignment, and a widow claim the capture
+contradicted). All nine were fixed: the panel lockup carries the tagline,
+a `.caption` rule exists, the reading specimen is the footer sentence
+rather than an editable paragraph, the test checks `document.fonts` for a
+loaded face of each family, and the record was corrected.
+
+Commands on the final branch: `pnpm check` exit 0 (core 87, crypto 13,
+api 5 and the db and auth suites); `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3100
+pnpm test:e2e` 13 passed (8.7s); `pnpm prose:check` passed. The first gate
+rerun after the review fix failed `web:lint` on an apostrophe in JSX text
+(`react/no-unescaped-entities`); the sentence was reworded and the gate
+rerun before the push.
+
+### Next action
+
+Merge G3 after CI, record the production smoke results for `0a90568`,
+`c364415` and the G3 merge, then let the second wave continue (B2 and C5
+start once the workflow sees the C1 merge). The lead's next own task is
+G4 (brand assets) once G5's component work is scheduled, or the review of
+B2 when it arrives.
