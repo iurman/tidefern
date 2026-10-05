@@ -22,3 +22,6 @@ pnpm-debug.log*
 # the vendored generator skill itself (voice-profile) is tracked
 .agents/skills/voice-*/
 !.agents/skills/voice-profile/
+
+# Git worktrees the agent harness creates for subagents
+.claude/worktrees/
