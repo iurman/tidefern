@@ -17,6 +17,7 @@
     "seed": "tsx scripts/seed.ts"
   },
   "dependencies": {
+    "@tidefern/schemas": "workspace:*",
     "@vercel/functions": "3.9.11",
     "drizzle-orm": "0.45.3",
     "pg": "8.23.1"

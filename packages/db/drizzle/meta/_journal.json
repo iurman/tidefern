@@ -15,6 +15,41 @@
       "when": 1791220745987,
       "tag": "0001_identity_and_profiles",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791221937659,
+      "tag": "0002_relationships",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1791222155997,
+      "tag": "0003_cycle",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791222272336,
+      "tag": "0004_pregnancy",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1791222399669,
+      "tag": "0005_children",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1791222566244,
+      "tag": "0006_platform",
+      "breakpoints": true
     }
   ]
 }
