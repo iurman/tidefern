@@ -12,6 +12,7 @@ import {
 } from "drizzle-orm/pg-core";
 
 import { user } from "../auth-schema";
+import { children } from "./children";
 import {
   consentBasisEnum,
   dataCategoryEnum,
@@ -110,8 +111,10 @@ const NO_CHILD = sql`'00000000-0000-0000-0000-000000000000'::uuid`;
 /**
  * One grant per (owner, grantee, category, child) at a time (architecture
  * record 8.1 and 8.2). `child_id` is required exactly when the category is
- * `child` and names the one child the grant reaches; the foreign key to
- * `children` is added by the B6 migration, after that table exists.
+ * `child` and names the one child the grant reaches; its foreign key to
+ * `children` arrived with the B6 migration, after that table existed, which
+ * is why this file and children.ts import each other through the lazy
+ * `references` callbacks.
  * `policy_version` and `description_version` record which policy and which
  * plain-words description the owner saw when she made the grant. `notify` is
  * her per-person switch for partner notifications, off by default. A grant
@@ -130,7 +133,7 @@ export const grants = pgTable(
       .references(() => user.id, { onDelete: "cascade" }),
     category: shareCategoryEnum("category").notNull(),
     level: shareLevelEnum("level").notNull(),
-    childId: uuid("child_id"),
+    childId: uuid("child_id").references(() => children.id, { onDelete: "cascade" }),
     policyVersion: text("policy_version").notNull(),
     descriptionVersion: text("description_version").notNull(),
     notify: boolean("notify").notNull().default(false),

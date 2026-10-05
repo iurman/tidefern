@@ -66,6 +66,7 @@ describe("the journal", () => {
       "0002_relationships",
       "0003_cycle",
       "0004_pregnancy",
+      "0005_children",
     ]);
 
     const files = readMigrationFiles(migrationConfig);
@@ -85,6 +86,10 @@ describe("the journal", () => {
     );
     expect(tables.map((row) => row.table_name)).toEqual([
       "account",
+      "child_events",
+      "child_guardians",
+      "child_measurements",
+      "children",
       "consents",
       "cycle_entries",
       "cycle_predictions",
@@ -272,6 +277,10 @@ describe("row level security", () => {
     );
     expect(flags).toEqual([
       { relname: "account", relrowsecurity: false, relforcerowsecurity: false },
+      { relname: "child_events", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "child_guardians", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "child_measurements", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "children", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "consents", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "cycle_entries", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "cycle_predictions", relrowsecurity: true, relforcerowsecurity: false },

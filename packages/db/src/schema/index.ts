@@ -10,3 +10,4 @@ export * from "./keys";
 export * from "./relationships";
 export * from "./cycle";
 export * from "./pregnancy";
+export * from "./children";

@@ -47,6 +47,11 @@ beforeAll(async () => {
   await insertUser(harness, BEN, "ben@example.test");
   await insertUser(harness, CARA, "cara@example.test");
   await harness.db.insert(schema.households).values({ id: HOUSEHOLD });
+  // grants.child_id references children since the B6 migration.
+  await harness.db.insert(schema.children).values([
+    { id: CHILD, householdId: HOUSEHOLD, displayName: "Mo", dateOfBirth: "2026-02-14" },
+    { id: OTHER_CHILD, householdId: HOUSEHOLD, displayName: "Sam", dateOfBirth: "2024-07-01" },
+  ]);
 });
 
 afterAll(async () => {
@@ -392,7 +397,13 @@ describe("consents", () => {
 });
 
 describe("cascades", () => {
-  test("deleting the household removes its members and invitations", async () => {
+  test("deleting the household removes its members and invitations once its children are gone", async () => {
+    // A household with children is wound down explicitly, never by cascade.
+    const withChildren = await refusal(
+      harness.db.delete(schema.households).where(eq(schema.households.id, HOUSEHOLD)),
+    );
+    expect(withChildren).toMatch(/children_household_id_households_id_fk/);
+    await harness.db.delete(schema.children);
     await harness.db.delete(schema.households).where(eq(schema.households.id, HOUSEHOLD));
     expect(await harness.db.query.householdMembers.findMany()).toEqual([]);
     expect(await harness.db.query.invitations.findMany()).toEqual([]);

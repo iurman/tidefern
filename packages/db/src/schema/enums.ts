@@ -132,3 +132,11 @@ export const endedReasonEnum = pgEnum("ended_reason", endedReasonValues);
 /** Pregnancy events are appointments and milestones only; symptoms live on the day sheet. */
 export const pregnancyEventKindValues = ["appointment", "milestone"] as const;
 export const pregnancyEventKindEnum = pgEnum("pregnancy_event_kind", pregnancyEventKindValues);
+
+/** Mirrors `Sex` in packages/core: what the WHO and CDC growth references are keyed by. */
+export const sexValues = ["female", "male"] as const;
+export const sexEnum = pgEnum("sex", sexValues);
+
+/** What a child event records (architecture record 8.2): milestones, feeds, sleep, diapers. */
+export const childEventKindValues = ["milestone", "feed", "sleep", "diaper"] as const;
+export const childEventKindEnum = pgEnum("child_event_kind", childEventKindValues);
