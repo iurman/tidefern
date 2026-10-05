@@ -5,6 +5,28 @@ what changed, the commands and their results, decisions with reasons, open
 findings and the next concrete action. Resume from the last entry and
 `git status`.
 
+## Owner actions pending (kept current by the lead; details in the newest entry)
+
+1. Dependency install on the owner's machine: the lockfile pins `hono`
+   4.13.13 (published 2026-10-04) and the machine's safe-chain guard blocks
+   it under its minimum package age rule, so `pnpm install --frozen-lockfile`
+   exits without linking anything. Run it once yourself with the guard's own
+   flag, `pnpm install --frozen-lockfile --safe-chain-skip-minimum-package-age`,
+   or wait until the release ages past the threshold. The agent may not pass
+   that flag.
+2. GitHub: `VERCEL_AUTOMATION_BYPASS_SECRET` is stored as a repository
+   variable, not a secret, so `deploy-verify.yml` reads an empty value and
+   every preview smoke test fails. Regenerate the Protection Bypass for
+   Automation value in the Vercel project (Settings, Deployment Protection),
+   store it with `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`, then delete
+   the variable (`gh variable delete VERCEL_AUTOMATION_BYPASS_SECRET`). The
+   old value sat in a variable of a public repository, so rotate rather than
+   copy.
+3. Vercel connector: the MCP connection is authorized for the personal scope
+   only and answers 403 for the `iurman's projects` team. Re-authorize it at
+   team scope so A2, A4 and the deployment checks can use it. Until then the
+   lead uses the logged-in Vercel CLI for read-only inspection.
+
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
 Started from the empty repository (commit `32e1123`, README only).
@@ -300,3 +322,104 @@ findings and what changed:
 Checks after the changes: `pnpm check` green (37 unit tests), 12 browser
 tests green. The research workflow and the review workflow are both
 complete; nothing is still running.
+
+## 2026-10-04, lead session 8517de27 (Phase 1 intake, task A1)
+
+Started from commit `43f34d0` on `main` (clean tree). Branch
+`claude/A1-intake`, draft pull request titled `A1: repository intake`.
+
+### Read
+
+`AGENTS.md`, `humanize.md`, `README.md`, `docs/ARCHITECTURE.md` end to end,
+`docs/BUILD_PLAN.md`, this log, `docs/research/SOURCE_ANALYSIS.md`, the
+`site-build` skill with all six references, the brand sheet image. Ten
+reader subagents mapped `docs/research/RESEARCH.md` (four ranges), the
+`humanize-writing` and `humanize-code` skills with their references, the
+token file and brand package, the web shell code, the API, core and
+schemas packages, and the CI workflows and runbook; a completeness critic
+spot-checked their citations. Their findings are recorded below under
+"Reader maps" once the run finished.
+
+### Commands and results
+
+| Command | Result |
+| --- | --- |
+| `pnpm install --frozen-lockfile` | failed: `ERR_PNPM_FETCH_403` on `hono-4.13.13.tgz`, blocked by safe-chain's minimum package age (hono 4.13.13 was published 2026-10-04T03:53Z and the lockfile pins it). pnpm exited 0 but linked nothing: `node_modules/.bin` is empty. The same install passes in CI (run 37250792049 on `main`). |
+| `pnpm --filter web exec playwright install chromium` | not run (no `node_modules`); Chromium build 1243 is already present in `~/.cache/ms-playwright` |
+| `pnpm check`, `pnpm test:e2e`, `pnpm build`, `pnpm --filter web start`, `node apps/web/scripts/capture.mjs` | not run, blocked by the install |
+| Version confirmation (`npm view`, 2026-10-04) | see the table below |
+| `gh auth status` | logged in as `iurman`; no open pull requests; remote branches `main` and the merged `claude/friendly-johnson-lrt79s` |
+| `gh run list` | CI and CodeQL green on `main` (37250792049, 37250792077); `Verify deployment` red on every deployment since the project was connected |
+| `vercel project inspect tidefern --scope iurmans-projects` (read only) | project `prj_9KHWVBhkBPNa3sgbkPs8IzOwqXUA`, team `iurman's projects`, root `apps/web`, Node 24.x, Next.js preset, default build command (A4 sets the migrate step later) |
+| `curl https://tidefern.app/` and `/api/v1/health` | 200 and 200; the domain resolves through Cloudflare name servers; deployment URLs (`*-iurmans-projects.vercel.app`) answer 302 to Vercel's SSO page |
+
+Versions in architecture section 4.2 against the registry on 2026-10-04:
+
+| Package | Pinned | Registry latest | Drift |
+| --- | --- | --- | --- |
+| turbo | 2.11.7 | 2.11.7 | none |
+| next, eslint-config-next | 16.3.8 | 16.3.8 | none |
+| react, react-dom | 19.2.8 | 19.3.0 | newer minor exists; not bumped (the pair `create-next-app` installs with 16.3.8 stays) |
+| typescript | 6.0.3 | 7.0.2 | expected, recorded in 4.2 |
+| eslint | 10.12.0 (9.39.5 in web) | 10.12.0 | none |
+| typescript-eslint | 8.71.0 | 8.71.0 | none |
+| tailwindcss | 4.3.3 | 4.3.3 | none |
+| hono, @hono/zod-openapi, zod | 4.13.13, 1.6.3, 4.6.5 | same | none |
+| vitest | 5.0.3 | 5.0.3 | none |
+| playwright, @playwright/test, @axe-core/playwright | 1.63.0, 1.63.0, 4.13.0 | same | none |
+| sharp | 0.35.5 | 0.35.5 | none |
+| pnpm | 10.34.6 | 12.9.1 | expected, recorded in 4.2 |
+| Node | 24.x, `.nvmrc` 24.21.0 | 24.21.0 is the current 24 line; 26.10.0 is current | none; this machine runs Node 26.7.0, so the engine warning is expected |
+| Not yet installed (Phase 1): drizzle-orm 0.45.3, drizzle-kit 0.31.11, pg 8.23.1, better-auth 1.7.7, @better-auth/passkey 1.7.7, @better-auth/drizzle-adapter 1.7.7, @electric-sql/pglite 0.5.8, openapi-typescript 7.13.0, openapi-fetch 0.17.0, react-day-picker 10.0.2, @vercel/functions 3.9.11 | as in 4.2 | same | none |
+
+### The red deployment check
+
+`deploy-verify.yml` failed on all nine deployments because of two GitHub
+settings, not the application:
+
+1. The repository variable meant to be `PRODUCTION_URL` was named
+   `PRODUCTION_URLPRODUCTION_URL`, so production smoke tests ran against the
+   deployment's unique URL, which sits behind Vercel Authentication and
+   redirects to SSO; the workflow's 401 check never fires on that 302, so
+   the first `curl | grep "Tidefern"` failed. Fixed: `PRODUCTION_URL` set to
+   `https://tidefern.app`, the misnamed variable deleted, run 37250822707
+   rerun (result recorded below).
+2. `VERCEL_AUTOMATION_BYPASS_SECRET` exists only as a repository variable,
+   so `secrets.VERCEL_AUTOMATION_BYPASS_SECRET` is empty and previews cannot
+   be reached. This session is not permitted to write repository secrets;
+   owner action 2 above.
+
+Follow-up for J5: the workflow should treat a redirect to
+`vercel.com/sso-api` as "protected" and say so, instead of following it and
+failing on the content check.
+
+### A2 and A3 status
+
+A2: the Vercel project is connected and deploys every push; production
+serves at `https://tidefern.app`. Per the build prompt A2 counts as
+confirmed by a passing `Verify deployment` run, which depends on the rerun
+above for production and on owner action 2 for previews. The team's plan is
+stated by the owner as Pro and could not be read through the connector
+(scope); recorded as stated, not verified. A3: no database URL is present
+locally (`.env.local` does not exist); the Neon side is checked when B1 and
+B10 touch it. A4 is checked when `packages/db` exists.
+
+### Decisions
+
+- The safe-chain age guard is the owner's security control; the lead does
+  not bypass it. Everything that needs `node_modules` waits for owner
+  action 1; reading, version confirmation, GitHub settings and the plan
+  bookkeeping proceeded.
+- The A1 branch was pushed without a local `pnpm check` or `pnpm test:e2e`
+  (both blocked by the install); it changes only `docs/`, and CI runs the
+  same gates on the pull request. This exception is recorded here and not
+  repeated for code changes.
+- Commit messages carry no model names, per the architecture record, so
+  no co-author trailer is added.
+
+### Next action
+
+After owner action 1: `pnpm install --frozen-lockfile`, `pnpm check`,
+`pnpm test:e2e`, `pnpm build`, start the production server, run
+`node apps/web/scripts/capture.mjs`, inspect the screenshots, record the
+results here, close A1, then claim G1.
