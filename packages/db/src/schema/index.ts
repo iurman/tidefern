@@ -1,0 +1,3 @@
+// Tables arrive with tasks B2 to B7. The module stays importable so
+// drizzle-kit and the client have a schema object from the first migration on.
+export {};
