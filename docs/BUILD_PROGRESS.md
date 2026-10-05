@@ -542,3 +542,69 @@ verdicts and the completeness critique), and the existing code in
 
 Launch the F1, F4, F2, F3 and D1 workflow (implement, fresh-context review,
 fix), then start G1: the gallery and product research record.
+
+### First wave merged (2026-10-05, lead session 061fed2d)
+
+Fifteen subagents (five implementers, five fresh-context reviewers, five
+fix passes) ran as one workflow for F1, F4, F2, F3 and D1, three more for
+B1, and twelve for the G1 research (six researchers, six skeptics). Every
+pull request was merged by the lead with squash after its review answers
+were read and its diff inspected.
+
+| Task | Pull request | Merge | Unit tests | Notes |
+| --- | --- | --- | --- | --- |
+| F2 | #6 | `68833ab` | 14 in `stages.test.ts` | review added an ending-before-day-0 guard and `changedAt` validation |
+| F3 | #9 | `7c30535` | 16 in `policy-filters.test.ts` | review added the first-grant-wins dedupe; a unique partial index on grants goes to B3 |
+| D1 | #8 | `981e0ed` | 13 in `packages/crypto` | review added `kekProvider` on wrapped keys and canonical base64 checks on the KEK |
+| F1 | #11 | `24719a3` | 18 in `growth.test.ts` | review measured up to 9 percentile points of error in the first weeks from monthly WHO rows; the fix flags percentiles under 56 days as approximate; new task F5 vendors the daily tables after the owner's WHO decision |
+| F4 | #10 | `8c86782` | 7 in `milestones.test.ts` | rebased after F1; the two branches both exported `DAYS_PER_MONTH`, so milestones now imports the growth engine's constant |
+| B1 | #7 | `56be184` | 8 PGlite tests | rebased twice (D1 and F1 moved `pnpm-lock.yaml` and the root scripts); review added notice logging to the migration runner |
+
+Checks on every merged head: `pnpm check` green in the subagent's worktree
+and in CI (`verify`), CodeQL green, and the preview smoke test green where
+Vercel built a preview. Vercel skipped the previews for the D1 and B1 fix
+heads as "Not affected" (neither package is a dependency of `apps/web`), so
+those merges rest on the previous head's preview smoke test plus CI; the
+production smoke test after each merge passed (runs on `68833ab`,
+`7c30535`, `24719a3` and later heads all `success`).
+
+Process notes:
+
+- The harness creates subagent worktrees under `.claude/worktrees/`, which
+  Prettier walked in the lead checkout; `.gitignore` and `.prettierignore`
+  now exclude it.
+- GitHub refuses a draft pull request with no commits, so every subagent
+  branch starts with one real or empty commit; squash merges remove it.
+- Killing the `pnpm start` wrapper leaves `next-server` on its port; the
+  briefs now say to kill the listener found with `ss -ltnp`.
+- One lead mistake, corrected: the rebased F4 branch was pushed before its
+  gate result was read, and the gate had failed on the duplicate constant.
+  The fix was pushed within minutes with a green gate; no merge happened
+  in between.
+- A force push after a rebase did not retrigger the pull request checks on
+  B1 while the pull request was still conflicting; an empty commit after
+  the second rebase did.
+
+### G1 closed
+
+`docs/design/RESEARCH.md` (429 lines) records eleven gallery and
+documentation observations with committed captures under
+`docs/design/research/` (19 JPEGs, 1.1 MB), the trend galleries as
+counter-signals, eight product references grouped by surface, fifteen
+decisions handed to G2, G5, G6, G7, E7, H1 to H7 and J3, the pinned
+guidelines skill, the `react-day-picker` 10.0.2 pin decision, and the
+inaccessible and licence tables. The skeptics confirmed or partially
+confirmed every observation the record keeps; the one correction (the
+size of Natural Cycles' first-cycle buffer) was applied. The pinned
+Vercel guidelines audit skill lives in `.agents/skills/web-design-guidelines`.
+
+Owner question surfaced by F1: whether Tidefern may vendor WHO's own daily
+expanded tables (task F5); until then the first eight weeks of a growth
+percentile are labelled approximate.
+
+### Next action
+
+Second wave running as one workflow: C1 and B12 in parallel, then B2 and
+C5, then B3 to B7 on one branch (one generated migration per task, in
+order). The lead claims G2 once this branch merges and writes
+`docs/design/DESIGN.md`, `CONTENT.md` and `ASSETS.md`.

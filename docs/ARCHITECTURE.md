@@ -250,6 +250,7 @@ Resolved from the registries on 2026-10-04. Exact pins, `save-exact=true`.
 | `packages/api-client/src/types.ts` (Phase 1) | `openapi/v1.json`                            | `pnpm client:generate`         | `pnpm client:check`                          |
 | `packages/db/drizzle/*.sql` (Phase 1)        | `packages/db/src/schema`                     | `pnpm db:generate`             | review in PR; CI applies to a fresh database |
 | `packages/db/src/auth-schema.ts` (Phase 1)   | Better Auth config                           | `npx auth@latest generate`     | review in PR                                 |
+| `packages/core/src/growth-data.json`         | `packages/core/data/{who,cdc}/*.csv`         | `pnpm growth:generate`         | `pnpm growth:check`                          |
 
 `pnpm check` runs the prose gate, every freshness gate, lint, types, unit
 tests and the production build. CI runs the same plus the browser suite.
