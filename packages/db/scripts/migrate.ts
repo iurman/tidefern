@@ -2,7 +2,7 @@ import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
 
-import { applyMigrations } from "../src/migrate";
+import { DestructiveMigrationError, applyMigrations } from "../src/migrate";
 
 // Migrations need the direct string: Neon's pooler runs in transaction
 // mode and the migrator takes a session lock.
@@ -28,6 +28,14 @@ const db = drizzle({ client: pool });
 try {
   await applyMigrations(db, migrate);
   console.log("migrations applied");
+} catch (error) {
+  // A refusal is a decision, not a crash: print the reason without a stack.
+  if (error instanceof DestructiveMigrationError) {
+    console.error(error.message);
+    process.exitCode = 1;
+  } else {
+    throw error;
+  }
 } finally {
   await pool.end();
 }

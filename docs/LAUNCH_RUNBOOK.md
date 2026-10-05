@@ -92,6 +92,18 @@ only. Record which it was in the progress log (task A4).
    the committed workflow.
 2. Secret scanning with push protection on; Dependabot alerts on.
 3. Enable Renovate (the GitHub App) so `.github/renovate.json` takes effect.
+4. An environment named `production-migrations` (Settings, Environments)
+   for `.github/workflows/migrate-production.yml`, the only path that
+   applies a contract migration (`DROP`, `RENAME`, `ALTER COLUMN ... TYPE`,
+   `TRUNCATE`) to production. Add yourself as a required reviewer, limit
+   deployment branches to `main`, and add the environment secret
+   `DATABASE_URL_UNPOOLED` holding the production owner role's direct
+   string. Secrets scoped to the environment are released only to a job
+   that targets it, so `ci.yml` never sees the credential. To run a
+   contract migration: note a Neon restore point (a snapshot or the
+   timestamp before the run), dispatch the workflow from `main` with the
+   migration's journal tag and that restore point, approve the review
+   prompt, and read the job summary, which records both inputs.
 
 ### Resend (Phase 1)
 
