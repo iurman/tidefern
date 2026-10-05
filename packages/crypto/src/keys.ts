@@ -14,6 +14,8 @@
 import { KEY_BYTES, openBytes, sealBytes } from "./envelope";
 
 export interface KeyProvider {
+  /** Stored beside each wrapped DEK as `kek_provider`; "env" in Phase 1, the KMS provider's name after it. */
+  readonly provider: string;
   /** Stored beside each wrapped DEK as `kek_version`; "v1" for TIDEFERN_KEK_V1. */
   readonly version: string;
   wrapDek(dek: Uint8Array, aad: string): Promise<Uint8Array> | Uint8Array;
@@ -30,6 +32,7 @@ export class KeyConfigurationError extends Error {
  * and a second instance with another key stands in for a rotated KEK.
  */
 export class FixedKeyProvider implements KeyProvider {
+  readonly provider = "fixed";
   readonly version: string;
   readonly #key: Uint8Array;
 
@@ -52,13 +55,22 @@ export class FixedKeyProvider implements KeyProvider {
 
 const ENV_NAME = /^TIDEFERN_KEK_V(\d+)$/;
 
+/** Padding is the one thing a generator may legitimately leave off. */
+function unpadded(base64: string): string {
+  return base64.replace(/=+$/, "");
+}
+
 /**
  * Phase 1 provider: the KEK is base64 of exactly 32 bytes in TIDEFERN_KEK_V1
  * (architecture record 17.1). The variable is read on first use, not at
  * construction, so the API can build its provider at module scope and a
- * build or test process without the variable still starts.
+ * build or test process without the variable still starts. The value must
+ * be canonical base64: Node's decoder drops characters it does not know, so
+ * a pasted value with one stray character could still land on 32 bytes and
+ * silently become a different key from the one escrowed.
  */
 export class EnvKeyProvider implements KeyProvider {
+  readonly provider = "env";
   readonly version: string;
   readonly #name: string;
   #key: Uint8Array | undefined;
@@ -82,11 +94,13 @@ export class EnvKeyProvider implements KeyProvider {
 
   #load(): Uint8Array {
     if (this.#key) return this.#key;
-    const raw = process.env[this.#name];
+    const raw = process.env[this.#name]?.trim();
     if (!raw) throw new KeyConfigurationError(`${this.#name} is not set`);
     const key = Buffer.from(raw, "base64");
-    if (key.byteLength !== KEY_BYTES) {
-      throw new KeyConfigurationError(`${this.#name} must be base64 of exactly ${KEY_BYTES} bytes`);
+    if (key.byteLength !== KEY_BYTES || unpadded(key.toString("base64")) !== unpadded(raw)) {
+      throw new KeyConfigurationError(
+        `${this.#name} must be canonical base64 of exactly ${KEY_BYTES} bytes`,
+      );
     }
     this.#key = key;
     return key;

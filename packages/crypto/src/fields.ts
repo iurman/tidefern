@@ -51,20 +51,21 @@ export function decryptField(
   return Buffer.from(plaintext.buffer, plaintext.byteOffset, plaintext.byteLength).toString("utf8");
 }
 
-/** The two columns `subject_keys` stores for a subject. */
+/** The three columns `subject_keys` stores for a subject (architecture record 7.4). */
 export interface WrappedDek {
   wrapped: Uint8Array;
+  kekProvider: string;
   kekVersion: string;
 }
 
-/** Wraps a DEK and records which KEK version did it, so the row can say so. */
+/** Wraps a DEK and records which KEK provider and version did it, so the row can say so. */
 export async function wrapSubjectDek(
   provider: KeyProvider,
   subjectId: string,
   dek: Uint8Array,
 ): Promise<WrappedDek> {
   const wrapped = await provider.wrapDek(dek, dekAad(subjectId, provider.version));
-  return { wrapped, kekVersion: provider.version };
+  return { wrapped, kekProvider: provider.provider, kekVersion: provider.version };
 }
 
 /** Mints a subject's DEK at sign-up or child creation and returns it with its stored form. */
@@ -77,18 +78,19 @@ export async function createSubjectKey(
 }
 
 /**
- * Unwraps a stored DEK. A row wrapped under another KEK version is refused
- * before any key is used: that is the rotation job's cue to unwrap with the
- * retiring provider and wrap again with the current one.
+ * Unwraps a stored DEK. A row wrapped by another provider or under another
+ * KEK version is refused before any key is used: that is the rotation job's
+ * cue (yearly version, or the Phase 2 move from env to KMS) to unwrap with
+ * the retiring provider and wrap again with the current one.
  */
 export async function unwrapSubjectDek(
   provider: KeyProvider,
   subjectId: string,
   record: WrappedDek,
 ): Promise<Uint8Array> {
-  if (record.kekVersion !== provider.version) {
+  if (record.kekProvider !== provider.provider || record.kekVersion !== provider.version) {
     throw new KeyConfigurationError(
-      `wrapped key needs KEK ${record.kekVersion} but the provider is ${provider.version}`,
+      `wrapped key needs ${record.kekProvider} KEK ${record.kekVersion} but the provider is ${provider.provider} ${provider.version}`,
     );
   }
   return provider.unwrapDek(record.wrapped, dekAad(subjectId, record.kekVersion));

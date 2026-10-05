@@ -8,7 +8,7 @@ import {
   unwrapSubjectDek,
   wrapSubjectDek,
 } from "./fields";
-import { FixedKeyProvider, KeyConfigurationError } from "./keys";
+import { FixedKeyProvider, KeyConfigurationError, type KeyProvider } from "./keys";
 
 const kekBytes = Uint8Array.from({ length: 32 }, (_, index) => index);
 const kek = new FixedKeyProvider(kekBytes, "v1");
@@ -63,9 +63,10 @@ describe("field encryption", () => {
 });
 
 describe("subject keys", () => {
-  it("wraps a DEK, records the KEK version, and unwraps it back", async () => {
+  it("wraps a DEK, records the KEK provider and version, and unwraps it back", async () => {
     const dek = generateDek();
     const record = await wrapSubjectDek(kek, subject, dek);
+    expect(record.kekProvider).toBe("fixed");
     expect(record.kekVersion).toBe("v1");
     expect(hex(record.wrapped)).not.toContain(hex(dek));
     expect(hex(await unwrapSubjectDek(kek, subject, record))).toBe(hex(dek));
@@ -76,15 +77,26 @@ describe("subject keys", () => {
     await expect(unwrapSubjectDek(rotated, subject, record)).rejects.toThrow(KeyConfigurationError);
     await expect(unwrapSubjectDek(kek, "another-subject", record)).rejects.toThrow(DecryptionError);
   });
+  it("refuses a record wrapped by another provider even at the same KEK version", async () => {
+    const record = await wrapSubjectDek(kek, subject, generateDek());
+    // Same key bytes and version, so only the provider label differs: the Phase 2 re-wrap cue.
+    const kms: KeyProvider = {
+      provider: "aws-kms",
+      version: kek.version,
+      wrapDek: (dek, aad) => kek.wrapDek(dek, aad),
+      unwrapDek: (wrapped, aad) => kek.unwrapDek(wrapped, aad),
+    };
+    await expect(unwrapSubjectDek(kms, subject, record)).rejects.toThrow(KeyConfigurationError);
+  });
   it("leaves a field unreadable once its wrapped DEK is discarded", async () => {
-    const { dek, kekVersion } = await createSubjectKey(kek, subject);
+    const { dek, kekProvider, kekVersion } = await createSubjectKey(kek, subject);
     const blob = encryptField(dek, location, "a short note");
     dek.fill(0);
     // The wrapped row is gone; what remains is the KEK, the blob and a zeroed buffer.
     expect(() => decryptField(dek, location, blob)).toThrow(DecryptionError);
     expect(() => decryptField(kekBytes, location, blob)).toThrow(DecryptionError);
-    await expect(unwrapSubjectDek(kek, subject, { wrapped: blob, kekVersion })).rejects.toThrow(
-      DecryptionError,
-    );
+    await expect(
+      unwrapSubjectDek(kek, subject, { wrapped: blob, kekProvider, kekVersion }),
+    ).rejects.toThrow(DecryptionError);
   });
 });
