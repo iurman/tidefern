@@ -116,6 +116,11 @@ generated. The journal after task B7:
   exception is `vocabulary`, reference data keyed by its natural
   `(kind, code)` pair, which is what makes the seed idempotent.
 - `created_at` and `updated_at` are `timestamptz` with `now()` defaults.
+  Four tables carry `created_at` only, because a row there is never
+  edited in the ordinary way: `due_date_changes` and `audit_events` are
+  append-only logs, `vocabulary` is seeded reference data, and
+  `subject_keys` records its one change in place, a rotation, in
+  `rotated_at`. `src/schema.test.ts` pins that list from the catalog.
   Every syncable user-data table (entries, symptoms, predictions,
   pregnancies, events, children, measurements, notes, photos, grants,
   consents) also carries `version` (default 1) and a content-free

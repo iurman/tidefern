@@ -8,6 +8,7 @@ import {
   BEN,
   CHILD,
   HOUSEHOLD,
+  constraintNames,
   expectJournalApplied,
   id,
   insertUser,
@@ -32,6 +33,18 @@ async function columnNames(table: string): Promise<string[]> {
       sql`select column_name from information_schema.columns where table_name = ${table} order by column_name`,
     ),
   ).map((row) => row.column_name as string);
+}
+
+/** The named index exists on the table and covers exactly these columns, in order. */
+async function expectIndex(table: string, name: string, columns: string[]) {
+  expect(await constraintNames(harness, table)).toContain(name);
+  const [definition] = rows(
+    await harness.db.execute(
+      sql`select indexdef from pg_catalog.pg_indexes where indexname = ${name}`,
+    ),
+  );
+  expect(definition?.indexdef).toMatch(/^CREATE INDEX /);
+  expect(definition?.indexdef).toContain(`(${columns.join(", ")})`);
 }
 
 beforeAll(async () => {
@@ -311,9 +324,20 @@ describe("audit events", () => {
       { id: id(35), actorId: ANNA, action: "session.sign_in", subjectId: ANNA },
     ]);
   });
+
+  test("carry the (subject_id, created_at) index 7.4 names", async () => {
+    await expectIndex("audit_events", "audit_events_subject_created_idx", [
+      "subject_id",
+      "created_at",
+    ]);
+  });
 });
 
 describe("jobs and idempotency keys", () => {
+  test("carry the (status, run_after) index 10.1 and 7.4 name", async () => {
+    await expectIndex("jobs", "jobs_status_run_after_idx", ["status", "run_after"]);
+  });
+
   test("queue a job with an ids-only payload and the defaults 10.1 names", async () => {
     const [job] = await harness.db
       .insert(schema.jobs)
