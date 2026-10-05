@@ -73,7 +73,7 @@ test("security headers and no indexing on previews", async ({ request }) => {
 
 for (const theme of ["light", "dark"] as const) {
   test(`home and design pages have no axe violations in ${theme} mode`, async ({ page }) => {
-    for (const path of ["/", "/design"]) {
+    for (const path of ["/", "/design", "/design/type"]) {
       await page.goto(path);
       await page.evaluate((value) => {
         document.documentElement.dataset.theme = value;
@@ -178,4 +178,25 @@ test("every public page links the health privacy policy by its required name @sm
     "Consumer Health Data Privacy Policy",
   );
   await expect(page.getByText("Draft, not yet reviewed")).toBeVisible();
+});
+
+test("the type chapter renders the specimens in both faces", async ({ page }) => {
+  await page.goto("/design/type");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Two faces, each with one job.");
+  const wordmark = page.locator(".specimen-wordmark").first();
+  await expect(wordmark).toHaveText("Tidefern");
+  const families = await page.evaluate(() => {
+    const family = (selector: string) =>
+      getComputedStyle(document.querySelector(selector) as Element).fontFamily;
+    return {
+      wordmark: family(".specimen-wordmark"),
+      body: family(".specimen-reading"),
+      numeric: getComputedStyle(document.querySelector(".numeral-column.tabular") as Element)
+        .fontVariantNumeric,
+    };
+  });
+  expect(families.wordmark).toMatch(/newsreader/i);
+  expect(families.body).toMatch(/figtree/i);
+  expect(families.numeric).toBe("tabular-nums");
+  await expect(page.getByRole("link", { name: "Previous: Design system" })).toBeVisible();
 });

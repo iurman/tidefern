@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { designTokens } from "@tidefern/design-tokens";
 import { pageMetadata } from "@/lib/site";
 
@@ -44,7 +45,15 @@ export default function DesignHome() {
         <ul className="chapter-grid">
           {chapters.map((chapter) => (
             <li key={chapter.slug}>
-              <h3>{chapter.title}</h3>
+              <h3>
+                {chapter.slug === "type" ? (
+                  <Link href="/design/type" prefetch={false}>
+                    {chapter.title}
+                  </Link>
+                ) : (
+                  chapter.title
+                )}
+              </h3>
               <p>{chapter.text}</p>
             </li>
           ))}
