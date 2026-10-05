@@ -587,15 +587,18 @@ Process notes:
 
 ### G1 closed
 
-`docs/design/RESEARCH.md` (429 lines) records eleven gallery and
-documentation observations with committed captures under
-`docs/design/research/` (19 JPEGs, 1.1 MB), the trend galleries as
+`docs/design/RESEARCH.md` records fifteen gallery and documentation
+observations with committed captures under `docs/design/research/`
+(23 JPEGs, 1.3 MB), the trend galleries as
 counter-signals, eight product references grouped by surface, fifteen
 decisions handed to G2, G5, G6, G7, E7, H1 to H7 and J3, the pinned
 guidelines skill, the `react-day-picker` 10.0.2 pin decision, and the
 inaccessible and licence tables. The skeptics confirmed or partially
 confirmed every observation the record keeps; the one correction (the
-size of Natural Cycles' first-cycle buffer) was applied. The pinned
+size of Natural Cycles' first-cycle buffer) was applied. A fresh-context
+review of the pull request then found two gaps (the Apple legend clip
+missed the legend; the empty-state and progress-indicator indexes were not
+rows) and four smaller ones; all six were fixed before the merge. The pinned
 Vercel guidelines audit skill lives in `.agents/skills/web-design-guidelines`.
 
 Owner question surfaced by F1: whether Tidefern may vendor WHO's own daily
