@@ -112,6 +112,41 @@ describe("findDestructiveStatement", () => {
       ),
     ).toBe("DROP");
   });
+
+  test("an apostrophe inside a dollar-quoted body does not hide a later statement", () => {
+    expect(
+      findDestructiveStatement("DO $$ BEGIN RAISE NOTICE $m$don't$m$; END $$;\nDROP TABLE t;"),
+    ).toBe("DROP");
+    expect(
+      findDestructiveStatement("ALTER TABLE t ALTER COLUMN c SET DEFAULT $x$it's$x$;\nTRUNCATE t;"),
+    ).toBe("TRUNCATE");
+    expect(
+      findDestructiveStatement(
+        "DO $body$ BEGIN RAISE NOTICE 'don''t'; END $body$;\nALTER TABLE t RENAME TO u;",
+      ),
+    ).toBe("RENAME");
+  });
+
+  test("a dollar-quoted body is cleaned like the rest of the file", () => {
+    expect(
+      findDestructiveStatement(
+        "DO $$ BEGIN RAISE NOTICE 'drop nothing'; -- truncate later\nEND $$;\nCREATE TABLE t (n int);",
+      ),
+    ).toBeNull();
+    expect(findDestructiveStatement("SELECT $1, $2 FROM t WHERE n = 'x';\nDROP TABLE t;")).toBe(
+      "DROP",
+    );
+  });
+
+  test("honours backslash escapes in E'' literals and nested block comments", () => {
+    expect(findDestructiveStatement("INSERT INTO t VALUES (E'a\\'drop\\'b');")).toBeNull();
+    expect(
+      findDestructiveStatement("/* outer /* inner */ DROP TABLE t; */ CREATE TABLE x (id int);"),
+    ).toBeNull();
+    expect(findDestructiveStatement("INSERT INTO t VALUES (E'a\\'b');\nTRUNCATE t;")).toBe(
+      "TRUNCATE",
+    );
+  });
 });
 
 describe("applyMigrations", () => {

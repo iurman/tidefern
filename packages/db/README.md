@@ -42,8 +42,11 @@ Before it applies anything, `applyMigrations` reads the journal and the
 `created_at` of the newest row in `drizzle.__drizzle_migrations` (a database
 with no such table has nothing applied), and scans every pending SQL file
 for `DROP`, `RENAME`, `ALTER COLUMN ... TYPE` and `TRUNCATE` as keywords,
-case insensitive, after stripping `--` and block comments, string literals
-and quoted identifiers; a `DO` block is scanned like any other statement.
+case insensitive, after stripping `--` and block comments (nested ones
+too), string literals (`''` and the backslash escapes of `E''`) and quoted
+identifiers; a dollar-quoted body such as a `DO` block is one token that is
+cleaned the same way and then scanned like any other statement, so a drop
+inside it counts and an apostrophe inside it hides nothing after it.
 Any `DROP` counts, including `DROP NOT NULL` and `DROP DEFAULT`. When a
 pending file matches and `MIGRATE_DESTRUCTIVE` is not exactly `1`, the
 runner throws `DestructiveMigrationError`, naming the file and the

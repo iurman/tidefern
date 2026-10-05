@@ -55,12 +55,22 @@ interface JournalEntry {
   when: number;
 }
 
+/** Matches a dollar-quote opener such as `$$` or `$body$`; `$1` is a parameter, not a quote. */
+const DOLLAR_TAG = /^\$([A-Za-z_][A-Za-z0-9_]*)?\$/;
+
+function isWordChar(ch: string | undefined): boolean {
+  return ch !== undefined && /[A-Za-z0-9_]/.test(ch);
+}
+
 /**
  * Removes everything the scanner must not read as SQL: `--` and block
- * comments, single-quoted literals (with `''` and the `E''` form) and
- * double-quoted identifiers. Dollar-quoted bodies stay, on purpose: a `DO`
- * block that drops a table is still a drop. Line structure is kept so
- * statements still split on their semicolons.
+ * comments (nested, as Postgres nests them), single-quoted literals (with
+ * `''`, and backslash escapes in the `E''` form) and double-quoted
+ * identifiers. A dollar-quoted body (`$$ ... $$` or `$tag$ ... $tag$`) is
+ * one token: its text is kept, on purpose, because a `DO` block that drops
+ * a table is still a drop, and it is cleaned the same way, so an apostrophe
+ * inside it never opens a literal that swallows the rest of the file. Line
+ * structure is kept so statements still split on their semicolons.
  */
 function stripSqlNoise(text: string): string {
   let out = "";
@@ -74,15 +84,44 @@ function stripSqlNoise(text: string): string {
       continue;
     }
     if (ch === "/" && next === "*") {
-      const end = text.indexOf("*/", i + 2);
-      i = end === -1 ? text.length : end + 2;
+      let depth = 1;
+      let j = i + 2;
+      while (j < text.length && depth > 0) {
+        if (text[j] === "/" && text[j + 1] === "*") {
+          depth += 1;
+          j += 2;
+        } else if (text[j] === "*" && text[j + 1] === "/") {
+          depth -= 1;
+          j += 2;
+        } else {
+          j += 1;
+        }
+      }
+      i = j;
       out += " ";
       continue;
     }
+    if (ch === "$") {
+      const tag = DOLLAR_TAG.exec(text.slice(i, i + 64))?.[0];
+      if (tag) {
+        const bodyStart = i + tag.length;
+        const end = text.indexOf(tag, bodyStart);
+        const bodyEnd = end === -1 ? text.length : end;
+        out += ` ${stripSqlNoise(text.slice(bodyStart, bodyEnd))} `;
+        i = end === -1 ? text.length : end + tag.length;
+        continue;
+      }
+    }
     if (ch === "'" || ch === '"') {
       const quote = ch;
+      const escaped =
+        quote === "'" && (text[i - 1] === "E" || text[i - 1] === "e") && !isWordChar(text[i - 2]);
       let j = i + 1;
       while (j < text.length) {
+        if (escaped && text[j] === "\\") {
+          j += 2;
+          continue;
+        }
         if (text[j] === quote) {
           if (text[j + 1] === quote) {
             j += 2;
