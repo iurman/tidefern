@@ -64,6 +64,7 @@ describe("the journal", () => {
       "0000_create_app_role",
       "0001_identity_and_profiles",
       "0002_relationships",
+      "0003_cycle",
     ]);
 
     const files = readMigrationFiles(migrationConfig);
@@ -84,6 +85,9 @@ describe("the journal", () => {
     expect(tables.map((row) => row.table_name)).toEqual([
       "account",
       "consents",
+      "cycle_entries",
+      "cycle_predictions",
+      "entry_symptoms",
       "grants",
       "household_members",
       "households",
@@ -96,6 +100,7 @@ describe("the journal", () => {
       "two_factor",
       "user",
       "verification",
+      "vocabulary",
     ]);
 
     const [userId] = rows(
@@ -264,6 +269,9 @@ describe("row level security", () => {
     expect(flags).toEqual([
       { relname: "account", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "consents", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "cycle_entries", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "cycle_predictions", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "entry_symptoms", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "grants", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "household_members", relrowsecurity: true, relforcerowsecurity: false },
       { relname: "households", relrowsecurity: true, relforcerowsecurity: false },
@@ -276,6 +284,7 @@ describe("row level security", () => {
       { relname: "two_factor", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "user", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "verification", relrowsecurity: false, relforcerowsecurity: false },
+      { relname: "vocabulary", relrowsecurity: false, relforcerowsecurity: false },
     ]);
   });
 

@@ -76,3 +76,47 @@ export const shareLevelEnum = pgEnum("share_level", shareLevelValues);
  */
 export const consentBasisValues = ["necessary", "consent"] as const;
 export const consentBasisEnum = pgEnum("consent_basis", consentBasisValues);
+
+/** Mirrors `FlowLevel` in packages/schemas. */
+export const flowLevelValues = ["none", "spotting", "light", "medium", "heavy"] as const;
+export const flowLevelEnum = pgEnum("flow_level", flowLevelValues);
+
+/** Mirrors `SymptomCode` in packages/schemas. */
+export const symptomCodeValues = [
+  "cramps",
+  "headache",
+  "bloating",
+  "fatigue",
+  "tender_breasts",
+  "nausea",
+  "backache",
+  "acne",
+  "cravings",
+  "insomnia",
+  "spotting",
+  "discharge",
+  "hot_flashes",
+  "dizziness",
+  "mood_swings",
+  "anxiety",
+  "low_energy",
+  "high_energy",
+  "other",
+] as const;
+export const symptomCodeEnum = pgEnum("symptom_code", symptomCodeValues);
+
+/** Mirrors `MoodCode` in packages/schemas. */
+export const moodCodeValues = ["low", "steady", "bright"] as const;
+export const moodCodeEnum = pgEnum("mood_code", moodCodeValues);
+
+/** The lists the `vocabulary` table holds, one per picker. */
+export const vocabularyKindValues = ["flow", "symptom", "mood"] as const;
+export const vocabularyKindEnum = pgEnum("vocabulary_kind", vocabularyKindValues);
+
+/** Mirrors `PredictionBasis` in packages/core. */
+export const predictionBasisValues = [
+  "first_guess",
+  "estimate",
+  "not_enough_regular_cycles",
+] as const;
+export const predictionBasisEnum = pgEnum("prediction_basis", predictionBasisValues);
