@@ -7,25 +7,20 @@ findings and the next concrete action. Resume from the last entry and
 
 ## Owner actions pending (kept current by the lead; details in the newest entry)
 
-1. Dependency install on the owner's machine: the lockfile pins `hono`
-   4.13.13 (published 2026-10-04) and the machine's safe-chain guard blocks
-   it under its minimum package age rule, so `pnpm install --frozen-lockfile`
-   exits without linking anything. Run it once yourself with the guard's own
-   flag, `pnpm install --frozen-lockfile --safe-chain-skip-minimum-package-age`,
-   or wait until the release ages past the threshold. The agent may not pass
-   that flag.
-2. GitHub: `VERCEL_AUTOMATION_BYPASS_SECRET` is stored as a repository
-   variable, not a secret, so `deploy-verify.yml` reads an empty value and
-   every preview smoke test fails. Regenerate the Protection Bypass for
-   Automation value in the Vercel project (Settings, Deployment Protection),
-   store it with `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`, then delete
-   the variable (`gh variable delete VERCEL_AUTOMATION_BYPASS_SECRET`). The
-   old value sat in a variable of a public repository, so rotate rather than
-   copy.
-3. Vercel connector: the MCP connection is authorized for the personal scope
+1. Vercel connector: the MCP connection is authorized for the personal scope
    only and answers 403 for the `iurman's projects` team. Re-authorize it at
    team scope so A2, A4 and the deployment checks can use it. Until then the
    lead uses the logged-in Vercel CLI for read-only inspection.
+2. Rotate the Protection Bypass for Automation value in the Vercel project
+   (Settings, Deployment Protection) and store the new value with
+   `gh secret set VERCEL_AUTOMATION_BYPASS_SECRET`; the current value sat in
+   a plaintext repository variable until 2026-10-04.
+3. Set a Vercel usage alert and record the team plan on task A2 (stated as
+   Pro; not readable through the connector).
+4. The machine's safe-chain guard blocks any lockfile pin published within
+   its minimum package age; when that recurs, run
+   `pnpm install --frozen-lockfile --safe-chain-skip-minimum-package-age`
+   yourself from the session prompt.
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -344,9 +339,11 @@ spot-checked their citations. Their findings are recorded below under
 
 | Command | Result |
 | --- | --- |
-| `pnpm install --frozen-lockfile` | failed: `ERR_PNPM_FETCH_403` on `hono-4.13.13.tgz`, blocked by safe-chain's minimum package age (hono 4.13.13 was published 2026-10-04T03:53Z and the lockfile pins it). pnpm exited 0 but linked nothing: `node_modules/.bin` is empty. The same install passes in CI (run 37250792049 on `main`). |
-| `pnpm --filter web exec playwright install chromium` | not run (no `node_modules`); Chromium build 1243 is already present in `~/.cache/ms-playwright` |
-| `pnpm check`, `pnpm test:e2e`, `pnpm build`, `pnpm --filter web start`, `node apps/web/scripts/capture.mjs` | not run, blocked by the install |
+| `pnpm install --frozen-lockfile` | first run failed: `ERR_PNPM_FETCH_403` on `hono-4.13.13.tgz`, blocked by safe-chain's minimum package age (hono 4.13.13 was published 2026-10-04T03:53Z and the lockfile pins it); pnpm exited 0 but linked nothing. The owner then ran it with `--safe-chain-skip-minimum-package-age`: 422 packages, done in 9.1s, engine warning for local Node 26.7.0 (expected). One build script ignored (`unrs-resolver`), which the previous session saw too. |
+| `pnpm --filter web exec playwright install chromium` | passed; Chromium 1243 already present (Playwright prints a fallback-build notice for this OS) |
+| `pnpm check` | passed: prose 117 files, skills 4, tokens, contrast 96 pairings, brand 5 files, OpenAPI, Prettier, then `turbo run lint typecheck test build` with 13 of 13 tasks successful; 37 unit tests (core 32, api 5) |
+| `pnpm test:e2e` | first run could not bind port 3000: a three-day-old `next-server` from another checkout (`~/.codex/worktrees/0a53/crm`) holds it and answers 500; left untouched. Rerun in external mode against `pnpm start --port 3100`: `12 passed (6.5s)` |
+| `node apps/web/scripts/capture.mjs` (against port 3100) | 8 screenshots of `/` and `/design` in both themes at 1440 and 390 px, written to the session scratchpad and inspected: the mark swaps to its dark variant, the warm panel reads in both themes, nothing clips or overflows at 390 px, the header navigation link is hidden on phones (known, G5). Not committed; J3 owns `docs/design/qa/` |
 | Version confirmation (`npm view`, 2026-10-04) | see the table below |
 | `gh auth status` | logged in as `iurman`; no open pull requests; remote branches `main` and the merged `claude/friendly-johnson-lrt79s` |
 | `gh run list` | CI and CodeQL green on `main` (37250792049, 37250792077); `Verify deployment` red on every deployment since the project was connected |
@@ -484,9 +481,15 @@ request template exists (`.github/PULL_REQUEST_TEMPLATE.md`), and
 `packages/api/scripts/emit-openapi.ts` exists. Three line citations were
 off by one; the content was right.
 
+### Owner actions resolved in this session
+
+Owner action 1 (install) and owner action 2 (the bypass secret) were run
+by the owner from the session prompt; the plaintext variable was deleted
+afterwards (`gh variable list` shows only `PRODUCTION_URL`). Rotation of
+the bypass value in Vercel is still recommended because it sat in a
+repository variable. Owner action 3 (connector scope) stays open.
+
 ### Next action
 
-After owner action 1: `pnpm install --frozen-lockfile`, `pnpm check`,
-`pnpm test:e2e`, `pnpm build`, start the production server, run
-`node apps/web/scripts/capture.mjs`, inspect the screenshots, record the
-results here, close A1, then claim G1.
+A1 closes with this entry. Next: claim G1 (design research record) on
+`claude/G1-research`.
