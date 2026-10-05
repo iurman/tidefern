@@ -50,6 +50,15 @@ only.
 | Placeholders end with an ellipsis and show an example | No placeholder-as-label; help text carries the example | Section 13.10 form anatomy |
 | `autocomplete="off"` on non-auth fields | Only where a password manager would otherwise fire; health fields keep `inputMode` and sensible `autocomplete` | Section 13.9 (3.3.8) and 13.10 |
 | Toasts and async updates use `aria-live="polite"` | Same, and every cue also has visible text; sound never carries meaning alone | Section 14.1 |
+| URL reflects state; deep-link filters, tabs and panels through query params (lines 97 and 99) | Only neutral state lives in the URL: the calendar month and view, a design chapter tab. Flow, symptoms, mood, note content, sharing categories and measurements never do | Section 9.1: health data never travels in URLs or query strings |
+| Preconnect to asset domains and preload fonts (lines 90 and 91) | Not applicable: fonts are self-hosted through `next/font/local`, no CDN | Section 13.5; close such a finding with a note |
+| Prefer muted autoplay video over GIF (lines 92 and 93) | Not applicable: no stock imagery, generated art, GIFs or video in Phase 1 | Section 13.10 |
+| Virtualize lists over 50 items (line 86) | Paginate (activity is cursor paginated) or accept the list; never add a virtualization library on the audit's say-so alone | Section 5.1 lists |
+
+The upstream skill repository declares MIT in its README only (no LICENSE
+file at the pinned commit); the rule file repository carries the full MIT
+text. This wrapper is written in Tidefern's own words and reads the rule
+file at audit time, so no upstream text is redistributed.
 
 Everything else in the rule file applies as written: reduced motion honoured,
 transform and opacity only, no `transition: all`, `color-scheme` and
