@@ -1,4 +1,10 @@
-# Vendored growth chart data
+# Vendored data sources
+
+Every dataset under `packages/core/data` is listed here with its origin, the
+date it was captured, its licence terms and the attribution the product must
+show. The growth chart tables come first; the milestone checklists follow.
+
+## Growth chart data
 
 The files under `cdc/` and `who/` are the reference tables the growth engine
 in `packages/core/src/growth.ts` runs on. They are kept exactly as downloaded
@@ -251,3 +257,23 @@ header line where the girls' rows begin; the generator skips the repeat.
 cdc.gov answers 403 to a plain `curl`; the files were fetched with a browser
 User-Agent and Accept headers, and the WHO girls' head circumference download
 was retried once after a connection reset.
+
+## CDC milestone checklists (`milestones/2022.json`)
+
+Origin: CDC "Learn the Signs. Act Early." developmental milestone checklists,
+2022 revision, text only, from the twelve per-age pages linked at
+https://www.cdc.gov/act-early/milestones/index.html (the full URL list and the
+capture method are in `milestones/README.md`).
+
+Captured: 2026-10-05, rendered in Chromium; the pages reported "last reviewed
+on May 15, 2026" (a later text-only fetch the same day showed "Reviewed: May
+16, 2026" with identical items).
+
+Licence: a United States Government work (17 U.S.C. 105), public domain, under
+CDC's reuse terms: attribution to CDC, a disclaimer that use does not imply
+endorsement by CDC, and no use of the CDC logo. Photos and videos on the CDC
+pages may be contractor owned and were not captured.
+
+Attribution shown with the data: "Source: CDC. Reference to CDC materials does
+not imply endorsement by CDC, HHS or the U.S. Government." Shown next to it at
+all times: "This is not a screening tool; your pediatrician is."
