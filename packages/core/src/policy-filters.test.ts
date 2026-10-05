@@ -113,6 +113,42 @@ describe("listScope()", () => {
     ]);
     expect(listScope(auntie, "write").filter((s) => s.reason === "grant")).toEqual([]);
   });
+  it("carries the child id on every scope that reaches a child", () => {
+    for (const actor of [herself, partnerActor, auntie]) {
+      for (const scope of listScope(actor, "read")) {
+        if (scope.reason !== "owner" && scope.categories.includes("child")) {
+          expect(scope.childId).toBeDefined();
+        }
+      }
+    }
+  });
+  it("answers from the first of two active grants on one category, as can() does", () => {
+    const doubled: Actor = {
+      id: partner,
+      guardianOf: [],
+      grants: [
+        {
+          ownerId: her,
+          granteeId: partner,
+          category: "cycle.history",
+          level: "read",
+          revokedAt: null,
+        },
+        {
+          ownerId: her,
+          granteeId: partner,
+          category: "cycle.history",
+          level: "contribute",
+          revokedAt: null,
+        },
+      ],
+    };
+    expect(listScope(doubled, "read").filter((s) => s.reason === "grant")).toEqual([
+      { reason: "grant", subjectId: her, categories: ["cycle.history"], level: "read" },
+    ]);
+    expect(listScope(doubled, "write").filter((s) => s.reason === "grant")).toEqual([]);
+    expect(categoriesFor(doubled, her)?.levels).toEqual({ "cycle.history": "read" });
+  });
   it("never reaches the private journal through a grant", () => {
     const generous: Actor = {
       ...partnerActor,

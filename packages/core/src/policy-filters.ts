@@ -23,9 +23,12 @@ export interface Access {
 /** One subject a list endpoint may include, with the level held there. */
 export interface Scope extends Access {
   /**
-   * The id can() compares against resource.subjectId: the actor herself, the
-   * owner who made a grant, or for a guardianship the child, which 8.3 names
-   * as the subject of a child record. Child tables filter by childId.
+   * The id can() compares against resource.subjectId, which differs by
+   * reason: the actor herself for "owner", the owner who made the grant for
+   * "grant" (a child grant included), and the child for "guardian", which
+   * 8.3 names as the subject of a child record. So a child table never
+   * filters by subjectId; it filters by childId, which every scope that
+   * reaches a child carries.
    */
   subjectId: string;
   level: Level;
@@ -77,13 +80,19 @@ function guardianScope(childId: string): Scope {
  * active grant that can() accepts for the action, so a summary grant is
  * absent from a read list and no grant ever reaches journal.private. A grant
  * can() answers with "owner" or "guardian" is already covered by the scope
- * above it and is not repeated.
+ * above it and is not repeated. When two active grants share one (owner,
+ * category, child) tuple only the first counts, because that is the one
+ * can() answers from; the level reported here is then the level enforced.
  */
 export function listScope(actor: Actor, action: Action): Scope[] {
   const scopes: Scope[] = [ownerScope(actor)];
   for (const childId of actor.guardianOf) scopes.push(guardianScope(childId));
+  const seen = new Set<string>();
   for (const grant of actor.grants) {
     if (grant.revokedAt !== null) continue;
+    const tuple = [grant.ownerId, grant.category, grant.childId ?? ""].join("|");
+    if (seen.has(tuple)) continue;
+    seen.add(tuple);
     const resource =
       grant.childId === undefined
         ? { subjectId: grant.ownerId, category: grant.category }
@@ -105,8 +114,11 @@ export function listScope(actor: Actor, action: Action): Scope[] {
 /**
  * The categories and levels the actor holds on one subject, or null when
  * can() would deny every category, which the request flow answers with 404.
- * Pass childId for a child record; then only guardianship and child grants
- * for that child count, exactly as can() matches them.
+ * subjectId is the id can() matches a grant's ownerId against, so for a
+ * child record pass the guardian who made the grant as subjectId and the
+ * child as childId; then only guardianship and child grants for that child
+ * count, exactly as can() matches them. Two active grants on one category
+ * resolve to the first, as in can().
  */
 export function categoriesFor(
   actor: Actor,
