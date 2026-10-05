@@ -3,10 +3,11 @@ import { customType, pgTable, text, timestamp, uuid } from "drizzle-orm/pg-core"
 import { subjectKindEnum } from "./enums";
 
 // drizzle-orm 0.45.3 ships no bytea column; this is the one place it is
-// declared. Both drivers (node-postgres and PGlite) hand bytea back as a
+// declared, and every encrypted column in the other schema files imports
+// it. Both drivers (node-postgres and PGlite) hand bytea back as a
 // Uint8Array (a Buffer in node-postgres, which is one), so the round trip
 // is bytes in, bytes out.
-const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
+export const bytea = customType<{ data: Uint8Array; driverData: Uint8Array }>({
   dataType() {
     return "bytea";
   },

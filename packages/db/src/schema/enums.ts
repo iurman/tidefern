@@ -120,3 +120,15 @@ export const predictionBasisValues = [
   "not_enough_regular_cycles",
 ] as const;
 export const predictionBasisEnum = pgEnum("prediction_basis", predictionBasisValues);
+
+/** Mirrors `DatingMethod` in packages/core (ACOG Committee Opinion 700). */
+export const datingMethodValues = ["lmp", "ultrasound", "transfer", "manual"] as const;
+export const datingMethodEnum = pgEnum("dating_method", datingMethodValues);
+
+/** Mirrors `EndedReason` in packages/core. Shown to nobody but her. */
+export const endedReasonValues = ["birth", "loss", "other"] as const;
+export const endedReasonEnum = pgEnum("ended_reason", endedReasonValues);
+
+/** Pregnancy events are appointments and milestones only; symptoms live on the day sheet. */
+export const pregnancyEventKindValues = ["appointment", "milestone"] as const;
+export const pregnancyEventKindEnum = pgEnum("pregnancy_event_kind", pregnancyEventKindValues);
