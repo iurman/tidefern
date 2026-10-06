@@ -187,7 +187,10 @@ revoked_at IS NULL`, so two active grants on one tuple cannot exist,
 - Children: a child belongs to a household with `ON DELETE RESTRICT` (a
   household with children is wound down explicitly); `child_guardians` is
   unique per child and user; `child_events` carry a `milestone_id` exactly
-  for milestones and a span for sleep; `child_measurements` need at least
+  for milestones and a span for sleep, and a feed may carry a `side`
+  (`left`, `right` or `both`, the closed nullable `child_event_side` enum
+  from migration `0009`, task B13) that the `child_events_side_is_for_feed`
+  check refuses on any other kind; `child_measurements` need at least
   one positive value.
 - Platform: `photos` hold the object key, status, content type, size,
   dimensions, an encrypted caption and the day taken, never a filename or
@@ -198,7 +201,11 @@ revoked_at IS NULL`, so two active grants on one tuple cannot exist,
   `(actor_id, key)` and hold `route`, `request_hash`, `state` and
   `resource_id`, never a response body; `data_requests` track the 45 day
   deadline, the closure `undo_until` and an `email_hmac` for people
-  without an account; `product_events` are daily counts unique on
+  without an account, and the partial unique index
+  `data_requests_open_closure_unique` on `(user_id) WHERE kind = 'closure'
+  AND state IN ('requested', 'in_progress')` (migration `0009`, task B13)
+  allows one open closure per person, a second guard behind the advisory
+  lock the close route takes; `product_events` are daily counts unique on
   `(day, name)` with no user column; `disclosures` is the per-user ledger
   of third parties.
 
@@ -228,6 +235,8 @@ behaviour on PGlite inside `withActor`, which drops to `tidefern_app`.
 | `is_household_member(household_id, role)`, `has_members(household_id)`, `may_join(household_id, role)` | definer | membership and invitation lookups |
 | `is_related(other_id)` | definer | a grant in either direction, a shared household, or a shared child |
 | `accept_invitation(invitation_id)` | definer, writes | sets `accepted_at` on an open invitation to the actor's verified email and nothing else; true when it closed one |
+| `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise |
+| `refresh_cycle_prediction(subject)` | definer, writes | migration `0010`, task B14: when `can_write(subject, 'cycle.history')` holds, keeps the live `cycle_predictions` row equal to the entries and pregnancies and answers true; false and nothing written otherwise |
 
 The `category` argument is text and the policies pass the literal they file
 under, so a row never spans categories except `cycle_entries`, where either
@@ -258,7 +267,9 @@ Two rules the SQL has to keep that `can()` never faces:
   read (`grants`, `child_guardians`, `household_members`, `children`,
   `invitations`) let `in_policy_helper()` through before anything else,
   and `invitations_update` does too, for the one write a helper makes
-  (`accept_invitation()`).
+  (`accept_invitation()`). Migration `0010` adds the marker to
+  `cycle_entries_select` and `pregnancies_select` for the two cycle
+  functions below.
   The marker counts only when `current_user` is not `tidefern_app`, so the
   app role setting it by hand changes nothing. `src/rls.test.ts` proves
   that from both roles, and its last block re-owns the helpers to a role
@@ -321,6 +332,44 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   who granted to her, or that child), so nobody files a read that could not
   have happened; nothing edits the log and only the system removes. `data_requests`: hers to read, file and cancel; the
   system closes. `disclosures`: hers to read, the product's to write.
+
+#### The derived cycle status and the prediction refresh
+
+Architecture record 8.2 derives `cycle.status` on read and never stores
+it, but a `cycle.status` grant reaches no row under the policies above, and
+a `cycle.history` contributor cannot see the pregnancy that suspends or
+bounds a prediction (8.4 rule 4). Migration `0010_cycle_status_functions`
+(hand-written, task B14) therefore derives both in the database and hands
+back derived values only:
+
+- `cycle_status_for(subject)` re-checks `can_read(subject, 'cycle.status')`
+  for the current actor, so a grant revoked after the session was loaded
+  answers no row. It takes no date: "today" is computed from `now()` in the
+  subject's profile zone (then the actor's, then UTC), so a grantee cannot
+  walk it back through the history. `GET /v1/cycle/status` calls it for the
+  subject and for a grantee alike and audits a grantee's read under
+  `cycle.status`.
+- `refresh_cycle_prediction(subject)` re-checks `can_write(subject,
+  'cycle.history')` and writes the live prediction row under the caller's
+  own insert and update policies; `PUT /v1/cycle/entries/{date}` calls it
+  after a contributor's history write. The subject's own writes and reads
+  keep recomputing through core in `packages/api`.
+- Two internal derivations run as their caller and are executable by the
+  owner role only (`REVOKE ... FROM PUBLIC`): `cycle_period_starts(subject)`
+  (the first bleeding day of each run, days up to two apart being one run,
+  spotting never bleeding) and `cycle_prediction_facts(subject)` (core's
+  `predictCycle` with the pregnancy rule). The app role holds `EXECUTE` on
+  the two entry points only.
+
+The SQL is a second implementation of `predictCycle` and of
+`periodStartsFrom` in `packages/api/src/routes/cycle.ts`, including the
+`PERIOD_GAP_DAYS` tolerance the owner has yet to confirm. The parity sweep
+in `packages/api/src/routes/cycle.test.ts` gives both the same rows for 60
+synthetic subjects and fails when either changes alone; a change to the
+rule is a `CREATE OR REPLACE FUNCTION` migration in the same pull request
+as the TypeScript. `src/b14-cycle-functions.test.ts` proves the grant
+checks, the privileges and the marker policies, and re-owns the two
+definers to a role that cannot bypass RLS to prove the Neon path.
 
 Changing a rule later is `ALTER POLICY ... USING (...)` or `CREATE OR
 REPLACE FUNCTION`, both additive; drizzle-kit does not model the helpers,

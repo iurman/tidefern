@@ -127,6 +127,8 @@ describe("the journal", () => {
       "0006_platform",
       "0007_row_level_security",
       "0008_idempotency_response",
+      "0009_child_event_side_and_open_closure",
+      "0010_cycle_status_functions",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

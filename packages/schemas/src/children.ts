@@ -26,6 +26,10 @@ export type Sex = z.infer<typeof Sex>;
 export const ChildEventKind = z.enum(["milestone", "feed", "sleep", "diaper"]);
 export type ChildEventKind = z.infer<typeof ChildEventKind>;
 
+/** The breast a feed was given from; a bottle feed has none, and only a feed may carry one. */
+export const ChildEventSide = z.enum(["left", "right", "both"]);
+export type ChildEventSide = z.infer<typeof ChildEventSide>;
+
 const DATE_PARTS = /^(\d{4})-(\d{2})-(\d{2})$/;
 
 /** A calendar date that exists; the regex alone accepts 2026-02-31. */
@@ -128,6 +132,7 @@ const EventFields = z.object({
     .max(2000)
     .optional()
     .describe("A feed's volume in millilitres; imperial is a display choice"),
+  side: ChildEventSide.optional().describe("A breast feed's side; absent for a bottle feed"),
   note: z
     .string()
     .trim()
@@ -156,6 +161,9 @@ function checkEvent(value: EventFields, ctx: z.RefinementCtx): void {
   }
   if (value.kind !== "feed" && value.quantityMl !== undefined) {
     ctx.addIssue({ code: "custom", path: ["quantityMl"], message: "Only a feed has a volume." });
+  }
+  if (value.kind !== "feed" && value.side !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["side"], message: "Only a feed has a side." });
   }
   if ((value.kind === "milestone" || value.kind === "diaper") && value.endedAt !== undefined) {
     ctx.addIssue({
@@ -198,6 +206,7 @@ export const ChildEvent = z
     endedAt: Instant.nullable(),
     milestoneId: MilestoneItemId.nullable(),
     quantityMl: z.int().nullable(),
+    side: ChildEventSide.nullable().describe("The breast a feed was given from; null otherwise"),
     note: z.string().nullable().describe("Decrypted for the actor after access is decided"),
     authorId: Id.nullable(),
     createdAt: Instant,

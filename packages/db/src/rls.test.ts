@@ -71,10 +71,15 @@ const DEFINER_HELPERS = [
   "can_write(uuid,text)",
   "can_use_key(uuid)",
   "is_related(uuid)",
+  // Task B14: the derived cycle status for a cycle.status grantee.
+  "cycle_status_for(uuid)",
 ];
 
-/** The one SECURITY DEFINER writer: an invitee closing her invitation. */
-const DEFINER_WRITERS = ["accept_invitation(uuid)"];
+/**
+ * The SECURITY DEFINER writers: an invitee closing her invitation, and
+ * (task B14) a contributor's prediction refresh.
+ */
+const DEFINER_WRITERS = ["accept_invitation(uuid)", "refresh_cycle_prediction(uuid)"];
 
 /** Every table 0007 forces, as the catalog orders them. */
 const RLS_TABLES = [

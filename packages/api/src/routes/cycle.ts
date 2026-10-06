@@ -1,13 +1,12 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context, TypedResponse } from "hono";
-import { and, asc, eq, gt, gte, inArray, isNotNull, isNull, lte, or } from "drizzle-orm";
+import { and, asc, eq, gt, gte, inArray, isNull, lte, or, sql } from "drizzle-orm";
 import {
   OVULATION_BAND_DAYS,
   addDays,
   can,
   compareDates,
-  cycleDay,
   diffDays,
   plausibleCycleLengths,
   predictCycle,
@@ -54,6 +53,15 @@ import type { ProblemCode } from "../problem";
  * project columns through `projectRow()` so a reader never receives a field
  * from a category she was not granted. Free text never travels here: the
  * day sheet's note is task E6's own encrypted row.
+ *
+ * Two derivations run in the database instead (task B14, migration
+ * `0010_cycle_status_functions`), because the actor's own transaction does
+ * not reach the rows they rest on: the status, through `cycle_status_for()`,
+ * which re-checks the `cycle.status` grant and returns derived values only
+ * (bounded by any pregnancy for a grantee, so a day count never discloses
+ * one), and a contributor's prediction refresh, through
+ * `refresh_cycle_prediction()`, which re-checks her `cycle.history`
+ * contribute grant and sees the pregnancy she cannot.
  */
 
 export interface CycleOptions {
@@ -180,7 +188,7 @@ async function auditPartnerRead(
   tx: Transaction,
   actor: RequestActor,
   subjectId: string,
-  categories: readonly CycleCategory[],
+  categories: readonly (CycleCategory | "cycle.status")[],
 ): Promise<void> {
   const day = todayIn(
     await subjectTimeZone(tx, subjectId, actor.profile?.timeZone ?? DEFAULT_TIME_ZONE),
@@ -253,13 +261,18 @@ async function pregnancyBoundary(
   return { active: false, since };
 }
 
-interface Computed {
+export interface Computed {
   prediction: CorePrediction | null;
   /** The starts that counted: all of them, or those after the pregnancy boundary. */
   starts: PeriodStart[];
 }
 
-async function computePrediction(tx: Transaction, subjectId: string): Promise<Computed> {
+/**
+ * Core's prediction over what the subject's own transaction sees. Exported
+ * so the parity test can hold `cycle_prediction_facts()` in migration 0010
+ * (task B14) to the same answer for the same rows.
+ */
+export async function computePrediction(tx: Transaction, subjectId: string): Promise<Computed> {
   const all = await periodStartsFor(tx, subjectId);
   const boundary = await pregnancyBoundary(tx, subjectId);
   if (boundary.active) return { prediction: null, starts: [] };
@@ -270,7 +283,7 @@ async function computePrediction(tx: Transaction, subjectId: string): Promise<Co
 }
 
 /** The columns the cache row and the response share, from core's result. */
-interface PredictionFacts {
+export interface PredictionFacts {
   basis: PredictionBasis;
   cycleLength: number | null;
   sampleSize: number;
@@ -282,7 +295,7 @@ interface PredictionFacts {
   ovulationBandDays: number;
 }
 
-function factsOf(prediction: CorePrediction | null): PredictionFacts {
+export function factsOf(prediction: CorePrediction | null): PredictionFacts {
   if (prediction === null) {
     return {
       basis: "none",
@@ -349,6 +362,7 @@ async function livePrediction(tx: Transaction, subjectId: string): Promise<Predi
  * only she sees every row the prediction rests on: a pregnancy filed under
  * `pregnancy.overview` suspends or bounds it (architecture record 8.4), and
  * a grantee's transaction would predict through one it cannot see. A
+ * contributor's write goes through `refreshAsContributor()` instead, and a
  * grantee's read serves the row as it is.
  */
 async function storePrediction(
@@ -390,6 +404,63 @@ async function storePrediction(
       version: live.version + 1,
     })
     .where(eq(schema.cyclePredictions.id, live.id));
+}
+
+/**
+ * The derived status for today, from `cycle_status_for()` (task B14): the
+ * function re-checks `can_read(subject, 'cycle.status')` for the actor of
+ * the transaction and answers no row when it does not hold, so a grant
+ * revoked after the session was loaded still ends in a 404. It takes no
+ * date, so nobody can ask it about another day, and it returns no entry.
+ */
+async function statusFor(tx: Transaction, subjectId: string): Promise<CycleStatus | null> {
+  const result = (await tx.execute(
+    sql`select to_char(s.today, 'YYYY-MM-DD') as today, s.cycle_day, s.period_day, s.in_fertile_window from cycle_status_for(${subjectId}::uuid) s`,
+  )) as {
+    rows: {
+      today: string;
+      cycle_day: number | null;
+      period_day: number | null;
+      in_fertile_window: boolean;
+    }[];
+  };
+  const [row] = result.rows;
+  if (row === undefined) return null;
+  return {
+    subjectId,
+    date: row.today,
+    cycleDay: row.cycle_day,
+    periodDay: row.period_day,
+    inFertileWindow: row.in_fertile_window,
+  };
+}
+
+/**
+ * The database refused a contributor's refresh that `can()` allowed on the
+ * loaded session: her grant was revoked in between. Thrown inside the
+ * transaction so her write rolls back, and answered as the denial it is.
+ */
+class ContributeGrantGoneError extends Error {
+  constructor() {
+    super("the prediction refresh refused a writer can() allowed");
+    this.name = "ContributeGrantGoneError";
+  }
+}
+
+/**
+ * A contributor's history write refreshes the stored prediction through
+ * `refresh_cycle_prediction()` (task B14), which re-checks her contribute
+ * grant and recomputes from the subject's entries and pregnancies as the
+ * function owner; it answers only whether she was allowed, so nothing she
+ * may not read reaches her transaction.
+ */
+async function refreshAsContributor(tx: Transaction, subjectId: string): Promise<void> {
+  const result = (await tx.execute(
+    sql`select refresh_cycle_prediction(${subjectId}::uuid) as ok`,
+  )) as { rows: { ok: boolean | null }[] };
+  if (result.rows[0]?.ok !== true) {
+    throw new ContributeGrantGoneError();
+  }
 }
 
 /* ------------------------------------------------------------------------ */
@@ -604,7 +675,7 @@ export const putEntryRoute = createRoute({
   tags: [TAG],
   summary: "Write one day",
   description:
-    "Creates or replaces the day's flow, symptoms and mood in every category the actor may write; a field left out is cleared there. The subject is the actor unless a subject she may contribute to is given. The subject's own write recomputes the prediction in the same transaction; a contributor's write leaves the stored prediction as it is until the subject's next read or write.",
+    "Creates or replaces the day's flow, symptoms and mood in every category the actor may write; a field left out is cleared there. The subject is the actor unless a subject she may contribute to is given. A write to the history recomputes the stored prediction in the same transaction, the subject's own and a contributor's alike; a contributor's refresh runs in the database and returns nothing she may not read.",
   middleware: [requireActor] as const,
   request: {
     params: DateParam,
@@ -676,7 +747,7 @@ export const statusRoute = createRoute({
   tags: [TAG],
   summary: "The derived status for today",
   description:
-    "Day of the cycle, day of the period while bleeding, and whether today is in the fertile window. Derived on read, never stored, never the entries. The subject only for now: a cycle.status grantee answers 404 until a database function derives the status under her own grant.",
+    "Day of the cycle, day of the period while bleeding, and whether today is in the fertile window, for today in the subject's time zone. Derived on read by a database function that re-checks the grant, never stored, never the entries. For the subject and a cycle.status grantee at any level; a grantee's read is audited.",
   middleware: [requireActor] as const,
   request: { query: z.object({ subject: SubjectQuery }) },
   responses: {
@@ -920,15 +991,22 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
           }
         }
         // Only the subject's own transaction sees every row the prediction
-        // rests on; a contributor's write leaves the stored row as it is.
+        // rests on; a contributor's write refreshes it in the database.
         if (writesHistory && access.reason === "owner") {
           const computed = await computePrediction(tx, subjectId);
           await storePrediction(tx, subjectId, computed.prediction, now);
+        } else if (writesHistory) {
+          await refreshAsContributor(tx, subjectId);
         }
         return { kind: "written", item: entryItem(row, symptoms, access) };
       },
       runtime.db,
-    );
+    ).catch((error: unknown): { kind: "refused" } => {
+      // A grant revoked after the session was loaded: the write rolled back.
+      if (error instanceof ContributeGrantGoneError) return { kind: "refused" };
+      throw error;
+    });
+    if (outcome.kind === "refused") return fail(c, 404, "not_found");
     if (outcome.kind === "stale") {
       return fail(c, 409, "conflict", { detail: VERSION_MISMATCH });
     }
@@ -1034,53 +1112,22 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
     const decision = can(actor, "summary", { subjectId, category: "cycle.status" });
     if (!decision.allowed || decision.reason === "denied") return fail(c, 404, "not_found");
 
-    // Blocked on the lead: cycle.status is derived from rows the B8 policies
-    // file under cycle.history, which a status grant does not reach, and a
-    // query never runs as anyone but the actor. Until a SECURITY DEFINER
-    // function re-checks the grant and returns only the derived numbers, a
-    // grantee gets the 404 a denial gets and no read is audited.
-    if (decision.reason !== "owner") return fail(c, 404, "not_found");
+    // The status rests on rows a status grant does not reach, so it is
+    // derived by cycle_status_for() inside the actor's own transaction; the
+    // function re-checks the grant and answers no row when it is gone.
     const status = await withActor(
       actor.id,
-      async (tx): Promise<CycleStatus> => {
-        const timeZone = await subjectTimeZone(
-          tx,
-          subjectId,
-          actor.profile?.timeZone ?? DEFAULT_TIME_ZONE,
-        );
-        const today = todayIn(timeZone);
-        const starts = (await periodStartsFor(tx, subjectId)).filter(
-          (start) => compareDates(start.date, today) <= 0,
-        );
-        const latest = starts.at(-1) ?? null;
-        const [todayRow] = await tx
-          .select({ flow: schema.cycleEntries.flow })
-          .from(schema.cycleEntries)
-          .where(
-            and(
-              eq(schema.cycleEntries.subjectId, subjectId),
-              eq(schema.cycleEntries.date, today),
-              isNull(schema.cycleEntries.deletedAt),
-              isNotNull(schema.cycleEntries.flow),
-            ),
-          )
-          .limit(1);
-        const bleedingToday = isPeriodFlow(todayRow?.flow ?? null);
-        const computed = await computePrediction(tx, subjectId);
-        const window = computed.prediction?.fertileWindow ?? null;
-        return {
-          subjectId,
-          date: today,
-          cycleDay: latest === null ? null : cycleDay(latest.date, today),
-          periodDay: latest === null || !bleedingToday ? null : diffDays(latest.date, today) + 1,
-          inFertileWindow:
-            window !== null &&
-            compareDates(window.start, today) <= 0 &&
-            compareDates(today, window.end) <= 0,
-        };
+      async (tx): Promise<CycleStatus | null> => {
+        const derived = await statusFor(tx, subjectId);
+        if (derived === null) return null;
+        if (decision.reason === "grant") {
+          await auditPartnerRead(tx, actor, subjectId, ["cycle.status"]);
+        }
+        return derived;
       },
       runtime.db,
     );
+    if (status === null) return fail(c, 404, "not_found");
     return c.json(status, 200);
   });
 }

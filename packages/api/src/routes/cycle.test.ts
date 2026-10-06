@@ -1,7 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull, sql } from "drizzle-orm";
 import { addDays, diffDays, todayIn } from "@tidefern/core";
-import { schema } from "@tidefern/db";
+import { schema, withActor } from "@tidefern/db";
 import {
   CycleEntry,
   CycleEntryList,
@@ -37,10 +37,18 @@ import {
   EVE,
   GINA,
   HANA,
+  IVY,
   createCycleFixture,
   cycleHeaders,
 } from "../test/cycle";
-import { PERIOD_GAP_DAYS, VERSION_MISMATCH, periodStartsFrom } from "./cycle";
+import {
+  PERIOD_GAP_DAYS,
+  VERSION_MISMATCH,
+  computePrediction,
+  factsOf,
+  periodStartsFrom,
+} from "./cycle";
+import type { PredictionFacts } from "./cycle";
 
 let harness: ApiTestDatabase;
 let app: Awaited<ReturnType<typeof createCycleFixture>>["app"];
@@ -153,6 +161,9 @@ const SHARED_PREDICTION_FIELDS = [
   "uncertaintyDays",
   "ovulationBandDays",
 ];
+
+/** Ben's status card on Anna, as the cycle fixture files it. */
+const BEN_STATUS_GRANT = "018f5e7a-2000-7000-8000-00000000e302";
 
 // The regular vector of core's own tests: four starts 28 days apart.
 const REGULAR = ["2026-05-01", "2026-05-29", "2026-06-26", "2026-07-24"];
@@ -605,7 +616,87 @@ describe("a contributor's writes", () => {
     ]);
   });
 
-  it("never touches the stored prediction on a contributor's write or a grantee's read", async () => {
+  it("refreshes the stored prediction on a contributor's period write, through a pregnancy she cannot see", async () => {
+    // Cara contributes to Gina's history and holds nothing on her pregnancy,
+    // which ended on GINA_ENDED_AT: only the periods after it count, and the
+    // first estimate after it carries five days of uncertainty.
+    await harness.db.insert(schema.grants).values({
+      id: "018f5e7a-2000-7000-8000-00000000e309",
+      ownerId: GINA,
+      granteeId: CARA,
+      category: "cycle.history",
+      level: "contribute",
+      policyVersion: "2026-10",
+      descriptionVersion: "2026-10",
+    });
+    const before = await livePredictionRow(GINA);
+    expect(before).toMatchObject({ basis: "first_guess", nextPeriodStart: "2026-07-29" });
+    const response = await put(T.cara, "2026-07-30", { flow: "heavy" }, { subject: GINA });
+    expect(response.status).toBe(200);
+    const after = await livePredictionRow(GINA);
+    expect(after).toMatchObject({
+      id: before?.id,
+      basis: "estimate",
+      cycleLength: 29,
+      sampleSize: 1,
+      nextPeriodStart: "2026-08-28",
+      uncertaintyDays: 5,
+      version: (before?.version ?? 0) + 1,
+    });
+    // Her own read recomputes through core and finds nothing to change: the
+    // database refresh and core agree on the facts.
+    await prediction(T.gina);
+    expect(await livePredictionRow(GINA)).toEqual(after);
+    expect((await auditRows(CARA, GINA)).map((row) => row.action)).toEqual(["partner.write"]);
+  });
+
+  it("answers 404 and keeps nothing when the contribute grant is revoked during the write", async () => {
+    // Eve's grant on Hana's history is active when the route checks it, and
+    // a trigger revokes it once her entry and her audit row are written,
+    // before the database re-checks it in refresh_cycle_prediction().
+    const grantId = "018f5e7a-2000-7000-8000-00000000e308";
+    const date = "2026-09-20";
+    await harness.db.execute(
+      sql.raw(`create function b14_revoke_during_write() returns trigger language plpgsql security definer set search_path = pg_catalog, public as $$
+        begin
+          update grants set revoked_at = now() where id = '${grantId}';
+          return new;
+        end
+      $$`),
+    );
+    await harness.db.execute(
+      sql.raw(`create trigger b14_revoke_during_write after insert on audit_events
+        for each row when (new.actor_id = '${EVE}' and new.subject_id = '${HANA}' and new.action = 'partner.write')
+        execute function b14_revoke_during_write()`),
+    );
+    try {
+      const audits = await auditRows(EVE, HANA);
+      const prediction = await livePredictionRow(HANA);
+      await expectProblem(
+        await put(T.eve, date, { flow: "heavy" }, { subject: HANA }),
+        404,
+        "not_found",
+      );
+      const written = await harness.db
+        .select()
+        .from(schema.cycleEntries)
+        .where(and(eq(schema.cycleEntries.subjectId, HANA), eq(schema.cycleEntries.date, date)));
+      expect(written).toEqual([]);
+      expect(await auditRows(EVE, HANA)).toEqual(audits);
+      expect(await livePredictionRow(HANA)).toEqual(prediction);
+      // The revocation rolled back with the write; the grant is still live.
+      const [grant] = await harness.db
+        .select({ revokedAt: schema.grants.revokedAt })
+        .from(schema.grants)
+        .where(eq(schema.grants.id, grantId));
+      expect(grant?.revokedAt).toBeNull();
+    } finally {
+      await harness.db.execute(sql`drop trigger b14_revoke_during_write on audit_events`);
+      await harness.db.execute(sql`drop function b14_revoke_during_write()`);
+    }
+  });
+
+  it("never touches the stored prediction on a symptoms contributor's write or a grantee's read", async () => {
     const before = await livePredictionRow(ANNA);
     expect(before).not.toBeNull();
     // Eve writes symptoms only; nothing she may write moves the prediction,
@@ -634,16 +725,86 @@ describe("GET /v1/cycle/status", () => {
     });
   });
 
-  it("answers 404 to a status grantee until the status function lands, auditing nothing", async () => {
-    // Ben still holds the status card: can() allows it, but no query runs as
-    // anyone but the actor and his own transaction reaches none of the rows
-    // the status rests on. See the report's Blocked section.
+  it("gives a status grantee the derived facts only and audits the read", async () => {
+    // Ben's history grant was revoked above; he still holds the status card,
+    // and his own transaction reaches none of the rows the status rests on.
+    const own = CycleStatus.parse(await (await get(T.anna, "status")).json());
+    const before = await auditRows(BEN, ANNA);
+    const response = await get(T.ben, `status?subject=${ANNA}`);
+    expect(response.status).toBe(200);
+    const body = (await response.json()) as Record<string, unknown>;
+    expect(Object.keys(body).sort()).toEqual(
+      ["subjectId", "date", "cycleDay", "periodDay", "inFertileWindow"].sort(),
+    );
+    expect(body).toEqual(own);
+    expect(own).toMatchObject({ cycleDay: 2, periodDay: 2 });
+    const rows = await auditRows(BEN, ANNA);
+    expect(rows.slice(before.length)).toEqual([
+      expect.objectContaining({ action: "partner.read", category: "cycle.status" }),
+    ]);
+    // A second read the same day is collapsed into the same audit row.
+    expect((await get(T.ben, `status?subject=${ANNA}`)).status).toBe(200);
+    expect(await auditRows(BEN, ANNA)).toEqual(rows);
+    // His own transaction still reads none of her rows.
+    const reached = await withActor(
+      BEN,
+      async (tx) => ({
+        entries: await tx
+          .select()
+          .from(schema.cycleEntries)
+          .where(eq(schema.cycleEntries.subjectId, ANNA)),
+        predictions: await tx
+          .select()
+          .from(schema.cyclePredictions)
+          .where(eq(schema.cyclePredictions.subjectId, ANNA)),
+      }),
+      harness.db,
+    );
+    expect(reached).toEqual({ entries: [], predictions: [] });
+  });
+
+  it("answers 404 to a revoked status grant and to a history reader without one, auditing nothing", async () => {
+    await harness.db
+      .update(schema.grants)
+      .set({ revokedAt: new Date() })
+      .where(eq(schema.grants.id, BEN_STATUS_GRANT));
     const before = await auditRows(BEN, ANNA);
     await expectProblem(await get(T.ben, `status?subject=${ANNA}`), 404, "not_found");
     expect(await auditRows(BEN, ANNA)).toEqual(before);
+    const ivy = await auditRows(IVY, ANNA);
+    await expectProblem(await get(T.ivy, `status?subject=${ANNA}`), 404, "not_found");
+    expect(await auditRows(IVY, ANNA)).toEqual(ivy);
   });
 
-  it.todo("gives a status grantee the derived facts only and audits the read");
+  it("gives a status grantee no day count while a pregnancy continues, and the subject hers", async () => {
+    // Hana is pregnant, filed under pregnancy.overview, which Dana does not
+    // hold: a cycle day counted through the pregnancy would tell her.
+    await harness.db.insert(schema.grants).values({
+      id: "018f5e7a-2000-7000-8000-00000000e310",
+      ownerId: HANA,
+      granteeId: DANA,
+      category: "cycle.status",
+      level: "summary",
+      policyVersion: "2026-10",
+      descriptionVersion: "2026-10",
+    });
+    expect((await put(T.hana, addDays(todayIn("UTC"), -5), { flow: "heavy" })).status).toBe(200);
+    const own = CycleStatus.parse(await (await get(T.hana, "status")).json());
+    expect(own.cycleDay).not.toBeNull();
+    const before = await auditRows(DANA, HANA);
+    const response = await get(T.dana, `status?subject=${HANA}`);
+    expect(response.status).toBe(200);
+    expect(CycleStatus.parse(await response.json())).toEqual({
+      subjectId: HANA,
+      date: own.date,
+      cycleDay: null,
+      periodDay: null,
+      inFertileWindow: false,
+    });
+    expect((await auditRows(DANA, HANA)).slice(before.length)).toEqual([
+      expect.objectContaining({ action: "partner.read", category: "cycle.status" }),
+    ]);
+  });
 
   it("answers null days when nothing is logged", async () => {
     const response = await get(T.cara, "status");
@@ -653,6 +814,163 @@ describe("GET /v1/cycle/status", () => {
       periodDay: null,
       inFertileWindow: false,
     });
+  });
+});
+
+/*
+ * Task B14: the prediction in migration 0010 (`cycle_prediction_facts()`,
+ * which the contributor refresh and the status use) is a second
+ * implementation of core's predictCycle and of periodStartsFrom. This sweep
+ * gives both the same rows for many synthetic subjects, with runs that
+ * touch PERIOD_GAP_DAYS from both sides, implausible gaps, spotting, ended
+ * and continuing pregnancies, and asserts the same facts, so neither side
+ * can change alone.
+ */
+
+/** A small deterministic generator, so a failure names a reproducible case. */
+function generator(seed: number): () => number {
+  let state = seed >>> 0;
+  return () => {
+    state = (Math.imul(state, 1664525) + 1013904223) >>> 0;
+    return state / 2 ** 32;
+  };
+}
+
+const FLOWS_FOR_SWEEP: FlowLevel[] = ["spotting", "light", "medium", "heavy", "none"];
+
+interface SweepCase {
+  subjectId: string;
+  days: { date: string; flow: FlowLevel }[];
+  pregnancy: { endedAt: string | null } | null;
+}
+
+function sweepCases(count: number): SweepCase[] {
+  const cases: SweepCase[] = [];
+  for (let n = 0; n < count; n += 1) {
+    const next = generator(n + 1);
+    const pick = (low: number, high: number) => low + Math.floor(next() * (high - low + 1));
+    const days: { date: string; flow: FlowLevel }[] = [];
+    let start = addDays("2025-01-01", pick(0, 30));
+    const periods = pick(0, 9);
+    for (let p = 0; p < periods; p += 1) {
+      // Bleeding days with gaps of one to four days, so runs split and
+      // join on both sides of PERIOD_GAP_DAYS.
+      let day = start;
+      const length = pick(1, 6);
+      for (let d = 0; d < length; d += 1) {
+        days.push({ date: day, flow: FLOWS_FOR_SWEEP[pick(0, 3)] ?? "heavy" });
+        day = addDays(day, pick(1, 4));
+      }
+      if (next() < 0.3) days.push({ date: addDays(day, pick(3, 8)), flow: "spotting" });
+      // Mostly plausible cycles, some too short or too long to count.
+      start = addDays(start, next() < 0.8 ? pick(21, 45) : pick(8, 70));
+    }
+    const unique = new Map(days.map((day) => [day.date, day]));
+    const roll = next();
+    const sorted = [...unique.keys()].sort();
+    const middle = sorted[Math.floor(sorted.length / 2)] ?? "2025-03-01";
+    const pregnancy =
+      roll < 0.2
+        ? { endedAt: null }
+        : roll < 0.5
+          ? { endedAt: addDays(middle, pick(-3, 3)) }
+          : null;
+    cases.push({
+      subjectId: `018f5e7a-3000-7000-8000-${(n + 1).toString(16).padStart(12, "0")}`,
+      days: [...unique.values()],
+      pregnancy,
+    });
+  }
+  return cases;
+}
+
+async function databaseFacts(subjectId: string): Promise<PredictionFacts> {
+  const result = (await harness.db.execute(
+    sql`select f.basis::text as basis, f.cycle_length, f.sample_size, to_char(f.next_period_start, 'YYYY-MM-DD') as next_period_start, to_char(f.ovulation, 'YYYY-MM-DD') as ovulation, to_char(f.fertile_window_start, 'YYYY-MM-DD') as fertile_window_start, to_char(f.fertile_window_end, 'YYYY-MM-DD') as fertile_window_end, f.uncertainty_days, f.ovulation_band_days from cycle_prediction_facts(${subjectId}::uuid) f`,
+  )) as { rows: Record<string, unknown>[] };
+  const [row] = result.rows;
+  if (row === undefined) return factsOf(null);
+  return {
+    basis: row["basis"] as PredictionFacts["basis"],
+    cycleLength: row["cycle_length"] as number | null,
+    sampleSize: row["sample_size"] as number,
+    nextPeriodStart: row["next_period_start"] as string | null,
+    ovulation: row["ovulation"] as string | null,
+    fertileWindowStart: row["fertile_window_start"] as string | null,
+    fertileWindowEnd: row["fertile_window_end"] as string | null,
+    uncertaintyDays: row["uncertainty_days"] as number,
+    ovulationBandDays: row["ovulation_band_days"] as number,
+  };
+}
+
+describe("the database prediction (migration 0010) against core", () => {
+  const cases = sweepCases(60);
+
+  beforeAll(async () => {
+    await harness.db.insert(schema.user).values(
+      cases.map((item, index) => ({
+        id: item.subjectId,
+        name: "sweep",
+        email: `sweep-${index}@example.com`,
+        emailVerified: true,
+      })),
+    );
+    for (const [caseIndex, item] of cases.entries()) {
+      if (item.days.length > 0) {
+        await harness.db.insert(schema.cycleEntries).values(
+          item.days.map((day, index) => ({
+            id: `018f5e7a-3001-7000-8000-${(caseIndex * 100 + index + 1).toString(16).padStart(12, "0")}`,
+            subjectId: item.subjectId,
+            date: day.date,
+            flow: day.flow,
+          })),
+        );
+      }
+      if (item.pregnancy !== null) {
+        await harness.db.insert(schema.pregnancies).values({
+          id: item.subjectId.replace("-3000-", "-3002-"),
+          subjectId: item.subjectId,
+          dueDate: "2026-12-01",
+          datingMethod: "lmp",
+          endedAt: item.pregnancy.endedAt,
+          endedReason: item.pregnancy.endedAt === null ? null : "other",
+        });
+      }
+    }
+  });
+
+  it("covers every basis, both sides of the gap tolerance and both pregnancy rules", () => {
+    const gaps = new Set<number>();
+    for (const item of cases) {
+      const dates = item.days.map((day) => day.date).sort();
+      for (let i = 1; i < dates.length; i += 1) {
+        gaps.add(diffDays(dates[i - 1] ?? "", dates[i] ?? ""));
+      }
+    }
+    expect(gaps.has(PERIOD_GAP_DAYS)).toBe(true);
+    expect(gaps.has(PERIOD_GAP_DAYS + 1)).toBe(true);
+    expect(cases.some((item) => item.pregnancy?.endedAt === null)).toBe(true);
+    expect(cases.some((item) => typeof item.pregnancy?.endedAt === "string")).toBe(true);
+  });
+
+  it("gives the same facts as core for every subject", async () => {
+    const bases = new Set<string>();
+    for (const item of cases) {
+      const computed = await withActor(
+        item.subjectId,
+        (tx) => computePrediction(tx, item.subjectId),
+        harness.db,
+      );
+      const expected = factsOf(computed.prediction);
+      bases.add(expected.basis);
+      expect({ subject: item.subjectId, ...(await databaseFacts(item.subjectId)) }).toEqual({
+        subject: item.subjectId,
+        ...expected,
+      });
+    }
+    expect([...bases].sort()).toEqual(
+      ["estimate", "first_guess", "none", "not_enough_regular_cycles"].sort(),
+    );
   });
 });
 
