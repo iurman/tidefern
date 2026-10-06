@@ -1,5 +1,6 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApiEnv } from "../context";
+import { registerNotes } from "./notes";
 
 /**
  * The resource route registry. Each area (profile, cycle, pregnancy,
@@ -9,5 +10,5 @@ import type { ApiEnv } from "../context";
  * internal routes stay in app.ts because the middleware order depends on them.
  */
 export function registerRoutes(app: OpenAPIHono<ApiEnv>): void {
-  void app;
+  registerNotes(app);
 }
