@@ -50,6 +50,13 @@
       "when": 1791222566244,
       "tag": "0006_platform",
       "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1791245563623,
+      "tag": "0007_row_level_security",
+      "breakpoints": true
     }
   ]
 }
