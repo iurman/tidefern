@@ -6,6 +6,7 @@ import type { ActorDatabase, SweepCounts } from "@tidefern/db/jobs";
 
 import { drainDue } from "../../jobs/index";
 import type { JobHandlers } from "../../jobs/index";
+import { enqueueReminders } from "../../jobs/reminders";
 import { deadQueueNotice } from "../../jobs/notice";
 import type { Mailer } from "../../jobs/notice";
 import { problem } from "../../problem";
@@ -79,6 +80,7 @@ export function internalJobs(options: JobsOptions) {
       return problem(c, 404, "not_found");
     }
     const now = options.now?.() ?? new Date();
+    await enqueueReminders(options.db, now);
     const outcome = await drainDue(
       options.db,
       options.claimLimit ?? DEFAULT_CLAIM_LIMIT,
