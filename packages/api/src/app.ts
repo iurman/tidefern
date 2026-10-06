@@ -169,7 +169,7 @@ export function createApp(options: ApiOptions = {}) {
   );
 
   app.openapi(meRoute, (c) => c.json(meBody(c), 200));
-  registerRoutes(app);
+  registerRoutes(app, { db: options.db });
 
   app.notFound((c) => problem(c, 404, "not_found"));
   app.onError((error, c) => {
