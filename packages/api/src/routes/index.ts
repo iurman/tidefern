@@ -7,6 +7,7 @@ import type { ApiEnv } from "../context";
 import { registerNotes } from "./notes";
 import { registerSharing } from "./sharing/index";
 import { registerPregnancy } from "./pregnancy/index";
+import { registerChildren } from "./children";
 
 /** What every resource area needs from the host: the actor database and the key provider. */
 export interface RouteOptions {
@@ -32,4 +33,5 @@ export function registerRoutes(app: OpenAPIHono<ApiEnv>, options: RouteOptions =
   registerNotes(app);
   registerSharing(app);
   registerPregnancy(app, resolved);
+  registerChildren(app);
 }
