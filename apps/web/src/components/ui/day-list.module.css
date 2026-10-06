@@ -41,6 +41,7 @@
   transform: scale(0.98);
 }
 
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
 [data-specimen-state="focus-visible"] > .root > .list > li:first-child > .row {
   outline: 2px solid var(--focus);
   outline-offset: 4px;

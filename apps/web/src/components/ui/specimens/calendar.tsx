@@ -90,7 +90,7 @@ const textureSamples = [
 export const specimens: SpecimenGroup = {
   slug: "calendar",
   title: "Calendar",
-  lede: "Every day is a YYYY-MM-DD string and today is a prop. A logged fact is solid, a prediction is dashed and an estimate is dotted; color never changes with certainty.",
+  lede: "Every day is a YYYY-MM-DD string and today is a prop. A logged fact is solid, a prediction is dashed and an estimate is dotted; color never changes with certainty. The logged pill is a solid stroke with a light fill until a period ink token exists, because a full fill behind the numeral falls under 4.5:1 in the light theme.",
   specimens: [
     {
       name: "Day cell textures",

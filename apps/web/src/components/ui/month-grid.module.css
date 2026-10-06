@@ -183,6 +183,7 @@
   transform: scale(0.94);
 }
 
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
 [data-specimen-state="focus-visible"] > .monthGrid [data-today] > .dayButton {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
