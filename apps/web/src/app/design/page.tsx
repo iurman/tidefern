@@ -10,7 +10,15 @@ export const metadata = pageMetadata(
 );
 
 /** The chapters that exist as routes; the rest are listed by name until they land. */
-const published = new Set(["brand", "color", "type", "components", "motion", "sound", "foundations"]);
+const published = new Set([
+  "brand",
+  "color",
+  "type",
+  "components",
+  "motion",
+  "sound",
+  "foundations",
+]);
 
 const chapters = [
   { slug: "brand", title: "Brand", text: "The mark, the wordmark, clear space and theme rules." },
