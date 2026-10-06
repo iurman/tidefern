@@ -21,7 +21,11 @@ export default defineConfig([
               message: "Key material stays inside the API.",
             },
             {
-              group: ["@tidefern/auth", "@tidefern/auth/server", "@tidefern/auth/server/*"],
+              // The browser client at "@tidefern/auth/client" is the one entry the app may import
+              // (task C3). The root entry and every other subpath, the server config above all,
+              // stay blocked; a regex because a gitignore-style group cannot re-include one child
+              // once the package root matches.
+              regex: "^@tidefern/auth(?!/client$)",
               message: "Use the auth client, not the server config.",
             },
           ],
