@@ -100,10 +100,12 @@ test("the sign-out route redirects with a path, never the server's own host", as
   request,
 }) => {
   // Without a database the auth server cannot clear a session, so the route sends
-  // the person back to /today; the point here is the shape of the Location.
+  // the person back to /today; with a database and no session the sign-out
+  // succeeds and the route sends them home. The point here is the shape of the
+  // Location: a path, never the server's own host.
   const response = await request.post("/sign-out", { maxRedirects: 0 });
   expect(response.status()).toBe(303);
-  expect(response.headers()["location"]).toBe("/today");
+  expect(response.headers()["location"]).toMatch(/^\/(today)?$/);
   expect(response.headers()["cache-control"]).toBe("private, no-store");
 });
 

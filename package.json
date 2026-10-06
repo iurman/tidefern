@@ -23,6 +23,7 @@
     "db:generate": "pnpm --filter @tidefern/db generate",
     "db:migrate": "pnpm --filter @tidefern/db migrate",
     "db:seed": "pnpm --filter @tidefern/db seed",
+    "db:grant-login": "pnpm --filter @tidefern/db grant-login",
     "jobs:run": "node --env-file-if-exists=.env.local scripts/jobs-run.mjs",
     "prose:check": "node scripts/check-prose.mjs",
     "skills:check": "node scripts/check-skills.mjs",
