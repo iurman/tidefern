@@ -874,3 +874,51 @@ Scratchpad paths above live under
 if that directory is gone, the pull request bodies carry the same
 evidence and the briefs are reconstructible from `COMPONENTS.md` and the
 plan rows.
+
+### Third and fourth waves landing (2026-10-06, lead session 061fed2d)
+
+Merged by squash since the state note: the CI timeout fix for the api,
+auth and crypto suites (PR #31, `4292568`), G4 (PR #21, `318f226`), D2
+(PR #24, `9c505d4`), B8 (PR #27, `694667c`), C2 (PR #25, `e41c19f`),
+G5 forms (PR #28, `fad7018`), G5 marks (PR #29, `eb82952`) and G5 actions
+(PR #26, `3db3eb8`). The plan marks G4, D2, B8 and C2 done with evidence;
+G5 stays in progress until structure and calendar merge and the lead
+composes the day sheet and the `/design/components` index. The fourth
+wave workflow ended without starting I1 (its wait for the B8 merge
+expired), so I1 runs as its own workflow now that migration 0007 is on
+main; B9 and C3 started as the fifth wave (plan rows claimed here), and
+E1 starts after I1 merges because both touch the API app file.
+
+Every merged group page was inspected by the lead in both themes before
+the merge (the buttons and toasts, the form fields and date input, the
+ring, week card, chart and timeline at native resolution, the social image
+and maskable icon). Decisions taken from the review answers: the
+fresh-auth refusal stays a 401 with a detail until E1 extends the closed
+problem code enum; the three two-line edits C2 made outside its file list
+were verified necessary and accepted; B8's schema test edits are
+ratified; the Resend half-configuration rule throws in production; the
+logged period pill is a solid stroke with a light fill until a period ink
+token exists (DESIGN.md 6.2 to gain that sentence); the forced
+focus-visible twins stay per module until the lead draws the ring once in
+the specimen frame; `[role="option"]` joins the sound provider's
+delegation at integration.
+
+Deployment and CI findings: Vercel posts no deployment event for most
+branches now, so every apps/web branch is smoke tested by manual dispatch
+against its branch alias before the merge (actions run 37397196786, forms
+37395874372, marks 37396464134, G4 37395603114, C2 37396579941); an
+empty retrigger commit builds no new preview, so the existing alias (same
+content) is what the dispatch tests; a GitHub re-run reuses the original
+merge commit and cannot pick up a fix landed on main, so a branch that
+needs main's fix gets a new push instead. PGlite and jsdom suites timed
+out at Vitest's defaults on the two-core runner once several packages ran
+side by side; the db, api, auth, crypto and web suites now allow 30 s
+(the web change rides on the calendar branch). All labelled as
+environment failures; no application defect was found behind them.
+
+### Next action
+
+Merge G5 calendar (chain running) and structure after its fix pass, then
+I1, B9 and C3 as they become ready; start E1 after I1; then the lead's
+day sheet and `/design/components` index, the sound provider's option
+selector and the shared forced focus rule, and H9.
