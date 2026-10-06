@@ -7044,7 +7044,7 @@ export interface paths {
     get?: never;
     /**
      * Write one day
-     * @description Creates or replaces the day's flow, symptoms and mood in every category the actor may write; a field left out is cleared there. The subject is the actor unless a subject she may contribute to is given. The subject's own write recomputes the prediction in the same transaction; a contributor's write leaves the stored prediction as it is until the subject's next read or write.
+     * @description Creates or replaces the day's flow, symptoms and mood in every category the actor may write; a field left out is cleared there. The subject is the actor unless a subject she may contribute to is given. A write to the history recomputes the stored prediction in the same transaction, the subject's own and a contributor's alike; a contributor's refresh runs in the database and returns nothing she may not read.
      */
     put: {
       parameters: {
@@ -7543,7 +7543,7 @@ export interface paths {
     };
     /**
      * The derived status for today
-     * @description Day of the cycle, day of the period while bleeding, and whether today is in the fertile window. Derived on read, never stored, never the entries. The subject only for now: a cycle.status grantee answers 404 until a database function derives the status under her own grant.
+     * @description Day of the cycle, day of the period while bleeding, and whether today is in the fertile window, for today in the subject's time zone. Derived on read by a database function that re-checks the grant, never stored, never the entries. For the subject and a cycle.status grantee at any level; a grantee's read is audited.
      */
     get: {
       parameters: {
@@ -9471,6 +9471,11 @@ export interface components {
       endedAt: string | null;
       milestoneId: string | null;
       quantityMl: number | null;
+      /**
+       * @description The breast a feed was given from; null otherwise
+       * @enum {string|null}
+       */
+      side: "left" | "right" | "both" | null;
       /** @description Decrypted for the actor after access is decided */
       note: string | null;
       /**
@@ -9510,6 +9515,11 @@ export interface components {
       milestoneId?: string;
       /** @description A feed's volume in millilitres; imperial is a display choice */
       quantityMl?: number;
+      /**
+       * @description A breast feed's side; absent for a bottle feed
+       * @enum {string}
+       */
+      side?: "left" | "right" | "both";
       /** @description Free text, encrypted at rest with the child's data key */
       note?: string;
     };
@@ -9555,6 +9565,11 @@ export interface components {
       milestoneId?: string;
       /** @description A feed's volume in millilitres; imperial is a display choice */
       quantityMl?: number;
+      /**
+       * @description A breast feed's side; absent for a bottle feed
+       * @enum {string}
+       */
+      side?: "left" | "right" | "both";
       /** @description Free text, encrypted at rest with the child's data key */
       note?: string;
     };
