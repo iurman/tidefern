@@ -20,6 +20,7 @@
     "@tidefern/schemas": "workspace:*",
     "next": "16.3.8",
     "react": "19.2.8",
+    "react-day-picker": "10.0.2",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
