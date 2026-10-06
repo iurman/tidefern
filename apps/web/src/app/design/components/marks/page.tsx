@@ -27,7 +27,10 @@ export default function MarksPage() {
         <p className="intro">{specimens.lede}</p>
       </header>
       <SpecimenFrame group={specimens} />
-      <ComponentsChapterNav previous={{ href: "/design/components/calendar", label: "Calendar" }} />
+      <ComponentsChapterNav
+        previous={{ href: "/design/components/calendar", label: "Calendar" }}
+        next={{ href: "/design/components/patterns", label: "Patterns" }}
+      />
     </div>
   );
 }

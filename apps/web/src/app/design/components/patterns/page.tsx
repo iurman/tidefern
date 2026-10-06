@@ -35,8 +35,8 @@ export default function PatternsPage() {
       </header>
       <PatternsSpecimens />
       <ComponentsChapterNav
-        previous={{ href: "/design/components/calendar", label: "Calendar" }}
-        next={{ href: "/design/components", label: "All components" }}
+        previous={{ href: "/design/components/marks", label: "Marks and charts" }}
+        next={{ href: "/design/motion", label: "Motion" }}
       />
     </div>
   );

@@ -399,7 +399,7 @@ export default function FoundationsPage() {
         />
       </section>
 
-      <ChapterFoot previous={{ href: "/design/motion", label: "Motion" }} />
+      <ChapterFoot previous={{ href: "/design/sound", label: "Sound and touch" }} />
     </div>
   );
 }
