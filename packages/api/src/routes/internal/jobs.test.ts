@@ -238,6 +238,92 @@ describe("GET /api/internal/jobs/run", () => {
     expect(DEFAULT_CLAIM_LIMIT).toBe(25);
   });
 
+  test("drains batch after batch until the due queue is empty", async () => {
+    const ran: string[] = [];
+    const ids: string[] = [];
+    for (let n = 0; n < 5; n += 1) ids.push(await enqueueDue("reminder.send"));
+    const app = appWith({
+      cronSecret: SECRET,
+      claimLimit: 2,
+      handlers: {
+        "reminder.send": async (job) => {
+          ran.push(job.id);
+        },
+      },
+    });
+    const report = (await (await run(app, `Bearer ${SECRET}`)).json()) as JobsRunReport;
+    expect(report).toMatchObject({ claimed: 5, done: 5, failed: 0, dead: 0 });
+    expect(ran.sort()).toEqual([...ids].sort());
+  });
+
+  test("does not reclaim a job that failed earlier in the same run", async () => {
+    vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    for (let n = 0; n < 3; n += 1) await enqueueDue("photo.process");
+    const report = (await (
+      await run(appWith({ cronSecret: SECRET, claimLimit: 2 }), `Bearer ${SECRET}`)
+    ).json()) as JobsRunReport;
+    expect(report).toMatchObject({ claimed: 3, done: 0, failed: 3, dead: 0 });
+  });
+
+  test("stops starting batches once the drain budget is spent", async () => {
+    for (let n = 0; n < 5; n += 1) await enqueueDue("reminder.send");
+    const app = appWith({
+      cronSecret: SECRET,
+      claimLimit: 2,
+      drainBudgetMs: 0,
+      handlers: { "reminder.send": async () => undefined },
+    });
+    const report = (await (await run(app, `Bearer ${SECRET}`)).json()) as JobsRunReport;
+    expect(report).toMatchObject({ claimed: 2, done: 2 });
+    const left = await database.db
+      .select()
+      .from(schema.jobs)
+      .where(eq(schema.jobs.status, "queued"));
+    expect(left).toHaveLength(3);
+  });
+
+  test("logs a throwing reminder step without content and still drains, sweeps and notifies", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const ran: string[] = [];
+    const mailer = new FakeMailer();
+    const pending = await enqueueDue("reminder.send");
+    await insertDead();
+    await database.db.insert(schema.idempotencyKeys).values({
+      id: "018f5e7a-2000-7000-8000-0000000000e3",
+      actorId: ANNA,
+      key: "018f5e7a-2000-7000-8000-0000000000e4",
+      route: "entries.put",
+      requestHash: "a",
+      createdAt: new Date(NOW.getTime() - 25 * 60 * 60_000),
+    });
+    const app = appWith({
+      cronSecret: SECRET,
+      mailer,
+      ownerEmail: OWNER,
+      reminders: async () => {
+        throw new RangeError(`Invalid time zone specified: ${ANNA}`);
+      },
+      handlers: {
+        "reminder.send": async (job) => {
+          ran.push(job.id);
+        },
+      },
+    });
+    const response = await run(app, `Bearer ${SECRET}`);
+    expect(response.status).toBe(200);
+    const report = (await response.json()) as JobsRunReport;
+    expect(report).toMatchObject({
+      reminders: "failed",
+      claimed: 1,
+      done: 1,
+      notice: "sent",
+      sweep: { idempotencyKeys: 1, deadJobs: 1 },
+    });
+    expect(ran).toEqual([pending]);
+    expect(mailer.messages).toHaveLength(1);
+    expect(warn.mock.calls).toEqual([["jobs_reminders_failed"]]);
+  });
+
   test("stays out of the OpenAPI document", async () => {
     const app = appWith({ cronSecret: SECRET });
     const document = (await (await app.request("/api/v1/openapi.json")).json()) as {

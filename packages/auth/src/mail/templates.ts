@@ -91,27 +91,23 @@ function greeting(firstName: string | undefined): string {
 /**
  * The daily reminder batch (architecture 10.3). The subject and the body are
  * the generic strings from sections 10.2 and 10.3 at every detail level; the
- * link opens the app, where the reminder itself is shown after sign-in.
+ * link opens the app, where the reminder itself is shown after sign-in. The
+ * same email goes to a partner told of a period start, and the switch for
+ * that is the owner's `notify` on the grant, not a setting of the partner's,
+ * so the body points to no setting.
  */
 export function reminderEmail(url: string, firstName?: string): MailContent {
   assertLink(url);
   const hello = greeting(firstName);
   return {
     subject: "Your Tidefern reminder",
-    text: [
-      hello,
-      "",
-      "You have a reminder in Tidefern. Open the app to see it:",
-      "",
-      url,
-      "",
-      "Reminders can be turned off in your Tidefern settings.",
-    ].join("\n"),
+    text: [hello, "", "You have a reminder in Tidefern. Open the app to see it:", "", url].join(
+      "\n",
+    ),
     html: [
       `<p>${escapeHtml(hello)}</p>`,
       "<p>You have a reminder in Tidefern. Open the app to see it:</p>",
       `<p><a href="${escapeHtml(url)}">${escapeHtml(url)}</a></p>`,
-      "<p>Reminders can be turned off in your Tidefern settings.</p>",
     ].join("\n"),
   };
 }
