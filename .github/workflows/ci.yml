@@ -189,7 +189,11 @@ jobs:
       # no test database, so it must pass against a server that has no database at all. This second
       # server is started with both database variables removed from its environment; the smoke rule
       # in apps/web/tests/e2e/smoke-rule.ts is what keeps the tagged tests from authenticating.
+      # The two browser assertions are independent, so this one runs even when the full suite
+      # failed (the job still fails); only a cancellation skips it.
       - name: Start a second server with no database
+        id: database_free
+        if: ${{ !cancelled() }}
         env:
           BETTER_AUTH_SECRET: ${{ env.BETTER_AUTH_SECRET }}
           BETTER_AUTH_URL: http://127.0.0.1:3001
@@ -215,6 +219,7 @@ jobs:
           exit 1
 
       - name: The smoke subset passes with DATABASE_URL unset
+        if: ${{ !cancelled() && steps.database_free.outcome == 'success' }}
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3001
         run: pnpm test:e2e --grep "@smoke"
