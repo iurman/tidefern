@@ -206,5 +206,5 @@ test("the type chapter renders the specimens in both faces", async ({ page }) =>
   expect(families.newsreaderLoaded).toBe(true);
   expect(families.figtreeLoaded).toBe(true);
   expect(families.numeric).toBe("tabular-nums");
-  await expect(page.getByRole("link", { name: "Previous: Design system" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Previous: Color" })).toBeVisible();
 });
