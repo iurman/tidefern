@@ -15,7 +15,9 @@
   },
   "dependencies": {
     "@tidefern/api": "workspace:*",
+    "@tidefern/auth": "workspace:*",
     "@tidefern/core": "workspace:*",
+    "@tidefern/db": "workspace:*",
     "@tidefern/design-tokens": "workspace:*",
     "@tidefern/schemas": "workspace:*",
     "next": "16.3.8",

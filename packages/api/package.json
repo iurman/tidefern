@@ -16,11 +16,15 @@
   "dependencies": {
     "@hono/zod-openapi": "1.6.3",
     "@tidefern/core": "workspace:*",
+    "@tidefern/db": "workspace:*",
     "@tidefern/schemas": "workspace:*",
+    "drizzle-orm": "0.45.3",
     "hono": "4.13.13",
     "zod": "4.6.5"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.8",
+    "@tidefern/auth": "workspace:*",
     "@tidefern/config": "workspace:*",
     "@types/node": "24.19.1",
     "eslint": "10.12.0",

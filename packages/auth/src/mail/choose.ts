@@ -3,8 +3,9 @@ import type { Mailer } from "../mailer";
 import { setCaptureMailer } from "./capture";
 import { ResendMailer } from "./resend";
 
-/** The subset of the environment the transport choice is made from. */
+/** The subset of the environment the transport choice is made from; the index signature is as in `HostEnvironment`. */
 export interface MailEnvironment {
+  [key: string]: string | undefined;
   VERCEL_ENV?: string | undefined;
   RESEND_API_KEY?: string | undefined;
   EMAIL_FROM?: string | undefined;

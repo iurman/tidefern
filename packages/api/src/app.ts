@@ -1,11 +1,16 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { secureHeaders } from "hono/secure-headers";
+import type { ActorDatabase } from "@tidefern/db";
+import { withSession } from "./auth";
+import type { SessionAuth } from "./auth";
+import type { ApiEnv, Defer } from "./context";
 import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
+import { meBody, meRoute } from "./routes/me";
 
 export const API_VERSION = "0.1.0";
 
-export type Defer = (task: () => Promise<void>) => void;
+export type { Defer } from "./context";
 
 /**
  * The mount prefix is permanent. Every path in the committed OpenAPI
@@ -23,6 +28,19 @@ export interface ApiOptions {
    * pass a collector. The API never imports a framework to get this.
    */
   defer?: Defer;
+  /**
+   * The Better Auth instance, mounted at /api/auth/* and consulted for the
+   * session on /api/v1 requests. The Next.js host passes `auth` from
+   * `@tidefern/auth/server`; tests pass a fake. Without one, the auth path
+   * is unmounted and every request is anonymous.
+   */
+  auth?: SessionAuth;
+  /**
+   * The database `withActor()` opens the actor's transaction on. The Next.js
+   * host passes the pooled client; tests pass PGlite. Without one the db
+   * package's production client is used.
+   */
+  db?: ActorDatabase;
 }
 
 /**
@@ -33,7 +51,7 @@ export interface ApiOptions {
  */
 export function createApp(options: ApiOptions = {}) {
   const defer: Defer = options.defer ?? ((task) => void task());
-  const app = new OpenAPIHono<{ Variables: { defer: Defer } }>({
+  const app = new OpenAPIHono<ApiEnv>({
     defaultHook: (result, c) => {
       if (!result.success) {
         return problem(c, 422, "validation_failed", {
@@ -58,7 +76,17 @@ export function createApp(options: ApiOptions = {}) {
     c.header("Cache-Control", "private, no-store");
   });
 
-  // Better Auth mounts here in the build: app.all("/auth/*", (c) => auth.handler(c.req.raw))
+  // Better Auth owns everything under /api/auth and sees the raw request
+  // (architecture 6.1). It is mounted ahead of /v1 and is not an OpenAPI
+  // route, so the committed contract never lists it.
+  const auth = options.auth;
+  if (auth !== undefined) {
+    app.all("/auth/*", (c) => auth.handler(c.req.raw));
+  }
+
+  // Every /v1 request learns its session and actor first (architecture 8.3
+  // step 1); routes that need one add requireActor.
+  app.use("/v1/*", withSession(auth, options.db));
 
   app.openapi(healthRoute, (c) =>
     c.json(
@@ -71,6 +99,8 @@ export function createApp(options: ApiOptions = {}) {
       200,
     ),
   );
+
+  app.openapi(meRoute, (c) => c.json(meBody(c), 200));
 
   app.doc("/v1/openapi.json", {
     openapi: "3.1.0",

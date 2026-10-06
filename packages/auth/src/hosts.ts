@@ -115,8 +115,14 @@ export function resolveHosts(facts: HostFacts): ResolvedHosts {
   };
 }
 
-/** The subset of the environment the host facts come from. */
+/**
+ * The subset of the environment the host facts come from. The index
+ * signature keeps `process.env` assignable from a Next.js program too, where
+ * the framework adds `NODE_ENV` to `NodeJS.ProcessEnv` and TypeScript would
+ * otherwise reject the all-optional shape for sharing no property with it.
+ */
 export interface HostEnvironment {
+  [key: string]: string | undefined;
   BETTER_AUTH_URL?: string | undefined;
   VERCEL_ENV?: string | undefined;
   VERCEL_URL?: string | undefined;

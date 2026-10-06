@@ -1,5 +1,5 @@
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { sql } from "drizzle-orm";
@@ -10,9 +10,13 @@ import type { MigrationConfig } from "drizzle-orm/migrator";
  * Where the committed journal lives and which table records what was
  * applied. Production (`scripts/migrate.ts`, node-postgres) and the PGlite
  * harness share this so a test proves the same files the build applies.
+ * The folder is joined from this module's own path rather than written as
+ * `new URL("../drizzle", import.meta.url)`, because a bundler (Turbopack,
+ * when the API that imports this package is built into the web app) reads
+ * that form as a static asset reference and fails on a directory.
  */
 export const migrationConfig: MigrationConfig = {
-  migrationsFolder: fileURLToPath(new URL("../drizzle", import.meta.url)),
+  migrationsFolder: join(dirname(fileURLToPath(import.meta.url)), "..", "drizzle"),
   migrationsTable: "__drizzle_migrations",
   migrationsSchema: "drizzle",
 };
