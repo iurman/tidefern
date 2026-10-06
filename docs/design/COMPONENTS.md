@@ -15,12 +15,12 @@ how the code is laid out so that the rules hold by construction.
 | `apps/web/src/components/ui/<name>.module.css`    | same group   | Its styles, CSS Modules, tokens only                                                              |
 | `apps/web/src/components/ui/<name>.test.tsx`      | same group   | Vitest with Testing Library for logic that can fail (validation, selection, keyboard)             |
 | `apps/web/src/components/ui/specimens/<group>.tsx` | same group  | The group's specimens: every component in every state, built from the real component             |
-| `apps/web/src/app/design/components/<group>/page.tsx` | same group | The group's chapter page, rendered through `SpecimenFrame`                                      |
+| `apps/web/src/app/(public)/design/components/<group>/page.tsx` | same group | The group's chapter page, rendered through `SpecimenFrame`                                      |
 | `apps/web/src/components/ui/specimen.ts`          | lead         | `ComponentState`, `Specimen`, `SpecimenGroup` types                                               |
 | `apps/web/src/components/ui/specimen-frame.tsx`   | lead         | Renders one specimen in both themes at the chosen width with the keyboard note and usage snippet  |
 | `apps/web/src/components/icons.tsx`               | lead         | The icon set: one `Icon` component keyed by name, 24 px grid, 1.6 px stroke, round caps           |
 | `apps/web/src/lib/motion-tokens.ts`               | lead         | Durations and easings read from the design tokens; the app and `/design/motion` both import it   |
-| `apps/web/src/app/design/components/page.tsx`     | lead         | The chapter index linking the groups, written at integration                                      |
+| `apps/web/src/app/(public)/design/components/page.tsx`     | lead         | The chapter index linking the groups, written at integration                                      |
 
 Nothing under `apps/web/src/components/ui/` imports from `apps/web/src/app/`.
 Components import tokens through CSS custom properties only; no hex, no

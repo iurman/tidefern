@@ -7,7 +7,7 @@ import { CopyCode } from "@/components/ui/copy-code";
 import { EmptyState } from "@/components/ui/empty-state";
 import { TextLink } from "@/components/ui/text-link";
 import { pageMetadata } from "@/lib/site";
-import rootManifest from "../../../../../../package.json";
+import rootManifest from "../../../../../../../package.json";
 import styles from "./page.module.css";
 
 export const metadata = pageMetadata(

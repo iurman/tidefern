@@ -21,6 +21,21 @@ export function indexingAllowed(): boolean {
   return process.env.SITE_INDEXABLE === "true" && process.env.VERCEL_ENV === "production";
 }
 
+/**
+ * The social card at the app root (`src/app/opengraph-image.png`). Next
+ * applies a file-based card only to pages in its own segment, and the home
+ * page sits in the (public) route group, whose own openGraph would hide it,
+ * so the home page names the card here. Moving the file into the group
+ * would change its URL to a hashed one.
+ */
+const socialCard = {
+  url: "/opengraph-image.png",
+  width: 1200,
+  height: 630,
+  type: "image/png",
+  alt: `${site.name}. ${site.tagline}.`,
+};
+
 export function pageMetadata(
   path: string,
   title: string,
@@ -43,6 +58,7 @@ export function pageMetadata(
       title,
       description,
       url: canonical,
+      ...(path === "/" ? { images: [socialCard] } : {}),
     },
     twitter: { card: "summary", title, description },
   };

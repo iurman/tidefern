@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { cueLength, MASTER_BUS_GAIN, onPlay, readMasterPeak, toDecibels } from "@/lib/sound";
-import styles from "@/app/design/sound/sound.module.css";
+import styles from "@/app/(public)/design/sound/sound.module.css";
 
 /** The meter's floor: anything quieter reads as silence. */
 const FLOOR_DB = -60;

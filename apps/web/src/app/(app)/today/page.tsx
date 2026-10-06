@@ -1,10 +1,9 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import { InlineFeedback } from "@/components/ui/inline-feedback";
 import { readSessionMe } from "@/lib/api-server";
 import { pageMetadata } from "@/lib/site";
-import { authCopy } from "../(auth)/copy";
+import { authCopy } from "../../(public)/(auth)/copy";
 
 const copy = authCopy.today;
 
@@ -18,6 +17,8 @@ export const dynamic = "force-dynamic";
  * actor's display name from GET /api/v1/me, read through the in-process
  * client of architecture 5.2 (lib/api-server.ts), and the sign-out form,
  * which is a POST and nothing else. No session sends the person to sign in.
+ * A read that failed shows only the heading: the (app) layout above already
+ * says the profile could not be loaded and how to retry.
  */
 export default async function TodayPage() {
   const lookup = await readSessionMe(await headers());
@@ -27,10 +28,7 @@ export default async function TodayPage() {
       {lookup.kind === "ok" ? (
         <h1 id="today-title">{lookup.me.profile?.displayName ?? "Welcome"}</h1>
       ) : (
-        <>
-          <h1 id="today-title">{copy.title}</h1>
-          <InlineFeedback tone="error">{copy.loadFailed}</InlineFeedback>
-        </>
+        <h1 id="today-title">{copy.title}</h1>
       )}
       <form method="post" action="/sign-out">
         <Button type="submit" variant="secondary">

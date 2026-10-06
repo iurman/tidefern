@@ -35,7 +35,7 @@ touches `packages/db/`; C touches `packages/auth/` and
 `apps/web/src/lib/auth-client.ts`; D touches `packages/crypto/`; E touches
 `packages/api/`, `packages/schemas/`, `packages/api-client/`,
 `openapi/`; F touches `packages/core/`; G touches `packages/design-tokens/`,
-`apps/web/src/app/design/`, `apps/web/src/components/`,
+`apps/web/src/app/(public)/design/`, `apps/web/src/components/`,
 `apps/web/src/app/globals.css`, `apps/web/tests/e2e/design-*.spec.ts`,
 `docs/design/`; H touches the named route
 directories under `apps/web/src/app/`; I touches `packages/api/src/jobs/`
@@ -59,7 +59,7 @@ on; it never sits waiting on them.
 | P0-4 | CI (digest-pinned, manual trigger), deployment smoke, CodeQL, Renovate with version guards, PR template; workflows register once the foundation is merged to `main` | done | same | `.github/workflows/*` |
 | P0-5 | Skills vendored and gated; AGENTS.md, CLAUDE.md, humanize.md | done | same | `.agents/skills/*`, `pnpm skills:check` passed |
 | P0-6 | Architecture record, source analysis, research findings, six-lens review and verification pass integrated | done | same | `docs/ARCHITECTURE.md`, `docs/research/*`, `docs/BUILD_PROGRESS.md` |
-| P0-7 | Draft `/privacy` and `/health-privacy` pages linked from the footer with a smoke test | done | same | `apps/web/src/app/health-privacy/page.tsx`, browser test |
+| P0-7 | Draft `/privacy` and `/health-privacy` pages linked from the footer with a smoke test | done | same | `apps/web/src/app/(public)/health-privacy/page.tsx`, browser test |
 
 ## Phase 1: household release
 
