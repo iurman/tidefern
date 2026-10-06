@@ -122,9 +122,11 @@ jobs:
       - name: Formatting
         run: pnpm format:check
 
-      # The contract drift gate of architecture 5.1 and 16.1: a removed or retyped field, a new
-      # required parameter or a dropped path in openapi/v1.json fails the pull request, because
-      # installed clients keep calling v1 for months. The base copy goes under node_modules/.cache,
+      # The contract drift gate of architecture 5.1 and 16.1: an error-level change in
+      # openapi/v1.json (a removed required field, a retyped field, a new required parameter or a
+      # dropped path) fails the pull request, because installed clients keep calling v1 for months.
+      # Removing an optional response field is info level in oasdiff and passes; whether it should
+      # fail is a 16.1 decision, not this step's. The base copy goes under node_modules/.cache,
       # which no later step formats, lints or builds, inside the workspace the action's container
       # mounts. The commit-message step above already fetched the base branch.
       - name: Read the base branch's contract (pull requests)

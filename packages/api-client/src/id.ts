@@ -11,7 +11,8 @@ const webRandom: RandomFill = (bytes) => globalThis.crypto.getRandomValues(bytes
  * A UUIDv7 (RFC 9562): 48 bits of Unix milliseconds, then random bits with
  * the version and variant set. The same layout as the server's minter
  * (`jobId` in packages/db/src/jobs.ts), rebuilt on Web Crypto because a
- * client never imports the database package or `node:crypto`. The API
+ * client never imports the database package or `node:crypto`; a test in
+ * id.test.ts compares the two so the layouts cannot drift apart. The API
  * validates a client-minted id as v7 (architecture 5.1), so an offline
  * client can create a record whose id the server keeps.
  */

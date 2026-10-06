@@ -1,3 +1,5 @@
+import "server-only";
+
 import { createApiClient, forwardedRequest, readMe } from "@tidefern/api-client";
 import type { ApiClient, MeLookup } from "@tidefern/api-client";
 import { GET as app } from "@/app/api/[[...route]]/route";
@@ -10,7 +12,8 @@ import { GET as app } from "@/app/api/[[...route]]/route";
  * answers every method, so the one import serves GET and POST alike.
  *
  * Server only: the route module it calls holds the database and the auth
- * server, which no client bundle may carry.
+ * server, which no client bundle may carry. The `server-only` import above
+ * makes a client component that reaches this module fail the build.
  */
 export function serverApiClient(incoming: Headers): ApiClient {
   const { baseUrl, headers } = forwardedRequest(incoming);
