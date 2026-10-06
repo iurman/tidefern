@@ -299,55 +299,8 @@ img {
   transform: translateY(1px);
 }
 
-/* Hero */
-.hero {
-  display: grid;
-  grid-template-columns: minmax(0, 1.15fr) minmax(0, 0.85fr);
-  align-items: center;
-  gap: var(--space-12);
-  padding-block: var(--space-24) var(--space-12);
-}
-.hero-copy p:last-of-type {
-  color: var(--muted);
-}
-.hero-art {
-  position: relative;
-  aspect-ratio: 1;
-  max-width: 420px;
-  margin-inline: auto;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sheet);
-  background: var(--surface);
-  border: 1px solid var(--soft-border);
-  overflow: hidden;
-}
-.hero-mark {
-  position: relative;
-  z-index: 1;
-}
-.tide {
-  position: absolute;
-  inset: auto -20% -35% -20%;
-  height: 70%;
-  border-radius: 50%;
-  background: var(--tide);
-  opacity: 0.35;
-  /* Finite: the tide settles once after load and rests (WCAG 2.2.2). */
-  animation: tide var(--duration-tide) var(--ease-tide) 1 forwards;
-}
-@keyframes tide {
-  from {
-    transform: translateY(0) scaleX(1);
-  }
-  to {
-    transform: translateY(-14px) scaleX(1.06);
-  }
-}
+/* The home page's hero, tide and chapter rules moved to apps/web/src/components/public (H9). */
 @media (prefers-reduced-motion: reduce) {
-  .tide {
-    animation: none;
-  }
   .control,
   .action,
   .site-nav a {
@@ -355,47 +308,13 @@ img {
   }
 }
 
-/* Chapters and principles */
-.chapter-list {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--space-6);
-}
-.chapter-list li {
-  display: grid;
-  grid-template-columns: 64px minmax(0, 1fr);
-  gap: var(--space-4);
-  padding-block: var(--space-6);
-  border-top: 1px solid var(--soft-border);
-}
-.chapter-list p {
-  margin: 0;
-  color: var(--muted);
-  max-width: 60ch;
-}
+/* Kept for the specimens index list, which still uses it. */
 .chapter-index {
   font-family: var(--font-newsreader), Georgia, serif;
   font-size: 2rem;
   color: var(--accent);
   line-height: 1;
 }
-.principles {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-  gap: var(--space-8);
-  margin: 0;
-}
-.principles dt {
-  font-weight: 600;
-  margin-bottom: 6px;
-}
-.principles dd {
-  margin: 0;
-  color: var(--muted);
-}
-
 /* Footer */
 .site-footer {
   margin-top: var(--space-24);
@@ -512,13 +431,6 @@ img {
   .wrap {
     padding-inline: var(--space-8);
   }
-  .hero {
-    grid-template-columns: 1fr;
-    padding-block: var(--space-12);
-  }
-  .hero-art {
-    max-width: 320px;
-  }
 }
 @media (max-width: 600px) {
   .wrap {
@@ -539,9 +451,6 @@ img {
   .section.panel {
     padding: var(--space-6);
     border-radius: var(--radius-card);
-  }
-  .chapter-list li {
-    grid-template-columns: 48px minmax(0, 1fr);
   }
   .token-table th[scope="row"] {
     white-space: normal;

@@ -1,9 +1,17 @@
 "use client";
 
+import { brand } from "@tidefern/design-tokens";
+import { Statement } from "@/components/public/statement";
+import { Button } from "@/components/ui/button";
+import "./globals.css";
+
 /**
- * Catches an error thrown by the root layout itself, where no stylesheet,
- * font or provider can be assumed. It renders its own document with the
- * page colors inline; the CSP allows inline styles, not inline scripts.
+ * Catches an error thrown by the root layout itself, where no font loader
+ * or provider can be assumed, so it renders its own document. The global
+ * stylesheet is imported here directly: it carries the tokens for both
+ * themes through prefers-color-scheme, so the page is designed in light and
+ * dark without a script. Fonts fall back to the stacks the stylesheet names.
+ * The error is never shown: no message, no digest, no stack.
  */
 export default function GlobalError({
   retry,
@@ -13,39 +21,27 @@ export default function GlobalError({
 }) {
   return (
     <html lang="en">
-      <body
-        style={{
-          margin: 0,
-          minHeight: "100vh",
-          display: "grid",
-          placeItems: "center",
-          background: "#F7F5EF",
-          color: "#1F3530",
-          fontFamily: "Georgia, serif",
-        }}
-      >
-        <main style={{ maxWidth: 480, padding: 24, textAlign: "center" }}>
-          <h1 style={{ fontWeight: 500, fontSize: 28 }}>Something went wrong.</h1>
-          <p style={{ lineHeight: 1.6 }}>
-            Nothing you entered was lost on the server. You can try again.
-          </p>
-          <button
-            type="button"
-            onClick={() => retry()}
-            style={{
-              marginTop: 16,
-              padding: "12px 20px",
-              borderRadius: 999,
-              border: 0,
-              background: "#2F4F46",
-              color: "#F7F5EF",
-              fontSize: 16,
-              cursor: "pointer",
-            }}
-          >
-            Try again
-          </button>
+      <body>
+        <main id="main">
+          <Statement
+            heading="Something went wrong."
+            sentence="Nothing you entered was lost on the server. You can try again."
+            action={
+              <Button type="button" onClick={() => retry()}>
+                Try again
+              </Button>
+            }
+          />
         </main>
+        <footer className="site-footer wrap">
+          <div className="footer-grid">
+            <p className="footer-line">{brand.closing}.</p>
+            <nav aria-label="Footer">
+              <a href="/privacy">Privacy</a>
+              <a href="/health-privacy">Consumer Health Data Privacy Policy</a>
+            </nav>
+          </div>
+        </footer>
       </body>
     </html>
   );

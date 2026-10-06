@@ -1,0 +1,35 @@
+.statement {
+  display: grid;
+  justify-items: start;
+  max-width: var(--size-reading);
+  padding-block: var(--space-16) var(--space-12);
+}
+
+.tide {
+  max-width: 160px;
+  margin-bottom: var(--space-8);
+}
+
+.heading {
+  margin-bottom: var(--space-3);
+  text-wrap: balance;
+}
+
+.sentence {
+  font-size: var(--type-intro);
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 40ch;
+  margin-bottom: var(--space-6);
+}
+
+.action {
+  display: grid;
+  justify-items: start;
+}
+
+@media (max-width: 600px) {
+  .statement {
+    padding-block: var(--space-12) var(--space-8);
+  }
+}

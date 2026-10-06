@@ -1,0 +1,94 @@
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--space-6);
+  padding-block: var(--space-8) var(--space-12);
+}
+
+.warmth,
+.promise {
+  display: grid;
+  border-radius: var(--radius-sheet);
+  padding: var(--space-8);
+}
+
+/* The one warmth surface on the page: the tagline and the mark, nothing else. */
+.warmth {
+  position: relative;
+  align-content: space-between;
+  gap: var(--space-12);
+  background: var(--warmth);
+  color: var(--text);
+}
+
+.mark {
+  justify-self: end;
+}
+
+.copy {
+  display: grid;
+}
+
+.copy .eyebrow {
+  margin-bottom: var(--space-2);
+}
+
+.tagline {
+  margin-bottom: var(--space-3);
+  text-wrap: balance;
+}
+
+.lede {
+  font-size: var(--type-intro);
+  line-height: 1.5;
+  margin: 0;
+  max-width: 34ch;
+}
+
+.promise {
+  align-content: center;
+  gap: var(--space-4);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.statement {
+  font-size: var(--type-display);
+  line-height: 1.05;
+  margin: 0;
+  text-wrap: balance;
+}
+
+.actions {
+  display: grid;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.status {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+@media (max-width: 960px) {
+  .hero {
+    grid-template-columns: minmax(0, 1fr);
+    padding-block: var(--space-6) var(--space-8);
+  }
+
+  .warmth {
+    gap: var(--space-8);
+  }
+
+  .mark {
+    justify-self: center;
+  }
+}
+
+@media (max-width: 600px) {
+  .warmth,
+  .promise {
+    padding: var(--space-6);
+  }
+}

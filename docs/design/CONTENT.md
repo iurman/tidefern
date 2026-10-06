@@ -97,3 +97,10 @@ still closes the page.
   (Phase 2 gate).
 - `[OWNER]` approval of the mark, which the home page and the brand chapter
   present.
+- `[OWNER]` the updated date each policy page shows (`/privacy`,
+  `/health-privacy`, `/terms`, `/accessibility`), set when the page is
+  approved; the pages show the marker until then.
+- `[OWNER]` the legal text of `/terms` (governing law, liability, warranty,
+  disputes), after attorney review; the page says it is missing.
+- `[OWNER]` the contact for accessibility reports on `/accessibility`, if it
+  differs from the privacy inbox.
