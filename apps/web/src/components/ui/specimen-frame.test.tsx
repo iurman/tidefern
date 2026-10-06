@@ -47,6 +47,17 @@ describe("SpecimenFrame", () => {
     expect(screen.getAllByRole("button", { name: "disabled" })[0]).toBeDisabled();
   });
 
+  it("gives a wide specimen the roomier column set", () => {
+    const wide: SpecimenGroup = {
+      ...group,
+      specimens: [{ ...group.specimens[0]!, wide: true }],
+    };
+    render(<SpecimenFrame group={wide} />);
+    const lists = document.querySelectorAll("ol");
+    expect(lists).toHaveLength(2);
+    for (const list of lists) expect(list.className).toContain("statesWide");
+  });
+
   it("links the source path and prints the keyboard note and usage", () => {
     render(<SpecimenFrame group={group} />);
     expect(
