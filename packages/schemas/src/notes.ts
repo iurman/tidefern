@@ -110,7 +110,7 @@ export const Note = z
     category: NoteFiling,
     date: NoteDate,
     body: NoteBody.optional().describe(
-      "Decrypted for the owner, a guardian and a read grantee; absent for a summary grantee and on a tombstone",
+      "Decrypted for the owner and a read or contribute grantee; absent for a summary grantee and on a tombstone",
     ),
     createdAt: Instant,
     updatedAt: Instant,

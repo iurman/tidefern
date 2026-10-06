@@ -111,6 +111,17 @@ async function noteOf(response: Response): Promise<Note> {
   return Note.parse(await response.json());
 }
 
+/** The keys the server sent, read before a schema parse can strip a leaked field. */
+async function rawKeysOf(response: Response): Promise<string[]> {
+  return Object.keys((await response.clone().json()) as object).sort();
+}
+
+/** The keys of every list item the server sent, read before a schema parse. */
+async function rawItemKeysOf(response: Response): Promise<string[][]> {
+  const raw = (await response.clone().json()) as { items: object[] };
+  return raw.items.map((item) => Object.keys(item).sort());
+}
+
 async function rowOf(id: string) {
   const [row] = await fixture.harness.db
     .select()
@@ -376,7 +387,8 @@ describe("reading notes as the owner", () => {
     );
     expect(after.items).toHaveLength(0);
 
-    // A content-free tombstone, as a sync path would leave one: no body for anyone, gone from the plain list.
+    // A tombstone inserted by hand: deletes are hard (architecture 11), so no route writes one today.
+    // The feed still has to serve the schema's deletedAt rows without a body and drop them from the plain list.
     const original = await rowOf(privateId);
     await fixture.harness.db.insert(schema.notes).values({
       id: TOMBSTONE_ID,
@@ -468,12 +480,14 @@ describe("a grantee", () => {
 
     const byId = await get(`/notes/${sharedId}`, TOKENS.ben);
     expect(byId.status).toBe(200);
+    expect(await rawKeysOf(byId)).toEqual([...NOTE_KEYS].sort());
     const seen = await noteOf(byId);
     expect(seen.body).toBe(CHANGED_TEXT);
     expect(seen.category).toBe("cycle.symptoms");
-    expect(Object.keys(seen).sort()).toEqual([...NOTE_KEYS].sort());
 
-    const list = NoteList.parse(await (await get(`/notes?subject=${ANNA}`, TOKENS.ben)).json());
+    const listResponse = await get(`/notes?subject=${ANNA}`, TOKENS.ben);
+    expect(await rawItemKeysOf(listResponse)).toEqual([[...NOTE_KEYS].sort()]);
+    const list = NoteList.parse(await listResponse.json());
     expect(list.items.map((item) => item.id)).toEqual([sharedId]);
     expect(list.items.every((item) => item.category === "cycle.symptoms")).toBe(true);
     // Two reads of one category on one day collapse to one audit row, in Anna's zone.
@@ -490,17 +504,43 @@ describe("a grantee", () => {
   });
 
   it("with a summary level learns the note exists and nothing of its body", async () => {
-    const list = NoteList.parse(await (await get(`/notes?subject=${ANNA}`, TOKENS.cara)).json());
+    const summaryKeys = NOTE_KEYS.filter((key) => key !== "body").sort();
+    const listResponse = await get(`/notes?subject=${ANNA}`, TOKENS.cara);
+    expect(await rawItemKeysOf(listResponse)).toEqual([summaryKeys]);
+    const list = NoteList.parse(await listResponse.json());
     expect(list.items.map((item) => item.id)).toEqual([sharedId]);
-    const item = list.items[0];
-    expect(item).not.toHaveProperty("body");
-    expect(Object.keys(item ?? {}).sort()).toEqual(
-      NOTE_KEYS.filter((key) => key !== "body").sort(),
-    );
+    expect(list.items[0]).not.toHaveProperty("body");
     const byId = await get(`/notes/${sharedId}`, TOKENS.cara);
     expect(byId.status).toBe(200);
+    expect(await rawKeysOf(byId)).toEqual(summaryKeys);
     expect(await byId.text()).not.toContain("noon");
     expect((await auditRows(ANNA)).filter((row) => row.actorId === CARA)).toHaveLength(1);
+  });
+
+  it("audits no read for a category whose sync page held only tombstones", async () => {
+    // Inserted by hand: deletes are hard (architecture 11), so no route writes a tombstone today.
+    await fixture.harness.db.insert(schema.notes).values({
+      id: TOMBSTONE_ID,
+      subjectId: ANNA,
+      authorId: ANNA,
+      category: "pregnancy.overview",
+      date: "2026-10-05",
+      body: (await rowOf(sharedId))!.body,
+      kekVersion: "test",
+      deletedAt: new Date(),
+    });
+    const feed = await get(
+      `/notes?subject=${ANNA}&updatedSince=2000-01-01T00:00:00.000Z`,
+      TOKENS.ben,
+    );
+    expect(feed.status).toBe(200);
+    const items = NoteList.parse(await feed.json()).items;
+    expect(items.find((item) => item.id === TOMBSTONE_ID)).not.toHaveProperty("body");
+    const reads = (await auditRows(ANNA)).filter(
+      (row) => row.actorId === BEN && row.action === "partner.read",
+    );
+    expect(reads.map((row) => row.category)).toEqual(["cycle.symptoms"]);
+    await fixture.harness.db.delete(schema.notes).where(eq(schema.notes.id, TOMBSTONE_ID));
   });
 
   it("with read access cannot change, share or delete the note", async () => {

@@ -217,7 +217,7 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 4000,
-            "description": "Decrypted for the owner, a guardian and a read grantee; absent for a summary grantee and on a tombstone"
+            "description": "Decrypted for the owner and a read or contribute grantee; absent for a summary grantee and on a tombstone"
           },
           "createdAt": {
             "type": "string",

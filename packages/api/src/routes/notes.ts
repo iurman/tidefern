@@ -430,7 +430,8 @@ export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
             const note = serialize(row, access, keys);
             if (note === null) continue;
             items.push(note);
-            categoriesRead.add(row.category);
+            // A tombstone reveals nothing of the category, so it is not a read to audit.
+            if (row.deletedAt === null) categoriesRead.add(row.category);
           }
           if (access.reason === "grant" && categoriesRead.size > 0) {
             const day = await subjectDay(tx, subjectId);
