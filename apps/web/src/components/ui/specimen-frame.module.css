@@ -12,7 +12,7 @@
  * drawn by each module's twin rule; the focus ring is drawn once here, the
  * same way the global :focus-visible rule draws it, so no module restates it.
  */
-[data-specimen-state="focus-visible"] > * {
+.group [data-specimen-state="focus-visible"] > * {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
   border-radius: 4px;
@@ -62,6 +62,10 @@
   gap: var(--space-2) var(--space-4);
 }
 
+.head > * {
+  min-width: 0;
+}
+
 .head h2 {
   margin: 0;
 }
@@ -69,6 +73,13 @@
 .source {
   font-size: var(--type-caption);
   color: var(--muted);
+  /* A repository path has no spaces; let it break anywhere rather than widen the card. */
+  overflow-wrap: anywhere;
+}
+
+.source code {
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .theme {
@@ -119,13 +130,14 @@
   align-items: start;
   min-height: 56px;
   min-width: 0;
-  /* A specimen wider than its cell (a rail, a chart) scrolls inside the cell instead of widening the page. */
-  overflow-x: auto;
+  /* A specimen wider than its cell is cut at the cell's edge instead of widening the page; clip creates no scroll region, so nothing needs keyboard access. */
+  overflow-x: clip;
 }
 
 .notes {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
+  min-width: 0;
   gap: var(--space-2) var(--space-4);
   margin: 0;
   font-size: var(--type-small);
@@ -137,12 +149,15 @@
 
 .notes dd {
   margin: 0;
+  min-width: 0;
 }
 
 .usage {
   margin: 0;
   padding: var(--space-3);
-  overflow-x: auto;
+  /* Long usage lines wrap; a scrolling block would need keyboard access of its own. */
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   border: 1px solid var(--soft-border);
   border-radius: var(--radius-control);
   background: var(--surface);

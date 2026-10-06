@@ -1,7 +1,11 @@
+"use client";
 import { DaySheet } from "../day-sheet";
 import type { ComponentState, Specimen, SpecimenGroup } from "../specimen";
+import { SpecimenFrame } from "../specimen-frame";
 
 const ui = "apps/web/src/components/ui/";
+
+const noop = () => {};
 
 const daySheet: Specimen = {
   name: "Day sheet",
@@ -25,26 +29,36 @@ const daySheet: Specimen = {
     <DaySheet
       inline
       open
-      onClose={() => {}}
+      onClose={noop}
       date="2026-10-05"
       initial={
         state === "empty"
           ? undefined
           : { period: true, flow: "light", symptoms: ["cramps", "fatigue"], mood: "steady" }
       }
-      onSave={() => {}}
-      onShareNote={() => {}}
-      onPrevious={() => {}}
-      onNext={() => {}}
+      onSave={noop}
+      onShareNote={noop}
+      onPrevious={noop}
+      onNext={noop}
       loading={state === "loading"}
       error={state === "error" ? "We could not save this day. Try again." : undefined}
     />
   ),
 };
 
+/**
+ * The compositions the product uses as one thing. This is a client module
+ * because the day sheet takes handlers, which cannot cross the server
+ * boundary as props; the page renders `PatternsSpecimens` and writes its own
+ * title and lede.
+ */
 export const specimens: SpecimenGroup = {
   slug: "patterns",
   title: "Patterns",
   lede: "Compositions the product uses as one thing: the day sheet first, built from the sheet, the flow scale, the chips, the mood selector and the note field, so the pieces are never recombined ad hoc on a route.",
   specimens: [daySheet],
 };
+
+export function PatternsSpecimens() {
+  return <SpecimenFrame group={specimens} />;
+}
