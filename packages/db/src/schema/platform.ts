@@ -247,6 +247,13 @@ export const dataRequests = pgTable(
   (table) => [
     index("data_requests_user_idx").on(table.userId),
     index("data_requests_state_deadline_idx").on(table.state, table.deadlineAt),
+    // One open closure per person (task B13): a second guard behind the
+    // advisory lock the close route takes, so two concurrent closures can
+    // never both be filed. The open states are the ones the account and
+    // profile routes treat as open.
+    uniqueIndex("data_requests_open_closure_unique")
+      .on(table.userId)
+      .where(sql`${table.kind} = 'closure' and ${table.state} in ('requested', 'in_progress')`),
     check(
       "data_requests_has_a_requester",
       sql`${table.userId} is not null or ${table.emailHmac} is not null`,

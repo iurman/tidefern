@@ -511,6 +511,7 @@ function serializeEvent(row: EventRow, note: string | null, scope: Scope): Child
       endedAt: row.endedAt === null ? null : instant(row.endedAt),
       milestoneId: row.milestoneId,
       quantityMl: row.quantityMl,
+      side: row.side,
       note,
       authorId: row.authorId,
       createdAt: instant(row.createdAt),
@@ -989,6 +990,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
               endedAt: input.endedAt === undefined ? null : new Date(input.endedAt),
               milestoneId: input.milestoneId ?? null,
               quantityMl: input.quantityMl ?? null,
+              side: input.side ?? null,
               note: sealed.note,
               kekVersion: sealed.kekVersion,
             })
@@ -1112,6 +1114,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
               endedAt: input.endedAt === undefined ? null : new Date(input.endedAt),
               milestoneId: input.milestoneId ?? null,
               quantityMl: input.quantityMl ?? null,
+              side: input.side ?? null,
               note: sealed.note,
               kekVersion: sealed.kekVersion,
               updatedAt: new Date(),
@@ -1176,6 +1179,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
             note: null,
             kekVersion: null,
             quantityMl: null,
+            side: null,
             startedAt: null,
             endedAt: null,
           })

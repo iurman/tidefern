@@ -4,6 +4,7 @@ import {
   date,
   index,
   integer,
+  pgEnum,
   pgTable,
   text,
   timestamp,
@@ -15,6 +16,14 @@ import { user } from "../auth-schema";
 import { childEventKindEnum, sexEnum } from "./enums";
 import { bytea } from "./keys";
 import { households } from "./relationships";
+
+/**
+ * The breast a feed was given from (task B13), for the "breast with side and
+ * timer" log. Closed and nullable: a bottle feed has none, and only a feed
+ * may carry one (the `child_events_side_is_for_feed` check).
+ */
+export const childEventSideValues = ["left", "right", "both"] as const;
+export const childEventSideEnum = pgEnum("child_event_side", childEventSideValues);
 
 /**
  * A child belongs to a household and is co-owned by its guardians
@@ -68,7 +77,8 @@ export const childGuardians = pgTable(
  * a calendar fact; a feed or a sleep also carries instants, a sleep as a
  * span. `milestone_id` is core's checklist item key (`<months>m-<domain>-<n>`)
  * and is set exactly for milestones. `quantity_ml` is the SI volume of a
- * feed. Any free text goes in `note`, encrypted under the child's DEK with
+ * feed and `side` the breast it was given from, set only on a feed. Any
+ * free text goes in `note`, encrypted under the child's DEK with
  * the sibling `kek_version`. The author may be any guardian or a partner
  * with a `contribute` grant for this child.
  */
@@ -86,6 +96,7 @@ export const childEvents = pgTable(
     endedAt: timestamp("ended_at", { withTimezone: true }),
     milestoneId: text("milestone_id"),
     quantityMl: integer("quantity_ml"),
+    side: childEventSideEnum("side"),
     note: bytea("note"),
     kekVersion: text("kek_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -107,6 +118,7 @@ export const childEvents = pgTable(
       "child_events_quantity_is_positive",
       sql`${table.quantityMl} is null or ${table.quantityMl} > 0`,
     ),
+    check("child_events_side_is_for_feed", sql`${table.side} is null or ${table.kind} = 'feed'`),
     check(
       "child_events_note_has_kek_version",
       sql`(${table.note} is null) = (${table.kekVersion} is null)`,

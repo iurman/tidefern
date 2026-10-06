@@ -47,6 +47,9 @@ const KEYS = {
   anonymous: "018f5e7a-3000-7000-8000-00000000e01a",
   guardianStale: "018f5e7a-3000-7000-8000-00000000e01b",
   v4Id: "018f5e7a-3000-7000-8000-00000000e01c",
+  bad5: "018f5e7a-3000-7000-8000-00000000e01d",
+  bad6: "018f5e7a-3000-7000-8000-00000000e01e",
+  caraFeed: "018f5e7a-3000-7000-8000-00000000e01f",
 };
 
 const CHILD_GRANT = "018f5e7a-2000-7000-8000-00000000c001";
@@ -184,6 +187,7 @@ const GRANTEE_EVENT_KEYS = [
   "endedAt",
   "milestoneId",
   "quantityMl",
+  "side",
   "note",
   "authorId",
   "createdAt",
@@ -472,6 +476,7 @@ describe("events", () => {
         startedAt: `${DAY_TEN}T08:00:00Z`,
         endedAt: `${DAY_TEN}T08:20:00Z`,
         quantityMl: 90,
+        side: "left",
         note: NOTE,
       },
     });
@@ -485,6 +490,7 @@ describe("events", () => {
       startedAt: `${DAY_TEN}T08:00:00.000Z`,
       endedAt: `${DAY_TEN}T08:20:00.000Z`,
       quantityMl: 90,
+      side: "left",
       note: NOTE,
       milestoneId: null,
       authorId: ANNA,
@@ -518,6 +524,12 @@ describe("events", () => {
       body: { kind: "diaper", date: DAY_TEN },
     });
     expect(diaper.status).toBe(201);
+    expect((await json<ChildEvent>(diaper)).side).toBeNull();
+    const [stored] = await db
+      .select({ side: schema.childEvents.side })
+      .from(schema.childEvents)
+      .where(eq(schema.childEvents.id, feedId));
+    expect(stored).toEqual({ side: "left" });
   });
 
   it("answers 422 with the field for each rule an event breaks", async () => {
@@ -525,6 +537,12 @@ describe("events", () => {
       [KEYS.bad1, { kind: "milestone", date: DAY_TEN }, "milestoneId"],
       [KEYS.bad2, { kind: "sleep", date: DAY_TEN }, "startedAt"],
       [KEYS.bad3, { kind: "diaper", date: DAY_TEN, quantityMl: 10 }, "quantityMl"],
+      [
+        KEYS.bad5,
+        { kind: "sleep", date: DAY_TEN, startedAt: `${DAY_TEN}T20:00:00Z`, side: "left" },
+        "side",
+      ],
+      [KEYS.bad6, { kind: "feed", date: DAY_TEN, side: "middle" }, "side"],
       [
         KEYS.bad4,
         {
@@ -586,13 +604,22 @@ describe("events", () => {
     });
     expect((await expectProblem(kind, 422, "validation_failed")).errors?.[0]?.path).toBe("kind");
 
+    const sideless = await call("PUT", `/children/${childId}/events/${feedId}`, {
+      ifMatch: "1",
+      body: { kind: "diaper", date: DAY_TEN, side: "right" },
+    });
+    expect((await expectProblem(sideless, 422, "validation_failed")).errors?.[0]?.path).toBe(
+      "side",
+    );
+
     const updated = await call("PUT", `/children/${childId}/events/${feedId}`, {
       ifMatch: "1",
-      body: { kind: "feed", date: DAY_TEN, quantityMl: 100, note: NOTE_AGAIN },
+      body: { kind: "feed", date: DAY_TEN, quantityMl: 100, side: "right", note: NOTE_AGAIN },
     });
     expect(updated.status).toBe(200);
     expect(await json<ChildEvent>(updated)).toMatchObject({
       quantityMl: 100,
+      side: "right",
       note: NOTE_AGAIN,
       startedAt: null,
       version: 2,
@@ -624,10 +651,11 @@ describe("events", () => {
         note: schema.childEvents.note,
         kekVersion: schema.childEvents.kekVersion,
         quantityMl: schema.childEvents.quantityMl,
+        side: schema.childEvents.side,
       })
       .from(schema.childEvents)
       .where(eq(schema.childEvents.id, feedId));
-    expect(row).toEqual({ note: null, kekVersion: null, quantityMl: null });
+    expect(row).toEqual({ note: null, kekVersion: null, quantityMl: null, side: null });
   });
 });
 
@@ -741,8 +769,25 @@ describe("a child grantee", () => {
     expect(event.note).toBe("partner wrote this");
     expect(Object.keys(event).sort()).toEqual(sorted(GRANTEE_EVENT_KEYS));
 
+    // The side is part of the child row, so a contributor records it and a
+    // grantee reads it like the rest of the event.
+    const feed = await call("POST", `/children/${childId}/events`, {
+      token: CHILDREN_TOKENS.cara,
+      key: KEYS.caraFeed,
+      body: { kind: "feed", date: DAY_TEN, side: "both" },
+    });
+    expect(feed.status).toBe(201);
+    const fed = await json<ChildEvent>(feed);
+    expect(Object.keys(fed).sort()).toEqual(sorted(GRANTEE_EVENT_KEYS));
+    expect(fed).toMatchObject({ kind: "feed", side: "both", authorId: CARA });
+    const listed = await json<{ items: ChildEvent[] }>(
+      await call("GET", `/children/${childId}/events?kind=feed`, { token: CHILDREN_TOKENS.cara }),
+    );
+    expect(listed.items.find((item) => item.id === fed.id)?.side).toBe("both");
+
     const writes = (await auditRows(childId)).filter((row) => row.action === "partner.write");
     expect(writes).toEqual([
+      { actorId: CARA, action: "partner.write", category: "child", childId, dedupeKey: null },
       { actorId: CARA, action: "partner.write", category: "child", childId, dedupeKey: null },
     ]);
 
