@@ -48,7 +48,7 @@
 
 .label {
   font-family: var(--font-serif);
-  font-size: 1.5rem;
+  font-size: var(--type-subheading);
   font-weight: var(--weight-serif);
   line-height: 1.1;
 }

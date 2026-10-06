@@ -270,7 +270,7 @@ export function CycleRing(props: CycleRingProps) {
                 </>
               ) : null}
             </p>
-            <p className={styles.estimate}>{estimateSentence(ring.prediction)}</p>
+            <p className={`estimate ${styles.estimateLine}`}>{estimateSentence(ring.prediction)}</p>
             {ovulation ? <p className={styles.fact}>{ovulation}</p> : null}
           </>
         ) : null}

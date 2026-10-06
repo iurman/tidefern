@@ -153,13 +153,9 @@
   line-height: var(--leading-body);
 }
 
-/* The estimate sentence is the only italic in the product (architecture 13.6). */
-.estimate {
+/* The italic comes from the global estimate class; this only clears the paragraph margin. */
+.estimateLine {
   margin: 0;
-  font-family: var(--font-serif);
-  font-style: italic;
-  font-size: var(--type-intro);
-  line-height: 1.45;
 }
 
 .emptyHeading {

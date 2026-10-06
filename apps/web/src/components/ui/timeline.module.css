@@ -36,8 +36,8 @@
   display: none;
 }
 
-/* The stretch leading to an expectation is dashed (RESEARCH.md decision 1). */
-.row:has(+ .expected)::before {
+/* The stretch an expectation owns is dashed (RESEARCH.md decision 1). */
+.expected::before {
   border-left-style: dashed;
 }
 

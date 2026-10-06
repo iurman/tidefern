@@ -12,7 +12,7 @@ import { WeekCard } from "../week-card";
  * the chart are images with the sentences beside them, so hover, focus-visible
  * and active have no meaning on their roots and are declared none; the
  * chart's range pills are the one interactive part and the chart's root
- * decides that those states show on its first pill. Disabled is none for all
+ * decides that those states show on its second pill, the first unchecked one. Disabled is none for all
  * four because none of them is a control.
  */
 

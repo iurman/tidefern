@@ -291,7 +291,7 @@ export function MeasurementChart(props: MeasurementChartProps) {
   return (
     <figure className={rootClass}>
       <fieldset className={styles.ranges}>
-        <legend className={styles.legend}>Range</legend>
+        <legend className="sr-only">Range</legend>
         {chartRanges.map((option) => (
           <label key={option.value} className={styles.pill}>
             <input

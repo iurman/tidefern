@@ -15,18 +15,6 @@
   border: 0;
 }
 
-.legend {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  padding: 0;
-  margin: -1px;
-  overflow: hidden;
-  clip: rect(0, 0, 0, 0);
-  white-space: nowrap;
-  border: 0;
-}
-
 /* The range pills swap the chart in place and never navigate; a native radio sits behind each one. */
 .pill {
   position: relative;
@@ -115,7 +103,7 @@
 .tick,
 .axisLabel {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-size: var(--type-caption);
   font-variant-numeric: tabular-nums;
   fill: var(--muted);
   dominant-baseline: middle;
