@@ -47,8 +47,11 @@ import type { Mailer } from "./notice";
  * reasons, with ids only in the payload: `userId` (the recipient), and
  * `pregnancyId` with `eventIds` for appointments (`pregnancyId` is the key
  * the pregnancy end route matches to cancel queued reminders, 8.4), and
- * `entryIds` for period starts. A recipient whose email is not verified, or
- * whose account is closing, gets nothing. The email is the same at every
+ * `entryIds` for period starts. A recipient who already has a reminder job
+ * run on her current local day gets no second one that day, whatever
+ * changed since: an edit to the appointment, a second run inside Hobby's
+ * jitter, a manual run. A recipient whose email is not verified, or whose
+ * account is closing, gets nothing. The email is the same at every
  * detail level: `notification_detail` changes only in-app text and the
  * lock-screen preview in Phase 1, so the handler never reads it.
  */
@@ -60,13 +63,18 @@ export { REMINDER_JOB_TYPE };
 const PERIOD_NOTICE_CATEGORIES = ["cycle.status", "cycle.history"] as const;
 
 /**
- * A reason already in a reminder job is not enqueued again. A period start
- * can be seen by the runs of two local days, at most two days apart; an
- * appointment is due on one local day only, so its window is shorter and
- * an appointment moved after its reminder is reminded again.
+ * How far back the step reads reminder jobs. A period start can be seen by
+ * the runs of two local days, at most two days apart, so a start already
+ * in a job inside this window is never told again. The same rows answer
+ * whether a recipient already had her reminder today in her zone. An
+ * appointment needs no window of its own: it is tomorrow on one local day
+ * only, and that day's one job per recipient covers it; one moved to a
+ * later date is due again on the day before its new date.
  */
-const ENTRY_LOOKBACK_MS = 3 * 24 * 60 * 60_000;
-const EVENT_LOOKBACK_MS = 36 * 60 * 60_000;
+const LOOKBACK_MS = 3 * 24 * 60 * 60_000;
+
+/** The zone a recipient without a profile row is counted in. */
+const FALLBACK_TIME_ZONE = "UTC";
 
 /** One reminder step at a time: two overlapping runs would both see the same reasons. */
 const REMINDER_LOCK = sql`pg_advisory_xact_lock(hashtext('reminder.send'))`;
@@ -111,7 +119,6 @@ interface DueAppointment {
   id: string;
   subjectId: string;
   pregnancyId: string;
-  updatedAt: Date;
 }
 
 /**
@@ -130,7 +137,6 @@ async function dueAppointments(tx: Transaction, now: Date): Promise<DueAppointme
       subjectId: events.subjectId,
       pregnancyId: events.pregnancyId,
       date: events.date,
-      updatedAt: events.updatedAt,
       timeZone: profiles.timeZone,
     })
     .from(events)
@@ -150,12 +156,7 @@ async function dueAppointments(tx: Transaction, now: Date): Promise<DueAppointme
     );
   return rows
     .filter((row) => row.date === addDays(todayIn(row.timeZone, now), 1))
-    .map(({ id, subjectId, pregnancyId, updatedAt }) => ({
-      id,
-      subjectId,
-      pregnancyId,
-      updatedAt,
-    }));
+    .map(({ id, subjectId, pregnancyId }) => ({ id, subjectId, pregnancyId }));
 }
 
 /** The core actor a grantee is, from the grants she holds from one owner. */
@@ -285,31 +286,69 @@ async function recentPeriodStarts(
   return starts;
 }
 
-/** The reasons already carried by a recent reminder job, so a run never repeats one. */
-async function alreadyQueued(
-  tx: Transaction,
-  now: Date,
-): Promise<{ events: Map<string, Date>; entries: Set<string> }> {
+interface Queued {
+  /** Period starts already carried by a recent reminder job. */
+  entries: Set<string>;
+  /** Recipient id to the times her recent reminder jobs were due. */
+  runsByRecipient: Map<string, Date[]>;
+}
+
+/**
+ * The recent reminder jobs in any state, so a run never repeats a period
+ * start and never writes a recipient's second job of her day.
+ */
+async function alreadyQueued(tx: Transaction, now: Date): Promise<Queued> {
   const rows = await tx
     .select({ payload: schema.jobs.payloadJson, runAfter: schema.jobs.runAfter })
     .from(schema.jobs)
     .where(
       and(
         eq(schema.jobs.type, REMINDER_JOB_TYPE),
-        gte(schema.jobs.runAfter, new Date(now.getTime() - ENTRY_LOOKBACK_MS)),
+        gte(schema.jobs.runAfter, new Date(now.getTime() - LOOKBACK_MS)),
       ),
     );
-  const events = new Map<string, Date>();
   const entries = new Set<string>();
+  const runsByRecipient = new Map<string, Date[]>();
   for (const { payload, runAfter } of rows) {
     const parsed = payload as Partial<ReminderPayload>;
-    for (const id of parsed.eventIds ?? []) {
-      const seen = events.get(id);
-      if (!seen || seen < runAfter) events.set(id, runAfter);
-    }
     for (const id of parsed.entryIds ?? []) entries.add(id);
+    if (typeof parsed.userId === "string") {
+      runsByRecipient.set(parsed.userId, [...(runsByRecipient.get(parsed.userId) ?? []), runAfter]);
+    }
   }
-  return { events, entries };
+  return { entries, runsByRecipient };
+}
+
+/**
+ * Of these recipients, the ones who already have a reminder job due on
+ * the local day `now` falls on in their own zone: one email a day per
+ * person, counted in her day, not the server's.
+ */
+async function remindedToday(
+  tx: Transaction,
+  runsByRecipient: ReadonlyMap<string, readonly Date[]>,
+  userIds: readonly string[],
+  now: Date,
+): Promise<Set<string>> {
+  const candidates = userIds.filter((userId) => runsByRecipient.has(userId));
+  if (candidates.length === 0) return new Set();
+  const zones = new Map(
+    (
+      await tx
+        .select({ userId: schema.profiles.userId, timeZone: schema.profiles.timeZone })
+        .from(schema.profiles)
+        .where(and(inArray(schema.profiles.userId, candidates), isNull(schema.profiles.deletedAt)))
+    ).map((row) => [row.userId, row.timeZone]),
+  );
+  const done = new Set<string>();
+  for (const userId of candidates) {
+    const zone = zones.get(userId) ?? FALLBACK_TIME_ZONE;
+    const today = todayIn(zone, now);
+    if ((runsByRecipient.get(userId) ?? []).some((runAfter) => todayIn(zone, runAfter) === today)) {
+      done.add(userId);
+    }
+  }
+  return done;
 }
 
 /**
@@ -364,12 +403,6 @@ export async function enqueueReminders(
     const byRecipient = new Map<string, Reasons>();
 
     for (const appointment of await dueAppointments(tx, now)) {
-      const seen = queued.events.get(appointment.id);
-      const eventSince = Math.max(
-        appointment.updatedAt.getTime(),
-        now.getTime() - EVENT_LOOKBACK_MS,
-      );
-      if (seen && seen.getTime() >= eventSince) continue;
       const reasons = reasonsFor(byRecipient, appointment.subjectId);
       reasons.pregnancyId = appointment.pregnancyId;
       reasons.eventIds.add(appointment.id);
@@ -383,10 +416,12 @@ export async function enqueueReminders(
       }
     }
 
-    const allowed = await reachable(tx, [...byRecipient.keys()]);
+    const recipients = [...byRecipient.keys()];
+    const allowed = await reachable(tx, recipients);
+    const done = await remindedToday(tx, queued.runsByRecipient, recipients, now);
     const counts: ReminderSweepCounts = { appointments: 0, periodNotices: 0, jobs: 0 };
     for (const [userId, reasons] of byRecipient) {
-      if (!allowed.has(userId)) continue;
+      if (!allowed.has(userId) || done.has(userId)) continue;
       await enqueue(tx, REMINDER_JOB_TYPE, { ...payloadOf(userId, reasons) }, { runAfter: now });
       counts.appointments += reasons.eventIds.size;
       counts.periodNotices += reasons.entryIds.size;
@@ -473,7 +508,12 @@ export function parseReminderPayload(payload: unknown): ReminderPayload {
   return parsed;
 }
 
-/** Of the appointments named, whether one is still hers, still on an open pregnancy and not past. */
+/**
+ * Of the appointments named, whether one is still hers, still on an open
+ * pregnancy and still dated tomorrow in her zone, or today for a retry
+ * that crossed her midnight. One moved to a later date waits for the run
+ * the day before it.
+ */
 async function appointmentStillDue(
   tx: Transaction,
   userId: string,
@@ -498,7 +538,10 @@ async function appointmentStillDue(
         isNull(pregnancies.deletedAt),
       ),
     );
-  return rows.some((row) => row.date >= todayIn(row.timeZone, now));
+  return rows.some((row) => {
+    const today = todayIn(row.timeZone, now);
+    return row.date === today || row.date === addDays(today, 1);
+  });
 }
 
 /**

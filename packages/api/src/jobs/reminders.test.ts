@@ -2,7 +2,7 @@ import { and, eq, sql } from "drizzle-orm";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, test, vi } from "vitest";
 import { CaptureMailer, reminderEmail } from "@tidefern/auth";
 import { schema } from "@tidefern/db";
-import { SweepRoleError, assertIdsOnly } from "@tidefern/db/jobs";
+import { SweepRoleError, assertIdsOnly, enqueue } from "@tidefern/db/jobs";
 import type { ActorDatabase, Job } from "@tidefern/db/jobs";
 
 import { createApp } from "../app";
@@ -283,6 +283,70 @@ describe("enqueueReminders", () => {
     expect(next.appointments).toBe(2);
   });
 
+  test("an edit to tomorrow's appointment between two runs of one day sends nothing more", async () => {
+    const first = await enqueueReminders(database.db, NOW);
+    expect(first.appointments).toBe(2);
+    // An edit ten minutes on (a new label) bumps the version and the updated
+    // time and keeps the date.
+    await database.db
+      .update(schema.pregnancyEvents)
+      .set({ version: 2, updatedAt: new Date(NOW.getTime() + 10 * 60_000) })
+      .where(eq(schema.pregnancyEvents.id, ANNA_TOMORROW));
+    try {
+      const again = await enqueueReminders(database.db, new Date(NOW.getTime() + 20 * 60_000));
+      expect(again).toEqual({ appointments: 0, periodNotices: 0, jobs: 0 });
+    } finally {
+      await database.db
+        .update(schema.pregnancyEvents)
+        .set({ version: 1, updatedAt: new Date("2026-09-01T00:00:00Z") })
+        .where(eq(schema.pregnancyEvents.id, ANNA_TOMORROW));
+    }
+  });
+
+  test("gives nobody a second job on her local day across Hobby's jitter", async () => {
+    // 07:30 UTC is 00:30 on the 6th in Los Angeles; 06:20 UTC the next day
+    // is 23:20 on the same local day there, so both runs see the 7th as
+    // tomorrow. In Auckland the second run is a new day.
+    const early = new Date("2026-10-06T07:30:00Z");
+    const late = new Date("2026-10-07T06:20:00Z");
+    const first = payloads(await reminderJobs());
+    expect(first).toEqual([]);
+    await enqueueReminders(database.db, early);
+    expect(payloads(await reminderJobs()).find((p) => p.userId === CARA)).toEqual({
+      userId: CARA,
+      pregnancyId: CARA_PREGNANCY,
+      eventIds: [CARA_NEXT],
+    });
+    const before = new Set((await reminderJobs()).map((job) => job.id));
+    const second = await enqueueReminders(database.db, late);
+    const added = (await reminderJobs()).filter((job) => !before.has(job.id));
+    expect(payloads(added)).toEqual([
+      { userId: ANNA, pregnancyId: ANNA_PREGNANCY, eventIds: [ANNA_LATER] },
+    ]);
+    expect(second).toEqual({ appointments: 1, periodNotices: 0, jobs: 1 });
+  });
+
+  test("reminds an appointment moved to a later date the day before its new date", async () => {
+    await enqueueReminders(database.db, NOW);
+    await database.db
+      .update(schema.pregnancyEvents)
+      .set({ date: "2026-10-08", updatedAt: new Date(NOW.getTime() + 10 * 60_000) })
+      .where(eq(schema.pregnancyEvents.id, ANNA_TOMORROW));
+    try {
+      await enqueueReminders(database.db, NEXT_DAY);
+      const anna = payloads(await reminderJobs()).filter((p) => p.userId === ANNA);
+      expect(anna).toEqual([
+        { userId: ANNA, pregnancyId: ANNA_PREGNANCY, eventIds: [ANNA_TOMORROW] },
+        { userId: ANNA, pregnancyId: ANNA_PREGNANCY, eventIds: [ANNA_LATER, ANNA_TOMORROW].sort() },
+      ]);
+    } finally {
+      await database.db
+        .update(schema.pregnancyEvents)
+        .set({ date: "2026-10-07", updatedAt: new Date("2026-09-01T00:00:00Z") })
+        .where(eq(schema.pregnancyEvents.id, ANNA_TOMORROW));
+    }
+  });
+
   test("tells a start logged after the day's run the next day, once", async () => {
     await database.db.delete(schema.cycleEntries).where(eq(schema.cycleEntries.id, DANA_START));
     try {
@@ -411,7 +475,7 @@ describe("sendReminder", () => {
     }
   });
 
-  test("sends nothing for an appointment deleted or a pregnancy ended after the run", async () => {
+  test("sends nothing for an appointment deleted after the run", async () => {
     await enqueueReminders(database.db, NOW);
     await database.db
       .update(schema.pregnancyEvents)
@@ -426,6 +490,50 @@ describe("sendReminder", () => {
         .set({ deletedAt: null })
         .where(eq(schema.pregnancyEvents.id, CARA_TOMORROW));
     }
+  });
+
+  test("sends nothing for a pregnancy ended after the run", async () => {
+    await enqueueReminders(database.db, NOW);
+    await database.db
+      .update(schema.pregnancies)
+      .set({ endedAt: "2026-10-05", endedReason: "birth" })
+      .where(eq(schema.pregnancies.id, CARA_PREGNANCY));
+    try {
+      const outcome = await drain();
+      expect(outcome.failed).toEqual([]);
+      expect(mailer.messages.map((message) => message.to)).not.toContain("person1@example.test");
+      expect(mailer.messages.map((message) => message.to)).toContain("person0@example.test");
+    } finally {
+      await database.db
+        .update(schema.pregnancies)
+        .set({ endedAt: null, endedReason: null })
+        .where(eq(schema.pregnancies.id, CARA_PREGNANCY));
+    }
+  });
+
+  test("sends nothing for an appointment moved past tomorrow after the run", async () => {
+    await enqueueReminders(database.db, NOW);
+    await database.db
+      .update(schema.pregnancyEvents)
+      .set({ date: "2026-11-06" })
+      .where(eq(schema.pregnancyEvents.id, CARA_TOMORROW));
+    try {
+      const outcome = await drain();
+      expect(outcome.failed).toEqual([]);
+      expect(mailer.messages.map((message) => message.to)).not.toContain("person1@example.test");
+    } finally {
+      await database.db
+        .update(schema.pregnancyEvents)
+        .set({ date: "2026-10-06" })
+        .where(eq(schema.pregnancyEvents.id, CARA_TOMORROW));
+    }
+  });
+
+  test("still sends a retry that crosses her midnight onto the appointment day", async () => {
+    await enqueueReminders(database.db, NOW);
+    // Two hours on it is 01:00 on the 6th in Los Angeles, the appointment's day.
+    await drain(new Date(NOW.getTime() + 2 * 60 * 60_000));
+    expect(mailer.messages.map((message) => message.to)).toContain("person1@example.test");
   });
 
   test("fails the job without a configured transport, so it retries and is never dropped", async () => {
@@ -469,5 +577,48 @@ describe("the scheduled run", () => {
       .from(schema.jobs)
       .where(and(eq(schema.jobs.type, REMINDER_JOB_TYPE), eq(schema.jobs.status, "done")));
     expect(statuses).toHaveLength(3);
+  });
+
+  test("goes on to drain and sweep when the reminder step throws on bad data", async () => {
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => undefined);
+    const queued = await database.db.transaction((tx) =>
+      enqueue(
+        tx,
+        REMINDER_JOB_TYPE,
+        { userId: ANNA, pregnancyId: ANNA_PREGNANCY, eventIds: [ANNA_TOMORROW] },
+        { runAfter: NOW },
+      ),
+    );
+    // A zone the API would never accept, written straight to the row.
+    await database.db
+      .update(schema.profiles)
+      .set({ timeZone: "Not/A_Zone" })
+      .where(eq(schema.profiles.userId, CARA));
+    try {
+      const secret = "a-cron-secret-for-the-reminder-tests";
+      const app = createApp({
+        jobs: { db: database.db, handlers: jobHandlers, cronSecret: secret, now: () => NOW },
+      });
+      const response = await app.request("/api/internal/jobs/run", {
+        headers: { authorization: `Bearer ${secret}` },
+      });
+      expect(response.status).toBe(200);
+      expect(await response.json()).toMatchObject({
+        reminders: "failed",
+        claimed: 1,
+        done: 1,
+        failed: 0,
+      });
+      expect(warn).toHaveBeenCalledWith("jobs_reminders_failed");
+      for (const call of warn.mock.calls) expect(call).toEqual(["jobs_reminders_failed"]);
+      const [job] = await database.db.select().from(schema.jobs).where(eq(schema.jobs.id, queued));
+      expect(job?.status).toBe("done");
+      expect(mailer.messages.map((message) => message.to)).toEqual(["person0@example.test"]);
+    } finally {
+      await database.db
+        .update(schema.profiles)
+        .set({ timeZone: "America/Los_Angeles" })
+        .where(eq(schema.profiles.userId, CARA));
+    }
   });
 });
