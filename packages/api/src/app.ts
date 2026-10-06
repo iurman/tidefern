@@ -3,14 +3,17 @@ import { secureHeaders } from "hono/secure-headers";
 import type { ActorDatabase } from "@tidefern/db";
 import { withSession } from "./auth";
 import type { SessionAuth } from "./auth";
-import type { ApiEnv, Defer } from "./context";
+import type { ApiEnv, Defer, DrainJobs } from "./context";
+import { drainEnqueued } from "./jobs/index";
 import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
+import { internalJobs } from "./routes/internal/jobs";
+import type { JobsOptions } from "./routes/internal/jobs";
 import { meBody, meRoute } from "./routes/me";
 
 export const API_VERSION = "0.1.0";
 
-export type { Defer } from "./context";
+export type { Defer, DrainJobs } from "./context";
 
 /**
  * The mount prefix is permanent. Every path in the committed OpenAPI
@@ -41,6 +44,13 @@ export interface ApiOptions {
    * package's production client is used.
    */
   db?: ActorDatabase;
+  /**
+   * The job runner (architecture 10.1): the owner-role connection, the
+   * handler registry, `CRON_SECRET`, and the mailer and address for the
+   * dead-queue notice. Without it the inline drain is a no-op and
+   * `/api/internal/jobs/run` is not mounted.
+   */
+  jobs?: JobsOptions;
 }
 
 /**
@@ -51,6 +61,18 @@ export interface ApiOptions {
  */
 export function createApp(options: ApiOptions = {}) {
   const defer: Defer = options.defer ?? ((task) => void task());
+  const jobs = options.jobs;
+  const drainJobs: DrainJobs = jobs
+    ? (ids) =>
+        defer(async () => {
+          try {
+            await drainEnqueued(jobs.db, ids, jobs.handlers ?? {});
+          } catch (error) {
+            // A failed claim, not a failed job: those are recorded on the row.
+            console.error("jobs_drain_error", { name: (error as Error).name });
+          }
+        })
+    : () => undefined;
   const app = new OpenAPIHono<ApiEnv>({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -67,6 +89,7 @@ export function createApp(options: ApiOptions = {}) {
 
   app.use("*", async (c, next) => {
     c.set("defer", defer);
+    c.set("drainJobs", drainJobs);
     await next();
   });
   app.use("*", secureHeaders());
@@ -102,6 +125,11 @@ export function createApp(options: ApiOptions = {}) {
   // Every other /v1 request learns its session and actor first (architecture
   // 8.3 step 1); routes that need one add requireActor.
   app.use("/v1/*", withSession(auth, options.db));
+
+  // Outside /v1 and outside the OpenAPI document: a plain sub-app, not app.openapi().
+  if (jobs) {
+    app.route("/internal", internalJobs(jobs));
+  }
 
   app.openapi(healthRoute, (c) =>
     c.json(
