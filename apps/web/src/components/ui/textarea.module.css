@@ -1,0 +1,49 @@
+.textarea {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--size-control);
+  padding: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  line-height: 1.5;
+  resize: vertical;
+  transition:
+    border-color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+.textarea::placeholder {
+  color: var(--muted);
+  opacity: 1;
+}
+
+.textarea:hover,
+[data-specimen-state="hover"] > .textarea {
+  border-color: var(--accent);
+}
+
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
+[data-specimen-state="focus-visible"] > .textarea {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.textarea[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.textarea:disabled {
+  color: var(--muted);
+  background: var(--panel);
+  border-color: var(--soft-border);
+  cursor: not-allowed;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .textarea {
+    transition-duration: 0ms;
+  }
+}

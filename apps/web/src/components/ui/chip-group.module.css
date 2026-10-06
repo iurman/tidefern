@@ -1,0 +1,121 @@
+.group {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.chips[hidden] {
+  display: none;
+}
+
+.chip,
+.more {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-control);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.2;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    color var(--duration-feedback) var(--ease-interface),
+    border-color var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface),
+    filter var(--duration-feedback) var(--ease-interface);
+}
+
+.more {
+  border-style: dashed;
+}
+
+.chip[aria-pressed="true"] {
+  background: var(--action);
+  color: var(--action-text);
+  border-color: var(--action);
+}
+
+/* The forced twins reach the first chip only, through its list item. */
+.chip:hover,
+.more:hover,
+[data-specimen-state="hover"] > .group li:first-child .chip {
+  background: var(--panel);
+}
+
+.chip[aria-pressed="true"]:hover,
+[data-specimen-state="hover"] > .group li:first-child .chip[aria-pressed="true"] {
+  background: var(--action);
+  filter: brightness(1.08);
+}
+
+.chip:active,
+.more:active,
+[data-specimen-state="active"] > .group li:first-child .chip {
+  transform: scale(0.94);
+}
+
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
+[data-specimen-state="focus-visible"] > .group li:first-child .chip {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.chip:disabled,
+.more:disabled {
+  color: var(--muted);
+  background: var(--panel);
+  border-color: var(--soft-border);
+  cursor: not-allowed;
+}
+
+.chip:disabled[aria-pressed="true"] {
+  background: var(--soft-border);
+}
+
+.group[data-invalid="true"] .chip {
+  border-color: var(--danger);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+@media (forced-colors: active) {
+  .chip[aria-pressed="true"] {
+    border: 2px solid Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chip,
+  .more {
+    transition-duration: 0ms;
+  }
+}
