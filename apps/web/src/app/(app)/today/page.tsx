@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
 import { readSessionMe } from "@/lib/api-server";
 import { pageMetadata } from "@/lib/site";
-import { authCopy } from "../(auth)/copy";
+import { authCopy } from "../../(public)/(auth)/copy";
 
 const copy = authCopy.today;
 

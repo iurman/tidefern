@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { designTokens } from "@tidefern/design-tokens";
-import { SoundLevelControl } from "@/app/settings/sound/level-control";
+import { SoundLevelControl } from "@/app/(app)/settings/sound/level-control";
 import { SoundContextState } from "@/components/design/sound-context-state";
 import { SoundCueButton } from "@/components/design/sound-cue-button";
 import { SoundHaptics } from "@/components/design/sound-haptics";

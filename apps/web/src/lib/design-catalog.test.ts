@@ -2,10 +2,10 @@
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { describe, expect, it } from "vitest";
-import { GET as catalogRoute } from "@/app/design/catalog.json/route";
-import { GET as referenceRoute } from "@/app/design/reference.md/route";
-import { GET as tokensCssRoute } from "@/app/design/tokens.css/route";
-import { GET as tokensJsonRoute } from "@/app/design/tokens.json/route";
+import { GET as catalogRoute } from "@/app/(public)/design/catalog.json/route";
+import { GET as referenceRoute } from "@/app/(public)/design/reference.md/route";
+import { GET as tokensCssRoute } from "@/app/(public)/design/tokens.css/route";
+import { GET as tokensJsonRoute } from "@/app/(public)/design/tokens.json/route";
 import { specimens as actions } from "@/components/ui/specimens/actions";
 import { specimens as calendar } from "@/components/ui/specimens/calendar";
 import { specimens as forms } from "@/components/ui/specimens/forms";

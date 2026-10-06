@@ -3,16 +3,16 @@ import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import lockup from "@tidefern/design-tokens/brand/lockup.json";
 import { describe, expect, it } from "vitest";
-import manifest from "../../manifest";
+import manifest from "../../../manifest";
 
 // The generated files are committed, so these checks guard a regeneration
 // that drifted from the spec in docs/design/ASSETS.md rather than the
 // generator's own math. Paths are strings because jsdom's URL is not Node's.
 
 const here = dirname(fileURLToPath(import.meta.url));
-const app = resolve(here, "../..");
-const publicDir = resolve(here, "../../../../public");
-const brand = resolve(here, "../../../../../../packages/design-tokens/brand");
+const app = resolve(here, "../../..");
+const publicDir = resolve(here, "../../../../../public");
+const brand = resolve(here, "../../../../../../../packages/design-tokens/brand");
 
 function pngSize(file: string): { width: number; height: number } {
   const bytes = readFileSync(file);
@@ -37,7 +37,10 @@ describe("brand rasters", () => {
 
   it("ships the apple icon at 180 and the social card at 1200 by 630", () => {
     expect(pngSize(resolve(app, "apple-icon.png"))).toEqual({ width: 180, height: 180 });
-    expect(pngSize(resolve(app, "opengraph-image.png"))).toEqual({ width: 1200, height: 630 });
+    expect(pngSize(resolve(app, "opengraph-image.png"))).toEqual({
+      width: 1200,
+      height: 630,
+    });
   });
 
   it("has alt text for the social card that matches the lockup title", () => {

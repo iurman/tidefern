@@ -2,7 +2,7 @@
 import { useEffect, useState } from "react";
 import { describeQuietHours, formatClockTime, msUntilQuietBoundary } from "@/lib/quiet-hours";
 import { audioState, isQuietNow, onAudioState, quietHours, soundLevel } from "@/lib/sound";
-import styles from "@/app/design/sound/sound.module.css";
+import styles from "@/app/(public)/design/sound/sound.module.css";
 
 type State = AudioContextState | "none" | "reading";
 

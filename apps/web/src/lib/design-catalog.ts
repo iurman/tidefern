@@ -31,56 +31,56 @@ export const designChapters: readonly DesignChapter[] = [
     slug: "overview",
     title: "Design system",
     href: "/design",
-    source: "apps/web/src/app/design/page.tsx",
+    source: "apps/web/src/app/(public)/design/page.tsx",
     summary: "The chapter index, the live tokens and the exports.",
   },
   {
     slug: "brand",
     title: "Brand",
     href: "/design/brand",
-    source: "apps/web/src/app/design/brand/page.tsx",
+    source: "apps/web/src/app/(public)/design/brand/page.tsx",
     summary: "The mark, the wordmark, clear space, minimum sizes and theme rules.",
   },
   {
     slug: "color",
     title: "Color",
     href: "/design/color",
-    source: "apps/web/src/app/design/color/page.tsx",
+    source: "apps/web/src/app/(public)/design/color/page.tsx",
     summary: "Every color role in both themes with its measured contrast.",
   },
   {
     slug: "type",
     title: "Type and space",
     href: "/design/type",
-    source: "apps/web/src/app/design/type/page.tsx",
+    source: "apps/web/src/app/(public)/design/type/page.tsx",
     summary: "Newsreader and Figtree, the scale, reading widths and font provenance.",
   },
   {
     slug: "components",
     title: "Components",
     href: "/design/components",
-    source: "apps/web/src/app/design/components/page.tsx",
+    source: "apps/web/src/app/(public)/design/components/page.tsx",
     summary: "The shared components in their eight states and both themes.",
   },
   {
     slug: "motion",
     title: "Motion",
     href: "/design/motion",
-    source: "apps/web/src/app/design/motion/page.tsx",
+    source: "apps/web/src/app/(public)/design/motion/page.tsx",
     summary: "Durations, easings, the tide and reduced motion.",
   },
   {
     slug: "sound",
     title: "Sound and touch",
     href: "/design/sound",
-    source: "apps/web/src/app/design/sound/page.tsx",
+    source: "apps/web/src/app/(public)/design/sound/page.tsx",
     summary: "The interface cues, their levels, the unlock rule and haptics.",
   },
   {
     slug: "foundations",
     title: "Foundations",
     href: "/design/foundations",
-    source: "apps/web/src/app/design/foundations/page.tsx",
+    source: "apps/web/src/app/(public)/design/foundations/page.tsx",
     summary: "Layout, accessibility, copy and privacy rules, and the checklist.",
   },
 ];
@@ -436,7 +436,7 @@ export interface CatalogSection {
 }
 
 const tokensJson = "packages/design-tokens/tokens.json";
-const design = "apps/web/src/app/design/";
+const design = "apps/web/src/app/(public)/design/";
 const designParts = "apps/web/src/components/design/";
 
 function sections(
@@ -646,7 +646,7 @@ export const chapterSections: Readonly<Record<ChapterSlug, readonly CatalogSecti
       "levels",
       "Levels, the mute and quiet hours",
       "All, actions only, off, and quiet hours.",
-      ["apps/web/src/lib/quiet-hours.ts", "apps/web/src/app/settings/sound/page.tsx"],
+      ["apps/web/src/lib/quiet-hours.ts", "apps/web/src/app/(app)/settings/sound/page.tsx"],
     ],
     ["touch", "Touch", "Haptic support and its fallback.", [`${designParts}sound-haptics.tsx`]],
     ["tokens", "Tokens", "The sound tokens.", [tokensJson]],

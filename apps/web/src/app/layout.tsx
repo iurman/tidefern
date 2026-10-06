@@ -1,8 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { headers } from "next/headers";
 import localFont from "next/font/local";
-import { Footer } from "@/components/footer";
-import { Header } from "@/components/header";
 import { SoundProvider } from "@/components/sound-provider";
 import { ThemeSync } from "@/components/theme-sync";
 import { indexingAllowed, preferenceScript, site } from "@/lib/site";
@@ -71,11 +69,9 @@ export default async function RootLayout({ children }: LayoutProps<"/">) {
         <a className="skip-link" href="#main">
           Skip to content
         </a>
-        <Header />
-        <main id="main" tabIndex={-1}>
-          {children}
-        </main>
-        <Footer />
+        {/* Each route group draws its own chrome around `<main id="main">`: (public) the header
+            and footer, (app) the shell. A header or footer inside main would lose its landmark. */}
+        {children}
       </body>
     </html>
   );
