@@ -32,3 +32,4 @@ export {
 } from "./hosts";
 export type { DynamicBaseUrl, HostEnvironment, HostFacts, ResolvedHosts } from "./hosts";
 export type { Auth, CreateAuthOptions, Session } from "./auth";
+export type { DatabaseHooks, UserCreatedHook, UserKeyHookOptions } from "./keys";
