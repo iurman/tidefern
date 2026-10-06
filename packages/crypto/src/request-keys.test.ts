@@ -7,6 +7,7 @@ import { FixedKeyProvider, KeyConfigurationError } from "./keys";
 import type { KeyProvider } from "./keys";
 import { SubjectKeyMissingError, destroySubjectKey, provisionSubjectKey } from "./provisioning";
 import {
+  KeyCacheClearedError,
   KeyNotUnwrappedError,
   createKeyCache,
   decryptFieldFor,
@@ -188,6 +189,31 @@ describe("encryptFieldFor and decryptFieldFor", () => {
     await unwrapForSubject(harness.db, ANNA, provider, cache);
     expect(provider.unwraps()).toBe(2);
     expect(decryptFieldFor(cache, location, blob)).toBe("a short note");
+  });
+
+  test("clear during an unwrap in flight rejects it and keeps no key", async () => {
+    const provider = countingProvider();
+    const cache = createKeyCache();
+    const inFlight = unwrapForSubject(harness.db, ANNA, provider, cache);
+    cache.clear();
+
+    const error = await inFlight.then(
+      () => undefined,
+      (caught: unknown) => caught as KeyCacheClearedError,
+    );
+    expect(error).toBeInstanceOf(KeyCacheClearedError);
+    expect(error?.subjectId).toBe(ANNA);
+    expect(error?.message).not.toContain(ANNA);
+    expect(provider.unwraps()).toBe(1);
+    expect(cache.size).toBe(0);
+    expect(cache.has(ANNA)).toBe(false);
+    expect(cache.peek(ANNA)).toBeUndefined();
+
+    // The cache is still usable: the next call unwraps afresh and keeps that key.
+    const dek = await unwrapForSubject(harness.db, ANNA, provider, cache);
+    expect(provider.unwraps()).toBe(2);
+    expect(cache.size).toBe(1);
+    expect(cache.peek(ANNA)).toBe(dek);
   });
 });
 

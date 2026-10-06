@@ -36,20 +36,6 @@ function rows(result: unknown): Row[] {
   return (result as { rows: Row[] }).rows;
 }
 
-/**
- * Drizzle wraps a driver error in "Failed query: ..." (parameters included)
- * and keeps the Postgres error as `cause`; the policy name lives there.
- */
-async function refusal(promise: Promise<unknown>): Promise<string> {
-  try {
-    await promise;
-  } catch (error) {
-    const cause = (error as { cause?: unknown }).cause;
-    return cause instanceof Error ? cause.message : (error as Error).message;
-  }
-  throw new Error("expected the query to be refused");
-}
-
 async function wrappedBytes(subjectId: string): Promise<string> {
   const [row] = rows(
     await harness.db.execute(
@@ -160,15 +146,18 @@ describe("provisionSubjectKey", () => {
     await expect(readSubjectKey(harness.db, NEWCOMER)).rejects.toThrow(SubjectKeyMissingError);
   });
 
-  test("is refused for the app role until the B8 policies land", async () => {
-    // Row level security is on and no policy exists yet, so the insert fails
-    // on the policy, not on a grant; the owner-role path (withSystem) is the
-    // one sign-up uses.
-    const message = await refusal(
-      withActor(NEWCOMER, (tx) => provisionSubjectKey(tx, NEWCOMER, kek), harness.db),
+  test("hides another subject's key from an actor who holds no grant", async () => {
+    // Row level security is on. Before B8 the app role has no policy and sees
+    // no rows; after B8 the policy mirrors can_read and BEN, a stranger to
+    // ANNA, still sees none. Either way the read inside withActor() finds
+    // nothing, while the owner role, which sign-up uses, finds the row.
+    await expect(withActor(BEN, (tx) => readSubjectKey(tx, ANNA), harness.db)).rejects.toThrow(
+      SubjectKeyMissingError,
     );
-    expect(message).toMatch(/row-level security policy for table "subject_keys"/);
-    expect(message).not.toMatch(/permission denied/);
+    await expect(withSystem((tx) => readSubjectKey(tx, ANNA), harness.db)).resolves.toMatchObject({
+      subjectId: ANNA,
+      kind: "user",
+    });
   });
 });
 

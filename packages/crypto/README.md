@@ -62,10 +62,13 @@ row is gone the only material left is the KEK, which never sealed a field,
 so every ciphertext under that DEK is unreadable at once (architecture 9.2,
 item 5). A child's key is destroyed only when the last guardian leaves.
 
-Until the B8 policies land, `subject_keys` has row level security on and no
-policy, so the app role can neither read nor write it inside `withActor()`;
-the sign-up hook provisions through `withSystem()` for that reason, and the
-test records the refusal.
+The sign-up hook provisions through `withSystem()` because no actor is
+signed in yet when the user row lands. Inside `withActor()` row level
+security on `subject_keys` decides whose key an actor may read: no policy
+before B8, so the app role sees no rows, and the `can_read` mirror after
+it, so a stranger still sees none. The test reads another subject's key
+under `withActor()` and expects `SubjectKeyMissingError`, which holds in
+both states.
 
 ## Keys in a request
 

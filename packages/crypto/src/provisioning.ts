@@ -10,7 +10,9 @@
 import { eq } from "drizzle-orm";
 import type { PgDatabase, PgQueryResultHKT } from "drizzle-orm/pg-core";
 
-import { schema } from "@tidefern/db";
+// The schema subpath only: the package index pulls in the client, which
+// builds a pg Pool at import, and nothing here needs a connection of its own.
+import * as schema from "@tidefern/db/schema";
 
 import { createSubjectKey } from "./fields";
 import type { WrappedDek } from "./fields";

@@ -31,15 +31,29 @@ export class KeyNotUnwrappedError extends Error {
   }
 }
 
+/** `clear()` ran while this unwrap was in flight; the request was over before the key arrived. */
+export class KeyCacheClearedError extends Error {
+  override readonly name = "KeyCacheClearedError";
+  readonly subjectId: string;
+
+  constructor(subjectId: string) {
+    super("the request's key cache was cleared before the unwrap finished");
+    this.subjectId = subjectId;
+  }
+}
+
 /**
  * Holds unwrapped DEKs for one request. Concurrent unwraps of the same
  * subject share one database read and one provider call; `clear()` zeroes
  * every key it holds, for a host that wants to scrub before the request
- * object is released.
+ * object is released, and an unwrap still in flight at that moment is
+ * rejected instead of landing in the cache afterwards.
  */
 export class KeyCache {
   readonly #keys = new Map<string, Uint8Array>();
   readonly #pending = new Map<string, Promise<Uint8Array>>();
+  /** Bumped by `clear()`, so an unwrap that started before it cannot store a key after it. */
+  #generation = 0;
 
   /** How many subjects' keys the request has unwrapped so far. */
   get size(): number {
@@ -61,23 +75,30 @@ export class KeyCache {
     if (held) return Promise.resolve(held);
     const pending = this.#pending.get(subjectId);
     if (pending) return pending;
+    const generation = this.#generation;
     const inFlight = unwrap()
       .then((dek) => {
+        if (this.#generation !== generation) {
+          dek.fill(0);
+          throw new KeyCacheClearedError(subjectId);
+        }
         this.#keys.set(subjectId, dek);
         return dek;
       })
       .finally(() => {
-        this.#pending.delete(subjectId);
+        // After a clear() the map is already empty and may hold a newer unwrap.
+        if (this.#generation === generation) this.#pending.delete(subjectId);
       });
     this.#pending.set(subjectId, inFlight);
     return inFlight;
   }
 
-  /** Zeroes and forgets every key. The request is over. */
+  /** Zeroes and forgets every key, and disowns any unwrap still in flight. The request is over. */
   clear(): void {
     for (const dek of this.#keys.values()) dek.fill(0);
     this.#keys.clear();
     this.#pending.clear();
+    this.#generation += 1;
   }
 }
 
