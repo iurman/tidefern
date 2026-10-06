@@ -1,0 +1,239 @@
+.ring {
+  display: grid;
+  gap: var(--space-4);
+  justify-items: start;
+  margin: 0;
+  color: var(--text);
+}
+
+.dial {
+  position: relative;
+  width: min(100%, 260px);
+  aspect-ratio: 1;
+}
+
+@media (max-width: 600px) {
+  .dial {
+    width: min(100%, 220px);
+  }
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.track {
+  fill: none;
+  stroke: var(--soft-border);
+  stroke-width: 14;
+}
+
+.logged {
+  fill: none;
+  stroke: var(--data-period);
+  stroke-width: 14;
+}
+
+/* A prediction is dashed: the same color as a logged day, never a different one (RESEARCH.md decision 1). */
+.predicted {
+  fill: none;
+  stroke: var(--data-period);
+  stroke-width: 14;
+  stroke-dasharray: 3 5;
+}
+
+/* An estimate is dotted. */
+.fertile {
+  fill: none;
+  stroke: var(--data-fertile);
+  stroke-width: 6;
+  stroke-linecap: round;
+  stroke-dasharray: 0 10;
+}
+
+.band {
+  fill: none;
+  stroke: var(--data-fertile);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-dasharray: 0 6;
+  opacity: 0.55;
+}
+
+.ovulationHalo {
+  fill: var(--page);
+}
+
+.ovulation {
+  fill: var(--page);
+  stroke: var(--text);
+  stroke-width: 1.6;
+}
+
+.progress {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.todayHalo {
+  fill: var(--page);
+}
+
+.today {
+  fill: var(--action);
+}
+
+/* The progress arc settles once per page entrance: transform and opacity only (DESIGN.md 7). */
+.settle {
+  transform-box: view-box;
+  transform-origin: center;
+  animation: settle var(--duration-settle) var(--ease-settle) 1 both;
+}
+
+@keyframes settle {
+  from {
+    opacity: 0;
+    transform: rotate(-8deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(0deg);
+  }
+}
+
+.center {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin: 0;
+  pointer-events: none;
+}
+
+.numeral {
+  font-family: var(--font-sans);
+  font-size: 3.5rem;
+  font-weight: var(--weight-numeral);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.numeralLabel {
+  font-family: var(--font-serif);
+  font-size: 1.25rem;
+  font-weight: var(--weight-serif);
+  line-height: 1.2;
+  color: var(--muted);
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-2);
+  max-width: 44ch;
+}
+
+.fact,
+.emptyHeading,
+.errorText {
+  margin: 0;
+}
+
+.fact {
+  font-size: var(--type-body);
+  line-height: var(--leading-body);
+}
+
+/* The estimate sentence is the only italic in the product (architecture 13.6). */
+.estimate {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: var(--type-intro);
+  line-height: 1.45;
+}
+
+.emptyHeading {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.errorText {
+  color: var(--danger);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-action);
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--action);
+  color: var(--action-text);
+  font-weight: var(--weight-sans-strong);
+  text-decoration: none;
+  transition:
+    filter var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.action:hover {
+  filter: brightness(1.04);
+}
+
+.action:active {
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .settle {
+    animation-duration: 0ms;
+  }
+  .action {
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .track {
+    stroke: GrayText;
+  }
+  .logged,
+  .predicted,
+  .fertile,
+  .band,
+  .progress,
+  .ovulation {
+    stroke: CanvasText;
+  }
+  .ovulationHalo,
+  .ovulation,
+  .todayHalo {
+    fill: Canvas;
+  }
+  .today {
+    fill: CanvasText;
+  }
+  .action {
+    border-color: ButtonText;
+  }
+}
+
+@media print {
+  .settle {
+    animation: none;
+  }
+}

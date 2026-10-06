@@ -1,0 +1,258 @@
+.chart {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  min-width: 0;
+  color: var(--text);
+}
+
+.ranges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* The range pills swap the chart in place and never navigate; a native radio sits behind each one. */
+.pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--size-control);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  cursor: pointer;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    border-color var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+/* The frame forces these on the chart's root; the chart shows them on its second pill, the first unchecked one. */
+.pill:hover,
+[data-specimen-state="hover"] > .chart .pill:nth-of-type(2) {
+  background: var(--panel);
+}
+
+.pill:focus-within,
+[data-specimen-state="focus-visible"] > .chart .pill:nth-of-type(2) {
+  border-color: var(--border);
+}
+
+.pill:active,
+[data-specimen-state="active"] > .chart .pill:nth-of-type(2) {
+  transform: scale(0.94);
+}
+
+.pill:has(.radio:checked) {
+  border-color: var(--action);
+  background: var(--action);
+  color: var(--action-text);
+}
+
+.pill:has(.radio:checked):hover {
+  background: var(--action);
+  filter: brightness(1.04);
+}
+
+.radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: inherit;
+  appearance: none;
+  cursor: pointer;
+}
+
+.plot {
+  min-width: 0;
+}
+
+.placeholder {
+  display: grid;
+  gap: var(--space-2);
+  align-content: center;
+  justify-items: start;
+  min-height: 190px;
+  padding: var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.grid {
+  stroke: var(--soft-border);
+  stroke-width: 1;
+}
+
+.tick,
+.axisLabel {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  fill: var(--muted);
+  dominant-baseline: middle;
+}
+
+.axisLabel {
+  dominant-baseline: auto;
+}
+
+/* The band is 40 percent fill with a 1 px solid edge; the median is dashed; both in data-band (DESIGN.md 6.5). */
+.band {
+  fill: var(--data-band);
+  fill-opacity: 0.4;
+  stroke: var(--data-band);
+  stroke-width: 1;
+  stroke-linejoin: round;
+}
+
+.median {
+  fill: none;
+  stroke: var(--data-band);
+  stroke-width: 1;
+  stroke-dasharray: 4 4;
+}
+
+.line {
+  fill: none;
+  stroke: var(--text);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dot {
+  fill: var(--text);
+}
+
+.caption {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--type-small);
+}
+
+.source,
+.care,
+.text,
+.emptyHeading,
+.errorText {
+  margin: 0;
+}
+
+.source {
+  color: var(--muted);
+}
+
+.care {
+  color: var(--text);
+  font-weight: var(--weight-sans-strong);
+}
+
+.readings {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--muted);
+}
+
+.readings time {
+  font-weight: var(--weight-sans-strong);
+  color: var(--text);
+}
+
+.emptyHeading {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.errorText {
+  color: var(--danger);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-action);
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--action);
+  color: var(--action-text);
+  font-weight: var(--weight-sans-strong);
+  text-decoration: none;
+  transition:
+    filter var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.action:hover {
+  filter: brightness(1.04);
+}
+
+.action:active {
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .pill,
+  .action {
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .pill:has(.radio:checked) {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+  .band {
+    fill: Canvas;
+    stroke: CanvasText;
+  }
+  .median,
+  .line {
+    stroke: CanvasText;
+  }
+  .dot {
+    fill: CanvasText;
+  }
+  .tick,
+  .axisLabel {
+    fill: CanvasText;
+  }
+  .action {
+    border-color: ButtonText;
+  }
+}

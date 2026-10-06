@@ -1,0 +1,178 @@
+.timeline {
+  --timeline-dot: 10px;
+  --timeline-date: 6ch;
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--text);
+}
+
+.row {
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--timeline-date) var(--timeline-dot) minmax(0, 1fr);
+  gap: var(--space-3);
+  align-items: start;
+  padding: var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  line-height: var(--leading-body);
+}
+
+/* The connector runs from this row's dot to the next row's dot. */
+.row::before {
+  content: "";
+  position: absolute;
+  top: calc(var(--space-3) + 0.8em);
+  bottom: calc(-1 * (var(--space-3) + 0.8em));
+  left: calc(var(--space-3) + var(--timeline-date) + var(--space-3) + var(--timeline-dot) / 2);
+  border-left: 1px solid var(--border);
+  transform: translateX(-0.5px);
+}
+
+.row:last-child::before {
+  display: none;
+}
+
+/* The stretch leading to an expectation is dashed (RESEARCH.md decision 1). */
+.row:has(+ .expected)::before {
+  border-left-style: dashed;
+}
+
+.date {
+  font-family: var(--font-sans);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+.marker {
+  position: relative;
+  z-index: 1;
+  width: var(--timeline-dot);
+  height: var(--timeline-dot);
+  margin-top: calc(0.8em - var(--timeline-dot) / 2);
+  border: 1px solid var(--text);
+  border-radius: var(--radius-round);
+  background: var(--text);
+}
+
+/* An expectation is an outlined dot; the dashing lives on the connector, where it can be read. */
+.expected .marker {
+  border-color: var(--text);
+  background: var(--page);
+}
+
+.newest {
+  background: var(--warmth);
+}
+
+.body {
+  display: grid;
+  gap: 0;
+  min-width: 0;
+}
+
+.title,
+.detail,
+.note,
+.text,
+.emptyHeading,
+.errorText {
+  margin: 0;
+}
+
+.title {
+  font-weight: var(--weight-sans-strong);
+}
+
+.detail {
+  color: var(--muted);
+}
+
+.note {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.link {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+  transition: color var(--duration-feedback) var(--ease-interface);
+}
+
+.link:hover {
+  color: var(--accent);
+}
+
+.emptyHeading {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.text {
+  margin-top: var(--space-2);
+}
+
+.errorText {
+  color: var(--danger);
+}
+
+.action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  min-height: var(--size-action);
+  margin-top: var(--space-3);
+  padding: 0 var(--space-6);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--action);
+  color: var(--action-text);
+  font-weight: var(--weight-sans-strong);
+  text-decoration: none;
+  transition:
+    filter var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.action:hover {
+  filter: brightness(1.04);
+}
+
+.action:active {
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link,
+  .action {
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .row::before {
+    border-left-color: CanvasText;
+  }
+  .marker {
+    border-color: CanvasText;
+    background: CanvasText;
+  }
+  .expected .marker {
+    background: Canvas;
+  }
+  .newest {
+    border-color: Highlight;
+  }
+  .action {
+    border-color: ButtonText;
+  }
+}
