@@ -75,3 +75,9 @@
   display: grid;
   gap: var(--space-3);
 }
+
+/* The usage snippets, one per language, spaced like the demos. */
+.usage {
+  display: grid;
+  gap: var(--space-4);
+}

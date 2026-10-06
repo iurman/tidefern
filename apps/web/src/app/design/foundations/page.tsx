@@ -278,7 +278,8 @@ export default function FoundationsPage() {
         <h2 id="accessibility">Accessibility targets</h2>
         <p className="muted-note">
           WCAG 2.2 AA throughout. Axe runs on every route in both themes in the browser suite with
-          the tags below; manual keyboard passes are recorded in <code>docs/design/QA.md</code>.
+          the tags below. Manual keyboard passes will be recorded in <code>docs/design/QA.md</code>{" "}
+          (task J3).
         </p>
         <ul className={styles.tags} aria-label="Axe tags">
           {axeTags.map((tag) => (
@@ -338,14 +339,19 @@ export default function FoundationsPage() {
         <p className="muted-note">
           What would be here, why it is not, and the one action that changes that. Never &quot;No
           results&quot; on its own. The specimen is the shared component with the calendar&apos;s
-          real copy.
+          real heading and reason. In the calendar its action is &quot;Log today&quot;; here the
+          action opens the component&apos;s specimen with every state.
         </p>
         <div className={styles.specimen}>
           <EmptyState
             level={3}
             heading="Nothing logged this month"
             why="Days you log show here with their flow and symptoms."
-            action={<Button variant="secondary">Log today</Button>}
+            action={
+              <Button variant="secondary" href="/design/components/actions#specimen-empty-state">
+                See every state
+              </Button>
+            }
           />
         </div>
       </section>

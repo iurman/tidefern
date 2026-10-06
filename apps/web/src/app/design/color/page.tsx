@@ -305,9 +305,10 @@ export default function ColorPage() {
             arrives through the storage event.
           </li>
           <li>
-            The toggle stores an explicit choice and rewrites both <code>theme-color</code> metas;
-            Settings offers &quot;follow system&quot; to clear it. The key is listed on{" "}
-            <TextLink href="/privacy">the privacy page</TextLink> under functional storage.
+            The toggle stores an explicit choice and rewrites both <code>theme-color</code> metas.
+            Clearing this site&apos;s data in the browser removes the key and returns to following
+            the system; the key is listed on <TextLink href="/privacy">the privacy page</TextLink>{" "}
+            under Appearance.
           </li>
           <li>
             Images never invert; the mark swaps to its dark variant. Warmth pairs with text, accent

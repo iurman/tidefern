@@ -22,7 +22,15 @@
   gap: var(--space-3);
 }
 
+/* The title takes the room left beside Replay and wraps inside it, so the
+   button stays on the title's line in every demo. */
+.head > :last-child {
+  flex-shrink: 0;
+}
+
 .title {
+  flex: 1 1 0;
+  min-width: 0;
   margin: 0;
   font-size: var(--type-body);
   font-weight: var(--weight-sans-strong);

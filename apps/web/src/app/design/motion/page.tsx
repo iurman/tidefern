@@ -43,7 +43,25 @@ const easingRows = [
 
 const CURVE_SIZE = 120;
 
-const usage = `import { durations, easings } from "@/lib/motion-tokens";\n\n/* In a module stylesheet the same values are custom properties: */\n.sheet {\n  animation: rise var(--duration-disclosure) var(--ease-disclosure);\n}\n\n@media (prefers-reduced-motion: reduce) {\n  .sheet {\n    animation-duration: 0ms;\n  }\n}`;
+const scriptUsage = `import { durations, easings, prefersReducedMotion } from "@/lib/motion-tokens";
+
+// Motion driven from script reads the same values the stylesheet uses,
+// and skips straight to the end state when reduced motion is on.
+element.animate(keyframes, {
+  duration: prefersReducedMotion() ? 0 : durations.disclosure,
+  easing: easings.disclosure,
+});`;
+
+const styleUsage = `/* In a module stylesheet the same values are custom properties. */
+.sheet {
+  animation: rise var(--duration-disclosure) var(--ease-disclosure);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet {
+    animation-duration: 0ms;
+  }
+}`;
 
 export default function MotionPage() {
   return (
@@ -267,7 +285,10 @@ export default function MotionPage() {
             declared first, or are not used.
           </li>
         </ul>
-        <CopyCode code={usage} label="Usage" language="tsx" />
+        <div className={styles.usage}>
+          <CopyCode code={scriptUsage} label="Usage in script" language="tsx" />
+          <CopyCode code={styleUsage} label="Usage in a stylesheet" language="css" />
+        </div>
       </section>
 
       <ChapterFoot

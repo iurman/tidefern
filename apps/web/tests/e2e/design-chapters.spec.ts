@@ -202,3 +202,30 @@ test("the three chapters reflow at 390 pixels without horizontal scrolling", asy
     expect(overflow, route).toBeLessThanOrEqual(0);
   }
 });
+
+test("the empty-state specimen's action opens the component's specimen", async ({ page }) => {
+  await page.goto("/design/foundations");
+  await page.getByRole("link", { name: "See every state" }).click();
+  await expect(page).toHaveURL(/\/design\/components\/actions#specimen-empty-state$/);
+  await expect(page.locator("#specimen-empty-state")).toBeVisible();
+});
+
+test("every motion demo keeps Replay on its title's line at desktop width", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/design/motion");
+  // The tide's control says "Run the tide" until its first run, so it is not one of these.
+  const demos = page
+    .locator("[data-demo]")
+    .filter({ has: page.getByRole("button", { name: "Replay" }) });
+  expect(await demos.count()).toBeGreaterThanOrEqual(4);
+  for (const demo of await demos.all()) {
+    const title = await demo.locator("h3").boundingBox();
+    const replay = await demo.getByRole("button", { name: "Replay" }).boundingBox();
+    expect(title, "the demo has a title").not.toBeNull();
+    expect(replay, "the demo has a Replay button").not.toBeNull();
+    if (!title || !replay) continue;
+    expect(replay.y, (await demo.getAttribute("data-demo")) ?? "demo").toBeLessThan(
+      title.y + title.height,
+    );
+  }
+});

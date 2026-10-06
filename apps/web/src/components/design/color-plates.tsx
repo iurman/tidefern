@@ -45,6 +45,11 @@ function inkProperty(kind: ColorKind): "color" | "backgroundColor" | "borderTopC
  * token file's declared value and the ratio computed from it on the server,
  * so the page cannot disagree with the stylesheet (architecture 13.8).
  * Nothing here writes anywhere.
+ *
+ * The plates do not compose the shared TokenSwatch: it reads the custom
+ * property's text under the root theme and re-measures when the root theme
+ * changes, while a plate needs the painted color under its pinned theme and
+ * one ratio per surface it names, measured in the same pass.
  */
 export function ColorPlates({ theme, plates }: { theme: Theme; plates: Plate[] }) {
   const root = useRef<HTMLOListElement>(null);
