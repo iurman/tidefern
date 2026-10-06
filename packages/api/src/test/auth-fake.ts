@@ -1,5 +1,11 @@
 import type { SessionAuth, SessionLookup } from "../auth";
 
+/**
+ * The cookie name the fake reads. Over https Better Auth prefixes it with
+ * `__Secure-`; the API never parses the cookie itself (the headers go to
+ * `getSession` whole), so nothing in the API depends on this name and no
+ * test may assert it.
+ */
 export const SESSION_COOKIE = "better-auth.session_token";
 
 /**

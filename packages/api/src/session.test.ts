@@ -174,6 +174,15 @@ describe("the session middleware", () => {
     expect(auth.lookups).toBe(before);
   });
 
+  it("never consults auth for the contract, even when the request carries a cookie", async () => {
+    const before = auth.lookups;
+    const response = await app.request("/api/v1/openapi.json", {
+      headers: sessionHeaders("anna"),
+    });
+    expect(response.status).toBe(200);
+    expect(auth.lookups).toBe(before);
+  });
+
   it("loads the actor with her profile, guardianships and active grants", async () => {
     const actor = await loadActor(ANNA, harness.db);
     expect(actor.id).toBe(ANNA);

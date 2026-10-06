@@ -84,8 +84,23 @@ export function createApp(options: ApiOptions = {}) {
     app.all("/auth/*", (c) => auth.handler(c.req.raw));
   }
 
-  // Every /v1 request learns its session and actor first (architecture 8.3
-  // step 1); routes that need one add requireActor.
+  // The contract is public and answers before the session middleware is
+  // reached, so a request for it never costs a session lookup even when it
+  // carries a cookie. The document itself is built at request time, so the
+  // routes registered below are still in it.
+  app.doc("/v1/openapi.json", {
+    openapi: "3.1.0",
+    info: {
+      title: "Tidefern API",
+      version: API_VERSION,
+      description:
+        "Versioned REST contract for every Tidefern client. Health data travels only in request and response bodies, never in paths or query strings.",
+    },
+    servers: [{ url: "/", description: "Same origin as the web app" }],
+  });
+
+  // Every other /v1 request learns its session and actor first (architecture
+  // 8.3 step 1); routes that need one add requireActor.
   app.use("/v1/*", withSession(auth, options.db));
 
   app.openapi(healthRoute, (c) =>
@@ -101,17 +116,6 @@ export function createApp(options: ApiOptions = {}) {
   );
 
   app.openapi(meRoute, (c) => c.json(meBody(c), 200));
-
-  app.doc("/v1/openapi.json", {
-    openapi: "3.1.0",
-    info: {
-      title: "Tidefern API",
-      version: API_VERSION,
-      description:
-        "Versioned REST contract for every Tidefern client. Health data travels only in request and response bodies, never in paths or query strings.",
-    },
-    servers: [{ url: "/", description: "Same origin as the web app" }],
-  });
 
   app.notFound((c) => problem(c, 404, "not_found"));
   app.onError((error, c) => {
