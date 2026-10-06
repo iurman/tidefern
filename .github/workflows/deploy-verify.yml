@@ -79,11 +79,13 @@ jobs:
           test "$no_origin" = "403" || { echo "::error::PUT without Origin answered $no_origin, expected 403"; exit 1; }
           test "$own_origin" = "404" || { echo "::error::PUT with the deployment's Origin answered $own_origin, expected 404"; exit 1; }
 
-      - name: Production serves the head of main
-        # Vercel Instant Rollback and a stale promotion keep an older commit on the
-        # production domains while newer merges build green (architecture 19). The
-        # commit this deployment was built from must be the current head of main, or
-        # the run fails and names both commits. A preview deployment skips this step.
+      - name: This production deployment is the head of main
+        # The commit this Production deployment was built from must be the current
+        # head of main, or the run fails and names both commits. This catches an old
+        # commit deployed or promoted again. It cannot see an Instant Rollback: the
+        # domains stay on the old deployment while a new merge's deployment, built
+        # from the head of main, passes here (docs/LAUNCH_RUNBOOK.md, Rollback).
+        # A preview deployment skips this step.
         if: env.IS_PRODUCTION == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
@@ -95,13 +97,13 @@ jobs:
             DEPLOYED_SHA=$(git rev-parse HEAD)
           fi
           MAIN_SHA=$(gh api "repos/${GITHUB_REPOSITORY}/commits/main" --jq '.sha')
-          echo "Production deployment commit: ${DEPLOYED_SHA}"
-          echo "Head of main:                 ${MAIN_SHA}"
+          echo "Production deployment built from: ${DEPLOYED_SHA}"
+          echo "Head of main:                     ${MAIN_SHA}"
           if [ "${DEPLOYED_SHA}" != "${MAIN_SHA}" ]; then
-            echo "::error::Production serves ${DEPLOYED_SHA} but main is at ${MAIN_SHA}: a Vercel rollback or a stale promotion is active. Choose Undo Rollback in the Vercel project or run vercel promote (docs/LAUNCH_RUNBOOK.md, Rollback). If a newer merge is still deploying, re-run this check once its deployment reports."
+            echo "::error::Production deployment ${DEPLOYED_SHA} is not the head of main ${MAIN_SHA}: an older commit was redeployed or promoted. Promote the head of main with vercel promote (docs/LAUNCH_RUNBOOK.md, Rollback). If a newer merge landed while this deployment was being verified, the newer deployment's own run supersedes this one; check that run instead of re-running this one, which compares the same commit again."
             exit 1
           fi
-          echo "Production serves the head of main."
+          echo "This production deployment is the head of main."
 
       - name: Set up pnpm from packageManager
         uses: pnpm/action-setup@ea17c68df8912ef543352723c149a84f56e3d413 # v6.1.0

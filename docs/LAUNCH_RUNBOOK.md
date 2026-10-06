@@ -159,22 +159,27 @@ production deployment. After a rollback Vercel stops assigning the
 production domains to new deployments, so later merges build green but do
 not go live until you choose "Undo Rollback" or run `vercel promote`; cron
 jobs revert to the rolled-back deployment's schedule and environment
-variable changes are not applied. The `deploy-verify` production check
-compares the deployed commit with `main` and fails loudly while a rollback
-is in effect: its step "Production serves the head of main" names the
-commit production serves and the head of `main`. To undo: in the Vercel
-project's Deployments view choose "Undo Rollback", or run
-`vercel promote` on the deployment that should be live, then re-run the
-check by hand so the record shows production back on `main`:
+variable changes are not applied. To undo: in the Vercel project's
+Deployments view choose "Undo Rollback", or run `vercel promote` on the
+deployment that should be live.
 
-```sh
-gh workflow run deploy-verify.yml --repo iurman/tidefern \
-  -f url=https://tidefern.app -f ref=$(git rev-parse origin/main) -f production=true
-```
+The `deploy-verify` step "This production deployment is the head of main"
+compares the commit a Production deployment was built from with the head
+of `main` and names both. It catches an old commit deployed or promoted
+again. It does not see an Instant Rollback: the rollback keeps the domains
+on the old deployment, while each new merge still produces a Production
+deployment built from the head of `main`, and that deployment passes the
+step. Until the health endpoint reports the commit it was built from, check
+a rollback by eye in the Vercel Deployments view, which marks the
+deployment the domains point to as Current. A manual run of the workflow
+with `-f ref=...` only compares the ref you pass with `main`; it says
+nothing about what the domains serve.
 
 A merge that lands while an earlier production deployment is still being
-verified trips the same step once; re-run it after the newer deployment
-reports. Database: migrations roll forward only and are written
+verified fails that earlier run, because its commit is no longer the head
+of `main`. Re-running it compares the same commit again and fails every
+time; the newer deployment's own run supersedes it, so read that run
+instead. Database: migrations roll forward only and are written
 expand-then-contract, so the previous code keeps working against the new
 schema; a problem gets a corrective migration; destructive steps run only
 through the owner-triggered migration workflow. Never rewrite history on
@@ -240,8 +245,10 @@ gh workflow run uptime.yml --repo iurman/tidefern
 gh run list --repo iurman/tidefern --workflow uptime.yml --limit 5
 ```
 
-Runs never overlap (one concurrency group, no cancellation), so a manual
-run that lands on a scheduled one waits for it.
+Runs never overlap: a run that arrives while another is in progress
+waits. GitHub keeps at most one pending run per concurrency group, so if a
+second run queues behind the first waiting one, GitHub cancels the older
+pending run and keeps the newest.
 
 ## Vendors and processors
 

@@ -14,7 +14,8 @@ on:
 permissions: {}
 
 concurrency:
-  # One check at a time: a scheduled run that arrives while another is running waits for it.
+  # One check at a time: a run that arrives while another is running waits; GitHub keeps
+  # only the newest pending run per group and cancels an older pending one.
   group: uptime-production
   cancel-in-progress: false
 
