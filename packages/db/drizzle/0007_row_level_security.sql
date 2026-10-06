@@ -23,11 +23,15 @@
 --    through first. The marker counts only when current_user is not
 --    tidefern_app, so the app role setting it by hand changes nothing; the
 --    PGlite suite proves that, and also re-owns the helpers to a role that
---    cannot bypass RLS to prove the Neon path.
+--    cannot bypass RLS to prove the Neon path. One helper writes:
+--    accept_invitation() closes an invitation for its invitee, so the
+--    invitations update policy carries the marker as well.
 
 -- The actor of the transaction, set by withActor(); null outside one.
+-- The three readers of transaction settings carry COST 1 so they stay the
+-- cheapest arms of every policy; the lookup helpers keep the default cost.
 CREATE FUNCTION current_actor() RETURNS uuid
-  LANGUAGE sql STABLE
+  LANGUAGE sql STABLE COST 1
   SET search_path = pg_catalog, public
   AS $$
     SELECT nullif(current_setting('app.actor_id', true), '')::uuid
@@ -36,7 +40,7 @@ CREATE FUNCTION current_actor() RETURNS uuid
 -- System context from withSystem(): the owner role with app.system on. The
 -- app role is excluded by name, whatever it sets.
 CREATE FUNCTION is_system() RETURNS boolean
-  LANGUAGE sql STABLE
+  LANGUAGE sql STABLE COST 1
   SET search_path = pg_catalog, public
   AS $$
     SELECT coalesce(current_setting('app.system', true), '') = 'on'
@@ -46,20 +50,23 @@ CREATE FUNCTION is_system() RETURNS boolean
 -- True only inside a SECURITY DEFINER helper below, where the function-level
 -- SET holds and current_user is the helper's owner.
 CREATE FUNCTION in_policy_helper() RETURNS boolean
-  LANGUAGE sql STABLE
+  LANGUAGE sql STABLE COST 1
   SET search_path = pg_catalog, public
   AS $$
     SELECT coalesce(current_setting('app.policy_helper', true), '') = 'on'
        AND current_user <> 'tidefern_app'
   $$;
 --> statement-breakpoint
--- The actor's verified sign-in email, lower-cased, for invitation matching.
--- The user table is outside RLS, so this needs no definer context.
+-- The actor's sign-in email, lower-cased, for invitation matching; null
+-- until Better Auth has verified it (architecture record 8.3 binds
+-- acceptance to the verified email). The user table is outside RLS, so
+-- this needs no definer context.
 CREATE FUNCTION actor_email() RETURNS text
   LANGUAGE sql STABLE
   SET search_path = pg_catalog, public
   AS $$
-    SELECT lower(u.email) FROM "user" u WHERE u.id = current_actor()
+    SELECT lower(u.email) FROM "user" u
+    WHERE u.id = current_actor() AND u.email_verified
   $$;
 --> statement-breakpoint
 -- Guardianship of one child (architecture record 8.1: full rights).
@@ -141,6 +148,29 @@ CREATE FUNCTION may_join(household_id uuid, member_role text) RETURNS boolean
         AND i.withdrawn_at IS NULL
         AND i.expires_at > now()
     )
+  $$;
+--> statement-breakpoint
+-- The one write an invitee makes to an invitation: closing it after her
+-- membership row exists. The policy no longer lets her update the row
+-- herself, so household, role, expiry and token stay as the inviter set
+-- them. VOLATILE because it writes; the marker lets the update through
+-- the invitations policies when the owner is bound by FORCE.
+CREATE FUNCTION accept_invitation(invitation_id uuid) RETURNS boolean
+  LANGUAGE sql VOLATILE SECURITY DEFINER
+  SET search_path = pg_catalog, public
+  SET app.policy_helper = 'on'
+  AS $$
+    WITH closed AS (
+      UPDATE invitations i
+      SET accepted_at = now(), updated_at = now()
+      WHERE i.id = accept_invitation.invitation_id
+        AND lower(i.invitee_email) = actor_email()
+        AND i.accepted_at IS NULL
+        AND i.withdrawn_at IS NULL
+        AND i.expires_at > now()
+      RETURNING i.id
+    )
+    SELECT EXISTS (SELECT 1 FROM closed)
   $$;
 --> statement-breakpoint
 -- can(actor, "summary" | "read", resource): the owner, a guardian when the
@@ -347,7 +377,9 @@ CREATE POLICY households_delete ON households FOR DELETE
 
 -- household_members: members see each other; a membership is the creator's
 -- owner row on an empty household or an invitee joining in the invited
--- role; a member ends her own membership and the owner ends anyone's.
+-- role; a member ends her own membership (the new row must keep her
+-- household and role, which the helper reads from the statement's
+-- snapshot) and the owner changes or ends anyone's.
 CREATE POLICY household_members_select ON household_members FOR SELECT
   USING (is_system() OR in_policy_helper() OR user_id = current_actor()
          OR is_household_member(household_id));
@@ -360,14 +392,18 @@ CREATE POLICY household_members_insert ON household_members FOR INSERT
 --> statement-breakpoint
 CREATE POLICY household_members_update ON household_members FOR UPDATE
   USING (is_system() OR user_id = current_actor() OR is_household_member(household_id, 'owner'))
-  WITH CHECK (is_system() OR user_id = current_actor() OR is_household_member(household_id, 'owner'));
+  WITH CHECK (is_system()
+              OR is_household_member(household_id, 'owner')
+              OR (user_id = current_actor() AND is_household_member(household_id, role::text)));
 --> statement-breakpoint
 CREATE POLICY household_members_delete ON household_members FOR DELETE
   USING (is_system() OR is_household_member(household_id, 'owner'));
 --> statement-breakpoint
 
--- invitations: the inviter and the owner see and withdraw them; the
--- invitee, matched by her verified email, reads and accepts hers.
+-- invitations: the inviter and the owner see and withdraw them, and only
+-- the owner of the household the row names may change one; the invitee,
+-- matched by her verified email, reads hers and closes it through
+-- accept_invitation(), which is why the marker is in the update policy.
 CREATE POLICY invitations_select ON invitations FOR SELECT
   USING (is_system() OR in_policy_helper() OR inviter_id = current_actor()
          OR is_household_member(household_id, 'owner')
@@ -378,12 +414,10 @@ CREATE POLICY invitations_insert ON invitations FOR INSERT
               OR (inviter_id = current_actor() AND is_household_member(household_id, 'owner')));
 --> statement-breakpoint
 CREATE POLICY invitations_update ON invitations FOR UPDATE
-  USING (is_system() OR inviter_id = current_actor()
-         OR is_household_member(household_id, 'owner')
-         OR lower(invitee_email) = actor_email())
-  WITH CHECK (is_system() OR inviter_id = current_actor()
-              OR is_household_member(household_id, 'owner')
-              OR lower(invitee_email) = actor_email());
+  USING (is_system() OR in_policy_helper() OR inviter_id = current_actor()
+         OR is_household_member(household_id, 'owner'))
+  WITH CHECK (is_system() OR in_policy_helper()
+              OR is_household_member(household_id, 'owner'));
 --> statement-breakpoint
 CREATE POLICY invitations_delete ON invitations FOR DELETE
   USING (is_system() OR inviter_id = current_actor()
@@ -524,7 +558,8 @@ CREATE POLICY due_date_changes_delete ON due_date_changes FOR DELETE
 --> statement-breakpoint
 
 -- children: the child is the subject of its own row; an active member of
--- the household creates one; guardians, or a contributor, edit it; a
+-- the household creates one; guardians, or a contributor, edit it in
+-- place, and only a guardian moves it, into a household she belongs to; a
 -- guardian removes it. Membership alone shows nothing (8.1).
 CREATE POLICY children_select ON children FOR SELECT
   USING (is_system() OR in_policy_helper() OR can_read(id, 'child'));
@@ -534,7 +569,9 @@ CREATE POLICY children_insert ON children FOR INSERT
 --> statement-breakpoint
 CREATE POLICY children_update ON children FOR UPDATE
   USING (is_system() OR can_write(id, 'child'))
-  WITH CHECK (is_system() OR can_write(id, 'child'));
+  WITH CHECK (is_system()
+              OR (can_write(id, 'child') AND household_id = child_household(id))
+              OR (is_guardian(id) AND is_household_member(household_id)));
 --> statement-breakpoint
 CREATE POLICY children_delete ON children FOR DELETE
   USING (is_system() OR is_guardian(id));
@@ -652,13 +689,15 @@ CREATE POLICY photo_variants_delete ON photo_variants FOR DELETE
 
 -- audit_events: the subject (or a child's guardian) sees who touched the
 -- records, the actor sees her own actions; an actor appends only as
--- herself; the log is never edited and only the sweep removes rows.
+-- herself and only about a subject she holds a key relationship to
+-- (herself, a child she guards, a person who granted to her, or that
+-- child); the log is never edited and only the sweep removes rows.
 CREATE POLICY audit_events_select ON audit_events FOR SELECT
   USING (is_system() OR subject_id = current_actor() OR actor_id = current_actor()
          OR is_guardian(subject_id));
 --> statement-breakpoint
 CREATE POLICY audit_events_insert ON audit_events FOR INSERT
-  WITH CHECK (is_system() OR actor_id = current_actor());
+  WITH CHECK (is_system() OR (actor_id = current_actor() AND can_use_key(subject_id)));
 --> statement-breakpoint
 CREATE POLICY audit_events_update ON audit_events FOR UPDATE
   USING (is_system())

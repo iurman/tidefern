@@ -59,7 +59,7 @@ const PREDICTION = id(40);
 const WRAPPED_DEK = Uint8Array.from({ length: 61 }, (_, index) => (index * 7 + 3) % 256);
 const CIPHERTEXT = Uint8Array.from([1, 2, 3, 4]);
 
-/** The SECURITY DEFINER helpers, the ones that read tables under RLS. */
+/** The SECURITY DEFINER readers, the helpers that read tables under RLS. */
 const DEFINER_HELPERS = [
   "is_guardian(uuid)",
   "has_guardian(uuid)",
@@ -72,6 +72,9 @@ const DEFINER_HELPERS = [
   "can_use_key(uuid)",
   "is_related(uuid)",
 ];
+
+/** The one SECURITY DEFINER writer: an invitee closing her invitation. */
+const DEFINER_WRITERS = ["accept_invitation(uuid)"];
 
 /** Every table 0007 forces, as the catalog orders them. */
 const RLS_TABLES = [
@@ -139,6 +142,7 @@ async function seed() {
     await insertUser(harness, userId, email);
     await insertProfile(harness, userId);
   }
+  await harness.db.update(schema.user).set({ emailVerified: true });
   await harness.db.insert(schema.subjectKeys).values([
     {
       subjectId: ANNA,
@@ -295,18 +299,21 @@ describe("the 0007 migration", () => {
       ),
     );
     expect(definers.map((row) => row.signature as string).sort()).toEqual(
-      [...DEFINER_HELPERS].sort(),
+      [...DEFINER_HELPERS, ...DEFINER_WRITERS].sort(),
     );
     for (const row of definers) {
-      expect(row.provolatile).toBe("s");
+      const writer = DEFINER_WRITERS.includes(row.signature as string);
+      expect(row.provolatile).toBe(writer ? "v" : "s");
       expect(row.proconfig).toEqual(["search_path=pg_catalog, public", "app.policy_helper=on"]);
     }
 
     // The three readers of the transaction settings run as the caller: an
-    // is_system() that ran as the owner would let the app role pass.
+    // is_system() that ran as the owner would let the app role pass. They
+    // cost 1 so they stay the cheapest arm of every policy; the planner
+    // keeps the written order only among terms of equal cost.
     const invokers = rows(
       await harness.db.execute(
-        sql`select p.oid::regprocedure::text as signature, p.provolatile, p.proconfig from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace and not p.prosecdef and p.proname in ('current_actor', 'is_system', 'in_policy_helper', 'actor_email') order by signature`,
+        sql`select p.oid::regprocedure::text as signature, p.provolatile, p.proconfig, p.procost from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace and not p.prosecdef and p.proname in ('current_actor', 'is_system', 'in_policy_helper', 'actor_email') order by signature`,
       ),
     );
     expect(invokers).toEqual([
@@ -314,19 +321,33 @@ describe("the 0007 migration", () => {
         signature: "actor_email()",
         provolatile: "s",
         proconfig: ["search_path=pg_catalog, public"],
+        procost: 100,
       },
       {
         signature: "current_actor()",
         provolatile: "s",
         proconfig: ["search_path=pg_catalog, public"],
+        procost: 1,
       },
       {
         signature: "in_policy_helper()",
         provolatile: "s",
         proconfig: ["search_path=pg_catalog, public"],
+        procost: 1,
       },
-      { signature: "is_system()", provolatile: "s", proconfig: ["search_path=pg_catalog, public"] },
+      {
+        signature: "is_system()",
+        provolatile: "s",
+        proconfig: ["search_path=pg_catalog, public"],
+        procost: 1,
+      },
     ]);
+    const lookups = rows(
+      await harness.db.execute(
+        sql`select min(p.procost) as cost from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace and p.prosecdef`,
+      ),
+    );
+    expect(lookups).toEqual([{ cost: 100 }]);
   });
 
   test("adds the indexes the policies lean on", async () => {
@@ -876,25 +897,340 @@ describe("households and guardianship", () => {
     );
     expect(wrongRole).toMatch(/row-level security policy for table "household_members"/);
 
+    // Until Better Auth has verified her email the invitation is not hers.
+    await harness.db
+      .update(schema.user)
+      .set({ emailVerified: false })
+      .where(eq(schema.user.id, DANA));
+    expect(await countsFor(DANA, ["invitations"])).toEqual({ invitations: 0 });
+    expect(await helper(DANA, sql`accept_invitation(${invitation}::uuid)`)).toBe(false);
+    const unverified = await refusal(
+      withActor(
+        DANA,
+        (tx) =>
+          tx
+            .insert(schema.householdMembers)
+            .values({ id: id(133), householdId: HOUSEHOLD, userId: DANA, role: "partner" }),
+        harness.db,
+      ),
+    );
+    expect(unverified).toMatch(/row-level security policy for table "household_members"/);
+    await harness.db
+      .update(schema.user)
+      .set({ emailVerified: true })
+      .where(eq(schema.user.id, DANA));
+
+    // She reads the row but cannot rewrite it: the update policy has no
+    // invitee path, so her statement matches zero rows and changes nothing.
+    const otherHousehold = id(134);
+    await harness.db.insert(schema.households).values({ id: otherHousehold });
+    const rewritten = await withActor(
+      DANA,
+      (tx) =>
+        tx
+          .update(schema.invitations)
+          .set({
+            householdId: otherHousehold,
+            role: "guardian",
+            expiresAt: new Date(Date.now() + 365 * 24 * 60 * 60 * 1000),
+          })
+          .where(eq(schema.invitations.id, invitation))
+          .returning({ id: schema.invitations.id }),
+      harness.db,
+    );
+    expect(rewritten).toEqual([]);
+    expect(
+      await harness.db
+        .select({ householdId: schema.invitations.householdId, role: schema.invitations.role })
+        .from(schema.invitations)
+        .where(eq(schema.invitations.id, invitation)),
+    ).toEqual([{ householdId: HOUSEHOLD, role: "partner" }]);
+    // Nobody else closes it for her either.
+    expect(await helper(CARA, sql`accept_invitation(${invitation}::uuid)`)).toBe(false);
+
+    // Her one write goes through accept_invitation(), after the membership
+    // row exists (may_join needs the invitation still open).
     const accepted = await withActor(
       DANA,
       async (tx) => {
         await tx
           .insert(schema.householdMembers)
           .values({ id: id(132), householdId: HOUSEHOLD, userId: DANA, role: "partner" });
-        const marked = await tx
-          .update(schema.invitations)
-          .set({ acceptedAt: new Date() })
-          .where(eq(schema.invitations.id, invitation))
-          .returning({ id: schema.invitations.id });
-        return { marked, members: await count(tx, "household_members") };
+        const [closed] = rows(
+          await tx.execute(sql`select accept_invitation(${invitation}::uuid) as value`),
+        );
+        const [again] = rows(
+          await tx.execute(sql`select accept_invitation(${invitation}::uuid) as value`),
+        );
+        return {
+          closed: closed?.value,
+          again: again?.value,
+          members: await count(tx, "household_members"),
+        };
       },
       harness.db,
     );
-    expect(accepted).toEqual({ marked: [{ id: invitation }], members: 4 });
+    expect(accepted).toEqual({ closed: true, again: false, members: 4 });
+    expect(
+      await harness.db
+        .select({ acceptedAt: schema.invitations.acceptedAt })
+        .from(schema.invitations)
+        .where(eq(schema.invitations.id, invitation)),
+    ).toEqual([{ acceptedAt: expect.any(Date) }]);
 
     await harness.db.delete(schema.householdMembers).where(eq(schema.householdMembers.id, id(132)));
     await harness.db.delete(schema.invitations).where(eq(schema.invitations.id, invitation));
+    await harness.db.delete(schema.households).where(eq(schema.households.id, otherHousehold));
+  });
+
+  test("keep a member's own row in her household and role", async () => {
+    const otherHousehold = id(140);
+    await harness.db.insert(schema.households).values({ id: otherHousehold });
+    // Ben is a partner; his own row is his to end, not to promote or move.
+    const promoted = await refusal(
+      withActor(
+        BEN,
+        (tx) =>
+          tx
+            .update(schema.householdMembers)
+            .set({ role: "owner" })
+            .where(eq(schema.householdMembers.id, id(51))),
+        harness.db,
+      ),
+    );
+    expect(promoted).toMatch(/row-level security policy for table "household_members"/);
+    const moved = await refusal(
+      withActor(
+        BEN,
+        (tx) =>
+          tx
+            .update(schema.householdMembers)
+            .set({ householdId: otherHousehold })
+            .where(eq(schema.householdMembers.id, id(51))),
+        harness.db,
+      ),
+    );
+    expect(moved).toMatch(/row-level security policy for table "household_members"/);
+    expect(await helper(BEN, sql`is_household_member(${HOUSEHOLD}::uuid, 'owner')`)).toBe(false);
+
+    // A throwaway membership: the owner changes its role, the member ends it.
+    const membership = id(141);
+    await harness.db
+      .insert(schema.householdMembers)
+      .values({ id: membership, householdId: HOUSEHOLD, userId: DANA, role: "partner" });
+    const changed = await withActor(
+      ANNA,
+      (tx) =>
+        tx
+          .update(schema.householdMembers)
+          .set({ role: "guardian" })
+          .where(eq(schema.householdMembers.id, membership))
+          .returning({ role: schema.householdMembers.role }),
+      harness.db,
+    );
+    expect(changed).toEqual([{ role: "guardian" }]);
+    const ended = await withActor(
+      DANA,
+      (tx) =>
+        tx
+          .update(schema.householdMembers)
+          .set({ status: "ended", endedAt: new Date() })
+          .where(eq(schema.householdMembers.id, membership))
+          .returning({ status: schema.householdMembers.status }),
+      harness.db,
+    );
+    expect(ended).toEqual([{ status: "ended" }]);
+
+    await harness.db
+      .delete(schema.householdMembers)
+      .where(eq(schema.householdMembers.id, membership));
+    await harness.db.delete(schema.households).where(eq(schema.households.id, otherHousehold));
+  });
+
+  test("let only a guardian move a child, into a household she belongs to", async () => {
+    const annasOther = id(150);
+    const nobodys = id(152);
+    await harness.db.insert(schema.households).values([{ id: annasOther }, { id: nobodys }]);
+    await harness.db
+      .insert(schema.householdMembers)
+      .values({ id: id(151), householdId: annasOther, userId: ANNA, role: "owner" });
+    await harness.db
+      .update(schema.grants)
+      .set({ level: "contribute" })
+      .where(eq(schema.grants.id, CHILD_GRANT));
+
+    // Cara contributes: she edits the child in place and cannot move it.
+    const renamed = await withActor(
+      CARA,
+      (tx) =>
+        tx
+          .update(schema.children)
+          .set({ displayName: "Mo" })
+          .where(eq(schema.children.id, CHILD))
+          .returning({ id: schema.children.id }),
+      harness.db,
+    );
+    expect(renamed).toEqual([{ id: CHILD }]);
+    const movedByContributor = await refusal(
+      withActor(
+        CARA,
+        (tx) =>
+          tx
+            .update(schema.children)
+            .set({ householdId: annasOther })
+            .where(eq(schema.children.id, CHILD)),
+        harness.db,
+      ),
+    );
+    expect(movedByContributor).toMatch(/row-level security policy for table "children"/);
+
+    // Anna guards the child: she moves it to her other household, never to
+    // one she is no member of.
+    const movedByGuardian = await withActor(
+      ANNA,
+      (tx) =>
+        tx
+          .update(schema.children)
+          .set({ householdId: annasOther })
+          .where(eq(schema.children.id, CHILD))
+          .returning({ householdId: schema.children.householdId }),
+      harness.db,
+    );
+    expect(movedByGuardian).toEqual([{ householdId: annasOther }]);
+    const movedOutside = await refusal(
+      withActor(
+        ANNA,
+        (tx) =>
+          tx
+            .update(schema.children)
+            .set({ householdId: nobodys })
+            .where(eq(schema.children.id, CHILD)),
+        harness.db,
+      ),
+    );
+    expect(movedOutside).toMatch(/row-level security policy for table "children"/);
+    const movedBack = await withActor(
+      ANNA,
+      (tx) =>
+        tx
+          .update(schema.children)
+          .set({ householdId: HOUSEHOLD })
+          .where(eq(schema.children.id, CHILD))
+          .returning({ householdId: schema.children.householdId }),
+      harness.db,
+    );
+    expect(movedBack).toEqual([{ householdId: HOUSEHOLD }]);
+
+    await harness.db
+      .update(schema.grants)
+      .set({ level: "read" })
+      .where(eq(schema.grants.id, CHILD_GRANT));
+    await harness.db.delete(schema.households).where(eq(schema.households.id, annasOther));
+    await harness.db.delete(schema.households).where(eq(schema.households.id, nobodys));
+  });
+});
+
+describe("the audit log", () => {
+  test("takes an event only from the actor, about a subject she is related to", async () => {
+    // Dana holds nothing of Anna's, so a read event naming Anna is refused.
+    const forged = await refusal(
+      withActor(
+        DANA,
+        (tx) =>
+          tx.insert(schema.auditEvents).values({
+            id: id(160),
+            actorId: DANA,
+            action: "record.read",
+            subjectId: ANNA,
+            category: "cycle.history",
+          }),
+        harness.db,
+      ),
+    );
+    expect(forged).toMatch(/row-level security policy for table "audit_events"/);
+    // Nor may Ben write it in Dana's name.
+    const impersonated = await refusal(
+      withActor(
+        BEN,
+        (tx) =>
+          tx.insert(schema.auditEvents).values({
+            id: id(161),
+            actorId: DANA,
+            action: "record.read",
+            subjectId: ANNA,
+            category: "cycle.history",
+          }),
+        harness.db,
+      ),
+    );
+    expect(impersonated).toMatch(/row-level security policy for table "audit_events"/);
+    // Cara reads the first child, not the other one.
+    const wrongChild = await refusal(
+      withActor(
+        CARA,
+        (tx) =>
+          tx.insert(schema.auditEvents).values({
+            id: id(162),
+            actorId: CARA,
+            action: "record.read",
+            subjectId: OTHER_CHILD,
+            category: "child",
+            childId: OTHER_CHILD,
+          }),
+        harness.db,
+      ),
+    );
+    expect(wrongChild).toMatch(/row-level security policy for table "audit_events"/);
+
+    // Her own sign-in, Ben's read of what Anna granted, Cara's of the child.
+    const written = await withActor(
+      DANA,
+      (tx) =>
+        tx
+          .insert(schema.auditEvents)
+          .values({ id: id(163), actorId: DANA, action: "session.sign_in", subjectId: DANA })
+          .returning({ id: schema.auditEvents.id }),
+      harness.db,
+    );
+    expect(written).toEqual([{ id: id(163) }]);
+    const partnerRead = await withActor(
+      BEN,
+      (tx) =>
+        tx
+          .insert(schema.auditEvents)
+          .values({
+            id: id(164),
+            actorId: BEN,
+            action: "record.read",
+            subjectId: ANNA,
+            category: "cycle.history",
+          })
+          .returning({ id: schema.auditEvents.id }),
+      harness.db,
+    );
+    expect(partnerRead).toEqual([{ id: id(164) }]);
+    const childRead = await withActor(
+      CARA,
+      (tx) =>
+        tx
+          .insert(schema.auditEvents)
+          .values({
+            id: id(165),
+            actorId: CARA,
+            action: "record.read",
+            subjectId: CHILD,
+            category: "child",
+            childId: CHILD,
+          })
+          .returning({ id: schema.auditEvents.id }),
+      harness.db,
+    );
+    expect(childRead).toEqual([{ id: id(165) }]);
+    // Anna sees the read of her records and of her child's; Dana only her own.
+    expect(await countsFor(ANNA, ["audit_events"])).toEqual({ audit_events: 2 });
+    expect(await countsFor(DANA, ["audit_events"])).toEqual({ audit_events: 1 });
+
+    await harness.db.delete(schema.auditEvents);
   });
 });
 
@@ -986,9 +1322,28 @@ describe("with helpers owned by a role that cannot bypass RLS", () => {
     await harness.db.execute(
       sql`grant select, insert, update, delete on all tables in schema public to tidefern_bound`,
     );
-    for (const signature of DEFINER_HELPERS) {
+    for (const signature of [...DEFINER_HELPERS, ...DEFINER_WRITERS]) {
       await harness.db.execute(sql`alter function ${sql.raw(signature)} owner to tidefern_bound`);
     }
+  });
+
+  test("still closes an invitation for its invitee through accept_invitation", async () => {
+    // The update inside the helper runs as the bound role, so it passes the
+    // invitations policies only through the marker term.
+    const invitation = id(170);
+    await harness.db.insert(schema.invitations).values({
+      id: invitation,
+      householdId: HOUSEHOLD,
+      inviterId: ANNA,
+      inviteeEmail: "dana@example.test",
+      role: "partner",
+      tokenHash: "hash-of-another-token-never-stored",
+      expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+    });
+    expect(await helper(CARA, sql`accept_invitation(${invitation}::uuid)`)).toBe(false);
+    expect(await helper(DANA, sql`accept_invitation(${invitation}::uuid)`)).toBe(true);
+    expect(await helper(DANA, sql`accept_invitation(${invitation}::uuid)`)).toBe(false);
+    await harness.db.delete(schema.invitations).where(eq(schema.invitations.id, invitation));
   });
 
   test("runs the helpers as the bound role", async () => {

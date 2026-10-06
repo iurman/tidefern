@@ -213,13 +213,14 @@ behaviour on PGlite inside `withActor`, which drops to `tidefern_app`.
 | `current_actor()` | caller | `app.actor_id` as a uuid, null outside `withActor` |
 | `is_system()` | caller | `app.system` is `on` and `current_user` is not `tidefern_app` |
 | `in_policy_helper()` | caller | `app.policy_helper` is `on` and `current_user` is not `tidefern_app` |
-| `actor_email()` | caller | the actor's sign-in email, lower-cased, from the `user` table |
+| `actor_email()` | caller | the actor's sign-in email, lower-cased, from the `user` table; null until `email_verified` |
 | `can_read(subject_id, category)` | definer | `can(actor, "summary" or "read", resource)`: the subject herself, a guardian when the category is `child`, or an active grant covering the category at any level |
 | `can_write(subject_id, category)` | definer | `can(actor, "write", resource)`: the same, but a grant must be `contribute` |
 | `can_use_key(subject_id)` | definer | who may read a wrapped key: the subject, a guardian, or any active grant from that subject or over that child |
 | `is_guardian(child_id)`, `has_guardian(child_id)`, `child_household(child_id)` | definer | guardianship lookups |
 | `is_household_member(household_id, role)`, `has_members(household_id)`, `may_join(household_id, role)` | definer | membership and invitation lookups |
 | `is_related(other_id)` | definer | a grant in either direction, a shared household, or a shared child |
+| `accept_invitation(invitation_id)` | definer, writes | sets `accepted_at` on an open invitation to the actor's verified email and nothing else; true when it closed one |
 
 The `category` argument is text and the policies pass the literal they file
 under, so a row never spans categories except `cycle_entries`, where either
@@ -229,7 +230,11 @@ a child record is the child (architecture record 8.3). `journal.private`
 is never granted: both helpers return false for it unless the actor is the
 subject. A grant is active while `revoked_at` is null; there is no expiry
 column, as in `can()`. Every helper is `STABLE` with `SET search_path =
-pg_catalog, public`.
+pg_catalog, public`, except `accept_invitation()`, which is `VOLATILE`
+because it writes. `current_actor()`, `is_system()` and
+`in_policy_helper()` carry `COST 1` so they stay the cheapest arm of every
+policy; Postgres keeps the written order only among terms of equal cost,
+and the lookup helpers keep the default cost of 100.
 
 Two rules the SQL has to keep that `can()` never faces:
 
@@ -244,7 +249,9 @@ Two rules the SQL has to keep that `can()` never faces:
   Each definer helper therefore carries `SET app.policy_helper = 'on'` for
   the duration of the call, and the policies of the five tables the helpers
   read (`grants`, `child_guardians`, `household_members`, `children`,
-  `invitations`) let `in_policy_helper()` through before anything else.
+  `invitations`) let `in_policy_helper()` through before anything else,
+  and `invitations_update` does too, for the one write a helper makes
+  (`accept_invitation()`).
   The marker counts only when `current_user` is not `tidefern_app`, so the
   app role setting it by hand changes nothing. `src/rls.test.ts` proves
   that from both roles, and its last block re-owns the helpers to a role
@@ -266,17 +273,29 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   `child_id`. `photo_variants` follow their photo through a subquery.
   `due_date_changes` are hers alone to read; a contributor who changes the
   due date may append, and nobody edits the log.
-- `profiles`: the person, plus anyone `is_related()` may read the row (the
-  API projects display name and time zone for them). `subject_keys`: read
-  with `can_use_key()`, written by the subject, a guardian or the system.
+- `profiles`: the person, plus anyone `is_related()` may read the row.
+  RLS works per row, so the projection is the API's contract: a related
+  reader (a partner with no grant included) is shown `display_name` and
+  `time_zone` only; `stage` and `age_attested_at` are health data and
+  `units` and `notification_detail` are hers, and the serializer in
+  `packages/core` never puts them in another person's view. Splitting a
+  `profiles_public` view off is the change to make if a route ever needs
+  the database to enforce that. `subject_keys`: read with
+  `can_use_key()`, written by the subject, a guardian or the system.
 - `households`, `household_members`, `invitations`: members see their
   household and each other; any signed-in actor creates a household and
   becomes its owner through the first membership row on an empty
   household; an invitee joins in the invited role while an open invitation
-  to her verified email exists (`may_join`), so the acceptance route inserts
-  the membership before it marks the invitation accepted; the owner invites,
-  withdraws and ends memberships, a member ends her own. Membership shows
-  nothing about another member's records (architecture record 8.1).
+  to her verified email exists (`may_join`), so the acceptance route
+  inserts the membership first and then calls `accept_invitation(id)`,
+  the only write she can make to the invitation (she reads hers, and an
+  update of her own matches no row). The owner of the household an
+  invitation names invites, changes and withdraws it; the inviter alone may
+  still withdraw. The owner changes or ends any membership, including
+  moving a member between two households she owns; a member ends her own,
+  and her row must keep its household and role (the check reads the
+  pre-statement row), so she cannot promote herself or move. Membership
+  shows nothing about another member's records (architecture record 8.1).
 - `grants`: both parties see a grant; only the owner makes one, and a child
   grant only by a guardian of that child; the owner or a co-guardian
   revokes (an update); the owner removes the row. `consents`: the subject,
@@ -285,11 +304,15 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   `can_read(id, 'child')`, so a household partner without guardianship or a
   grant sees none; an active member of the household creates a child and
   becomes its first guardian (`NOT has_guardian`), after that only a
-  guardian adds one; guardians see each other, step down or remove another,
-  and alone remove the child.
+  guardian adds one; guardians or a contributor edit the row in place, and
+  only a guardian moves it, into a household she is an active member of;
+  guardians see each other, step down or remove another, and alone remove
+  the child.
 - `audit_events`: the subject (or a child's guardian) and the actor read;
-  an actor appends only as herself; nothing edits the log and only the
-  system removes. `data_requests`: hers to read, file and cancel; the
+  an actor appends only as herself and only about a subject she holds a
+  key relationship to (`can_use_key`: herself, a child she guards, a person
+  who granted to her, or that child), so nobody files a read that could not
+  have happened; nothing edits the log and only the system removes. `data_requests`: hers to read, file and cancel; the
   system closes. `disclosures`: hers to read, the product's to write.
 
 Changing a rule later is `ALTER POLICY ... USING (...)` or `CREATE OR
