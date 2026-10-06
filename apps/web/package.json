@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@tidefern/api": "workspace:*",
+    "@tidefern/api-client": "workspace:*",
     "@tidefern/auth": "workspace:*",
     "@tidefern/core": "workspace:*",
     "@tidefern/db": "workspace:*",

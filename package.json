@@ -17,6 +17,8 @@
     "tokens:check": "pnpm --filter @tidefern/design-tokens check",
     "openapi:generate": "pnpm --filter @tidefern/api openapi:generate",
     "openapi:check": "pnpm --filter @tidefern/api openapi:check",
+    "client:generate": "pnpm --filter @tidefern/api-client generate",
+    "client:check": "pnpm --filter @tidefern/api-client check",
     "growth:generate": "pnpm --filter @tidefern/core growth:generate",
     "growth:check": "pnpm --filter @tidefern/core growth:check",
     "brand:generate": "node scripts/brand/generate-icons.mjs",
@@ -30,7 +32,7 @@
     "css:check": "node scripts/check-css.mjs",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
-    "check": "pnpm prose:check && pnpm skills:check && pnpm css:check && pnpm tokens:check && pnpm tokens:contrast && pnpm --filter web brand:check && pnpm openapi:check && pnpm growth:check && pnpm format:check && turbo run lint typecheck test build",
+    "check": "pnpm prose:check && pnpm skills:check && pnpm css:check && pnpm tokens:check && pnpm tokens:contrast && pnpm --filter web brand:check && pnpm openapi:check && pnpm client:check && pnpm growth:check && pnpm format:check && turbo run lint typecheck test build",
     "tokens:contrast": "pnpm --filter @tidefern/design-tokens contrast"
   },
   "devDependencies": {
