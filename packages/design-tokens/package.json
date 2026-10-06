@@ -6,7 +6,8 @@
   "exports": {
     ".": "./src/index.ts",
     "./tokens.json": "./tokens.json",
-    "./stylesheet": "./stylesheet.mjs"
+    "./stylesheet": "./stylesheet.mjs",
+    "./brand/lockup.json": "./brand/lockup.json"
   },
   "scripts": {
     "generate": "node scripts/generate.mjs",

@@ -19,6 +19,7 @@
     "openapi:check": "pnpm --filter @tidefern/api openapi:check",
     "growth:generate": "pnpm --filter @tidefern/core growth:generate",
     "growth:check": "pnpm --filter @tidefern/core growth:check",
+    "brand:generate": "node scripts/brand/generate-icons.mjs",
     "db:generate": "pnpm --filter @tidefern/db generate",
     "db:migrate": "pnpm --filter @tidefern/db migrate",
     "db:seed": "pnpm --filter @tidefern/db seed",
@@ -31,7 +32,11 @@
     "tokens:contrast": "pnpm --filter @tidefern/design-tokens contrast"
   },
   "devDependencies": {
+    "fontkit": "2.0.4",
+    "png-to-ico": "3.0.2",
     "prettier": "3.9.9",
-    "turbo": "2.11.7"
+    "sharp": "0.35.5",
+    "turbo": "2.11.7",
+    "wawoff2": "2.0.1"
   }
 }

@@ -1,0 +1,30 @@
+{
+  "viewBox": {
+    "width": 1105,
+    "height": 239
+  },
+  "wordmark": {
+    "family": "Newsreader",
+    "opticalSize": 72,
+    "weight": 500,
+    "fontSize": 200,
+    "capHeight": 134,
+    "x": 301.03,
+    "baseline": 150.4
+  },
+  "tagline": {
+    "family": "Figtree",
+    "weight": 500,
+    "fontSize": 56.512,
+    "capHeight": 39.56,
+    "tracking": 0.18,
+    "baseline": 238.2
+  },
+  "mark": {
+    "scale": 0.5377,
+    "width": 237.93,
+    "gap": 67
+  },
+  "clearSpace": 134,
+  "minimumWidth": 120
+}

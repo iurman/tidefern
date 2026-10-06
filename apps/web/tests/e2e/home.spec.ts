@@ -73,7 +73,7 @@ test("security headers and no indexing on previews", async ({ request }) => {
 
 for (const theme of ["light", "dark"] as const) {
   test(`home and design pages have no axe violations in ${theme} mode`, async ({ page }) => {
-    for (const path of ["/", "/design", "/design/type"]) {
+    for (const path of ["/", "/design", "/design/type", "/design/brand"]) {
       await expectNoAxeViolations(page, path, theme);
     }
   });
