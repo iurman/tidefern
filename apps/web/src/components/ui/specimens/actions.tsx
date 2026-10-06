@@ -77,15 +77,12 @@ export const specimens: SpecimenGroup = {
         "  how Tidefern stores your account",
         "</TextLink>",
       ].join("\n"),
-      keyboard: "Tab reaches it, Enter follows it.",
+      keyboard:
+        "Tab reaches it, Enter follows it. In a sentence it reads as running text: Read how Tidefern stores your account before you decide.",
       // Running text has no disabled, loading, error or empty form.
       states: { disabled: "none", loading: "none", error: "none", empty: "none" },
-      render: () => (
-        <p style={{ margin: 0 }}>
-          Read <TextLink href="/privacy">how Tidefern stores your account</TextLink> before you
-          decide.
-        </p>
-      ),
+      // The link is the root so the frame's forced states reach it; the sentence around it is the page's.
+      render: () => <TextLink href="/privacy">how Tidefern stores your account</TextLink>,
     },
     {
       name: "Inline feedback",

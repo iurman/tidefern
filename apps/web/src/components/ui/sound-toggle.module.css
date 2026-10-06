@@ -1,5 +1,6 @@
 .toggle {
   display: inline-flex;
+  justify-self: start;
   align-items: center;
   justify-content: center;
   min-width: var(--size-control);

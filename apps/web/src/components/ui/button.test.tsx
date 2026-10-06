@@ -52,10 +52,12 @@ describe("Button", () => {
         Create an account
       </Button>,
     );
+    render(<Button variant="primary">Create an account</Button>);
     const link = screen.getByRole("link", { name: "Create an account" });
+    const button = screen.getByRole("button", { name: "Create an account" });
     expect(link).toHaveAttribute("href", "/welcome");
     expect(link).toHaveAttribute("data-variant", "primary");
-    expect(link.className).toBe(screen.getByRole("link", { name: "Create an account" }).className);
+    expect(link.className).toBe(button.className);
     expect(link.className).toContain("button");
   });
 
