@@ -1,0 +1,146 @@
+/*
+ * One calendar day (DESIGN.md 6.2). The holder (.host) draws the window pill
+ * in two layers behind the content: ::before is the stroke, solid for a
+ * logged fact, dashed for a prediction, dotted for an estimate; ::after is
+ * the faint fill a logged window gets. Consecutive days join because the
+ * layers reach the holder's inline edges and only the window's ends round.
+ */
+
+.host {
+  --cell-stroke: transparent;
+  --cell-style: solid;
+  --cell-fill: transparent;
+  position: relative;
+  min-width: var(--size-control);
+  min-height: var(--size-control);
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.host::before,
+.host::after {
+  content: "";
+  position: absolute;
+  inset-block: var(--space-1);
+  inset-inline: 0;
+  z-index: 0;
+  pointer-events: none;
+}
+
+.host::before {
+  border-block: 2px var(--cell-style) var(--cell-stroke);
+}
+
+.host::after {
+  background: var(--cell-fill);
+  opacity: 0.16;
+}
+
+.logged {
+  --cell-stroke: var(--data-period);
+  --cell-style: solid;
+  --cell-fill: var(--data-period);
+}
+
+.predicted {
+  --cell-stroke: var(--data-period);
+  --cell-style: dashed;
+}
+
+.estimated {
+  --cell-stroke: var(--data-fertile);
+  --cell-style: dotted;
+}
+
+.edgeStart::before,
+.edgeStart::after,
+.edgeSingle::before,
+.edgeSingle::after {
+  inset-inline-start: var(--space-1);
+  border-start-start-radius: var(--radius-round);
+  border-end-start-radius: var(--radius-round);
+}
+
+.edgeStart::before,
+.edgeSingle::before {
+  border-inline-start: 2px var(--cell-style) var(--cell-stroke);
+}
+
+.edgeEnd::before,
+.edgeEnd::after,
+.edgeSingle::before,
+.edgeSingle::after {
+  inset-inline-end: var(--space-1);
+  border-start-end-radius: var(--radius-round);
+  border-end-end-radius: var(--radius-round);
+}
+
+.edgeEnd::before,
+.edgeSingle::before {
+  border-inline-end: 2px var(--cell-style) var(--cell-stroke);
+}
+
+.cell {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+}
+
+.number {
+  font-family: var(--font-sans);
+  font-size: var(--type-small);
+  font-weight: var(--weight-numeral);
+  line-height: 1.2;
+}
+
+.today .number {
+  color: var(--accent);
+  font-weight: var(--weight-sans-strong);
+}
+
+.outside {
+  color: var(--muted);
+}
+
+.marks {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  justify-content: center;
+  height: 7px;
+}
+
+.noted {
+  display: block;
+  width: 4px;
+  height: 4px;
+  border-radius: var(--radius-round);
+  background: var(--text);
+}
+
+.point {
+  display: block;
+  width: 7px;
+  height: 7px;
+  border: 1.5px solid var(--text);
+  border-radius: var(--radius-round);
+  background: transparent;
+}
+
+/* A row of sample cells for the reference chapter; the product never renders cells outside a grid or strip. */
+.samples {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.sample {
+  display: grid;
+  place-items: center;
+}
