@@ -47,7 +47,13 @@ function leave() {
 /**
  * Email and password, a passkey where the browser has WebAuthn, and the
  * second step when the server asks for it. The heading lives here because
- * it changes with the step. Nothing here ever sends `trustDevice`.
+ * it changes with the step. Each step's form carries its own `key`, so a
+ * step change mounts a fresh form instead of React rewriting the previous
+ * step's fields in place (which would carry the email into the code field
+ * and leave focus nowhere); the code field then takes focus on mount,
+ * since the control the person submitted from has gone with the password
+ * form. It mounts only after that action, never on page load. Nothing here
+ * ever sends `trustDevice`.
  */
 export function SignInForm() {
   const [step, setStep] = useState<Step>("password");
@@ -137,7 +143,7 @@ export function SignInForm() {
           {copy.heading}
         </h1>
         <p className={styles.lede}>{copy.lede}</p>
-        <form className={styles.form} onSubmit={submitPassword}>
+        <form key="password" className={styles.form} onSubmit={submitPassword}>
           <FormField label={copy.email.label} required>
             <TextInput
               name="email"
@@ -188,7 +194,7 @@ export function SignInForm() {
         {two.heading}
       </h1>
       <p className={styles.lede}>{backup ? two.backupLede : two.lede}</p>
-      <form className={styles.form} onSubmit={submitCode}>
+      <form key={step} className={styles.form} onSubmit={submitCode}>
         {backup ? (
           <FormField label={two.backupCode.label} required>
             <TextInput
@@ -197,6 +203,7 @@ export function SignInForm() {
               autoComplete="off"
               autoCapitalize="off"
               spellCheck={false}
+              autoFocus
             />
           </FormField>
         ) : (
@@ -208,6 +215,7 @@ export function SignInForm() {
               autoComplete="one-time-code"
               pattern="[0-9 ]{6,8}"
               maxLength={8}
+              autoFocus
             />
           </FormField>
         )}

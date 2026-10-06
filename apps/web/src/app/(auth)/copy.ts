@@ -59,8 +59,10 @@ export const authCopy = {
   verify: {
     title: "Verify your email",
     description: "The result of the link in your confirmation email.",
-    heading: "Your email is confirmed",
-    lede: "Sign in and Tidefern is ready for you.",
+    heading: "Confirm your email",
+    lede: "Open the link in the mail we sent you. It brings you back here once your email is confirmed.",
+    confirmedHeading: "Your email is confirmed",
+    confirmedLede: "Sign in and Tidefern is ready for you.",
     failedHeading: "This link no longer works",
     failedLede:
       "It may have expired or already been used. Sign in with your email and password and we send a fresh one if your email still needs confirming.",

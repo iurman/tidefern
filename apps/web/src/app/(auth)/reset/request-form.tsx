@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
@@ -16,11 +16,16 @@ type State =
 /**
  * The email field and the one button. The server answers the same way
  * whether the email has an account or not, so the success sentence says
- * "if"; it is the honest one.
+ * "if"; it is the honest one. It takes focus when it replaces the form.
  */
 export function RequestResetForm({ expired }: { expired: boolean }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const pending = state.kind === "pending";
+  const sentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (state.kind === "sent") sentRef.current?.focus();
+  }, [state.kind]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -40,9 +45,11 @@ export function RequestResetForm({ expired }: { expired: boolean }) {
 
   if (state.kind === "sent") {
     return (
-      <InlineFeedback tone="success" cue className={styles.feedback}>
-        {copy.sent}
-      </InlineFeedback>
+      <div ref={sentRef} tabIndex={-1}>
+        <InlineFeedback tone="success" cue className={styles.feedback}>
+          {copy.sent}
+        </InlineFeedback>
+      </div>
     );
   }
 

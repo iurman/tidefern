@@ -16,8 +16,13 @@ export type { AuthClient, AuthClientError };
 /** Where every successful sign-in lands. */
 export const SIGNED_IN_PATH = "/today";
 
-/** The route the verification link in a sign-up mail lands on. */
-export const VERIFY_PATH = "/verify";
+/**
+ * The callback the verification link in a sign-up mail lands on. Better Auth
+ * redirects to it as given after a verification and appends `error=` when
+ * the token fails, so `done` is the one signal that a verification happened:
+ * /verify without it is a direct visit and shows neither result.
+ */
+export const VERIFY_PATH = "/verify?done=1";
 
 /** The route the reset link in a reset mail lands on; the server appends the token. */
 export const RESET_PATH = "/reset";

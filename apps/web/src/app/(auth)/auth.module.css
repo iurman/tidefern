@@ -2,6 +2,7 @@
 
 .frame {
   max-width: 520px;
+  margin-inline: auto;
   padding-block: var(--space-12) var(--space-24);
 }
 

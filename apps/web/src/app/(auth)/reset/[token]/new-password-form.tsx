@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
@@ -21,11 +21,17 @@ type State =
 /**
  * New password twice, then the token goes with it. A mismatch is caught
  * here before any request; an expired token is the server's answer and
- * gets the link back to a fresh request.
+ * gets the link back to a fresh request. The done sentence takes focus
+ * when it replaces the form.
  */
 export function NewPasswordForm({ token }: { token: string }) {
   const [state, setState] = useState<State>({ kind: "idle" });
   const pending = state.kind === "pending";
+  const doneRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (state.kind === "done") doneRef.current?.focus();
+  }, [state.kind]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -53,9 +59,11 @@ export function NewPasswordForm({ token }: { token: string }) {
   if (state.kind === "done") {
     return (
       <>
-        <InlineFeedback tone="success" cue className={styles.feedback}>
-          {copy.done}
-        </InlineFeedback>
+        <div ref={doneRef} tabIndex={-1}>
+          <InlineFeedback tone="success" cue className={styles.feedback}>
+            {copy.done}
+          </InlineFeedback>
+        </div>
         <div className={styles.actions}>
           <Button href="/sign-in">{copy.signIn}</Button>
         </div>

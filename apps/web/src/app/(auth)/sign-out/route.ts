@@ -10,6 +10,12 @@ import { POST as api } from "@/app/api/[[...route]]/route";
  * redirect, and sends the person home. When the auth server did not answer
  * 2xx the session still exists, so the redirect goes back to /today rather
  * than pretending.
+ *
+ * The redirect's Location is a path, not an absolute URL: `request.url`
+ * carries the server's own listen name (localhost on Vercel and behind any
+ * proxy), so an absolute Location built from it would send the visitor off
+ * the origin they came from. A browser resolves a path against the request's
+ * own origin, which is always the right one.
  */
 export const dynamic = "force-dynamic";
 
@@ -36,9 +42,13 @@ export async function POST(request: Request) {
   } catch {
     signedOut = false;
   }
-  const destination = new URL(signedOut ? "/" : "/today", request.url);
-  const redirect = NextResponse.redirect(destination, 303);
+  const redirect = new NextResponse(null, {
+    status: 303,
+    headers: {
+      location: signedOut ? "/" : "/today",
+      "cache-control": "private, no-store",
+    },
+  });
   for (const cookie of cookies) redirect.headers.append("set-cookie", cookie);
-  redirect.headers.set("Cache-Control", "private, no-store");
   return redirect;
 }

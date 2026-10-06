@@ -1,5 +1,5 @@
 "use client";
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
@@ -16,11 +16,17 @@ type State =
 /**
  * Name, email and password. The server requires a verified email before a
  * sign-in, so success here is the sentence about the inbox, not a session;
- * the link in the mail lands on /verify.
+ * the link in the mail lands on /verify. The sentence takes focus when it
+ * replaces the form, because the button the person pressed has gone.
  */
 export function SignUpForm() {
   const [state, setState] = useState<State>({ kind: "idle" });
   const pending = state.kind === "pending";
+  const sentRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (state.kind === "sent") sentRef.current?.focus();
+  }, [state.kind]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -42,9 +48,11 @@ export function SignUpForm() {
 
   if (state.kind === "sent") {
     return (
-      <InlineFeedback tone="success" cue className={styles.feedback}>
-        {copy.sent}
-      </InlineFeedback>
+      <div ref={sentRef} tabIndex={-1}>
+        <InlineFeedback tone="success" cue className={styles.feedback}>
+          {copy.sent}
+        </InlineFeedback>
+      </div>
     );
   }
 

@@ -10,7 +10,18 @@ import { expectNoAxeViolations } from "./axe";
 const routes = [
   { path: "/sign-up", title: "Create an account | Tidefern", heading: "Create your account" },
   { path: "/sign-in", title: "Sign in | Tidefern", heading: "Sign in" },
-  { path: "/verify", title: "Verify your email | Tidefern", heading: "Your email is confirmed" },
+  { path: "/verify", title: "Verify your email | Tidefern", heading: "Confirm your email" },
+  {
+    path: "/verify?done=1",
+    title: "Verify your email | Tidefern",
+    heading: "Your email is confirmed",
+  },
+  {
+    // What Better Auth sends when the token fails: the callback's own query, then the error.
+    path: "/verify?done=1&error=INVALID_TOKEN",
+    title: "Verify your email | Tidefern",
+    heading: "This link no longer works",
+  },
   {
     path: "/verify?error=INVALID_TOKEN",
     title: "Verify your email | Tidefern",
@@ -85,6 +96,17 @@ test("the sign-out route refuses GET", async ({ request }) => {
   expect(response.status()).toBe(405);
 });
 
+test("the sign-out route redirects with a path, never the server's own host", async ({
+  request,
+}) => {
+  // Without a database the auth server cannot clear a session, so the route sends
+  // the person back to /today; the point here is the shape of the Location.
+  const response = await request.post("/sign-out", { maxRedirects: 0 });
+  expect(response.status()).toBe(303);
+  expect(response.headers()["location"]).toBe("/today");
+  expect(response.headers()["cache-control"]).toBe("private, no-store");
+});
+
 test("today sends a visitor without a session to sign in", async ({ page }) => {
   await page.goto("/today");
   await expect(page).toHaveURL(/\/sign-in$/);
@@ -143,11 +165,17 @@ test("sign-in asks for the code when the server wants a second factor", async ({
   const code = page.locator('input[name="code"]');
   await expect(code).toHaveAttribute("autocomplete", "one-time-code");
   await expect(code).toHaveAttribute("inputmode", "numeric");
+  // The password form is gone, so focus moves to the new step's field instead of the body,
+  // and the field is a fresh one: nothing typed on the previous step carries over.
+  await expect(code).toBeFocused();
+  await expect(code).toHaveValue("");
   await code.fill("123 456");
   await page.getByRole("button", { name: "Continue" }).click();
   await expect(page.getByRole("status")).toContainText("That code did not match");
   await page.getByRole("button", { name: "Use a backup code instead" }).click();
   await expect(page.getByLabel("Backup code")).toBeVisible();
+  await expect(page.getByLabel("Backup code")).toBeFocused();
+  await expect(page.getByLabel("Backup code")).toHaveValue("");
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 
@@ -179,13 +207,15 @@ test("sign-up points an existing email at sign in", async ({ page }) => {
 });
 
 test("sign-up reports the inbox when the server accepts", async ({ page }) => {
-  await page.route("**/api/auth/sign-up/email", (route) =>
-    route.fulfill({
+  const bodies: string[] = [];
+  await page.route("**/api/auth/sign-up/email", (route) => {
+    bodies.push(route.request().postData() ?? "");
+    return route.fulfill({
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ token: null, user: { id: "x", email: "person@example.com" } }),
-    }),
-  );
+    });
+  });
   await page.goto("/sign-up");
   await page.getByLabel("Your name").fill("Sam");
   await page.getByLabel("Email").fill("person@example.com");
@@ -193,6 +223,11 @@ test("sign-up reports the inbox when the server accepts", async ({ page }) => {
   await page.getByRole("button", { name: "Create account" }).click();
   await expect(page.getByRole("status")).toContainText("Check your inbox");
   await expect(page.locator("form")).toHaveCount(0);
+  // The button that was pressed has gone, so the sentence that replaced the form holds focus.
+  await expect(page.locator(":focus")).toContainText("Check your inbox");
+  expect(bodies).toHaveLength(1);
+  // The verification link lands on /verify with the marker the page reads as a result.
+  expect(JSON.parse(bodies[0] ?? "{}")).toMatchObject({ callbackURL: "/verify?done=1" });
 });
 
 test("the reset request answers the same sentence whether or not the email exists", async ({
@@ -212,6 +247,7 @@ test("the reset request answers the same sentence whether or not the email exist
   await page.getByLabel("Email").fill("person@example.com");
   await page.getByRole("button", { name: "Send the link" }).click();
   await expect(page.getByRole("status")).toContainText("If that email has an account");
+  await expect(page.locator(":focus")).toContainText("If that email has an account");
   expect(bodies).toHaveLength(1);
   expect(JSON.parse(bodies[0] ?? "{}")).toMatchObject({ redirectTo: "/reset" });
 });
@@ -245,6 +281,24 @@ test("the new password form catches a mismatch itself and an expired token from 
     "/reset",
   );
   expect(requests).toBe(1);
+});
+
+test("the new password form reports success and hands focus to the sentence", async ({ page }) => {
+  await page.route("**/api/auth/reset-password", (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify({ status: true }),
+    }),
+  );
+  await page.goto("/reset/sample-token");
+  await page.locator('input[name="password"]').fill("correct horse battery");
+  await page.locator('input[name="confirm"]').fill("correct horse battery");
+  await page.getByRole("button", { name: "Set the new password" }).click();
+  await expect(page.getByRole("status")).toContainText("Your password is set");
+  await expect(page.locator("form")).toHaveCount(0);
+  await expect(page.locator(":focus")).toContainText("Your password is set");
+  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/sign-in");
 });
 
 test("the auth routes reflow at 320 px without a horizontal scroll", async ({ page }) => {
