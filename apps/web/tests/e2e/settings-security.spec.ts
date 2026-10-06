@@ -1,12 +1,23 @@
-import { expect, test, type Page, type Route } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import {
+  expect,
+  test,
+  type BrowserContext,
+  type Cookie,
+  type Page,
+  type Route,
+} from "@playwright/test";
 import { expectNoAxeViolations } from "./axe";
 
 /**
- * The devices and two-step sign-in routes against the production build
- * without a database: the settings layout lets a request with a cookie
- * through, and every call the pages make to /api/auth is answered by
- * page.route with a canned body. Nothing here authenticates and nothing is
- * tagged @smoke.
+ * The devices and two-step sign-in routes against the production build.
+ * The settings layout reads the session through GET /api/v1/me in process,
+ * so the cookie the browser carries depends on the server: against a
+ * seeded server (CI, task B11) the suite signs in once as a seeded persona
+ * and reuses that cookie; without a database the read cannot answer and the
+ * layout renders for a canned cookie. Either way every call the pages make
+ * to /api/auth is answered by page.route with a canned body, so the states
+ * below never depend on real sessions. Nothing here is tagged @smoke.
  */
 
 const routes = [
@@ -84,18 +95,39 @@ interface Canned {
   twoFactorEnabled?: boolean;
 }
 
+/** A seeded, verified persona without two-step sign-in (packages/db seed cast). */
+const seededPersona = { email: "noor@example.test", password: "tidefern-seed-noor" };
+
 /**
- * A cookie so the settings layout renders, then the two reads every page
- * starts with. Anything else under /api/auth answers 500 unless a test
+ * The cookies of one real sign-in against a seeded server, read once per
+ * worker because Better Auth allows three sign-ins per ten seconds; null
+ * when the server has no seeded users (no database), undefined until tried.
+ */
+let seededCookies: Cookie[] | null | undefined;
+
+type CookiesToAdd = Parameters<BrowserContext["addCookies"]>[0];
+
+async function sessionCookies(page: Page, origin: string): Promise<CookiesToAdd> {
+  if (seededCookies === undefined) {
+    // page.request shares the context's cookie jar and is never answered by page.route.
+    const response = await page.request.post("/api/auth/sign-in/email", {
+      data: seededPersona,
+    });
+    seededCookies = response.ok() ? await page.context().cookies(origin) : null;
+  }
+  if (seededCookies !== null) return seededCookies;
+  return [{ name: "better-auth.session_token", value: "e2e-canned", url: origin }];
+}
+
+/**
+ * A session cookie so the settings layout renders, then the two reads every
+ * page starts with. Anything else under /api/auth answers 500 unless a test
  * routes it, so an unexpected call fails loudly instead of reaching a server.
  */
 async function signedIn(page: Page, canned: Canned = {}) {
   const base = test.info().project.use.baseURL ?? "http://127.0.0.1:3000";
-  await page
-    .context()
-    .addCookies([
-      { name: "better-auth.session_token", value: "e2e-canned", url: new URL(base).origin },
-    ]);
+  const origin = new URL(base).origin;
+  await page.context().addCookies(await sessionCookies(page, origin));
   await page.route("**/api/auth/**", (route) =>
     refusal(route, 500, "UNEXPECTED", "This suite did not expect that call"),
   );
@@ -108,6 +140,14 @@ async function signedIn(page: Page, canned: Canned = {}) {
   await page.route("**/api/auth/list-sessions", (route) =>
     json(route, canned.sessions ?? [chrome, current, safari]),
   );
+}
+
+/** The axe pass of ./axe on the page as it stands, for a step reached by the person's own actions. */
+async function expectNoAxeViolationsHere(page: Page, label: string) {
+  const results = await new AxeBuilder({ page })
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+    .analyze();
+  expect(results.violations, label).toEqual([]);
 }
 
 /** The innermost element that holds both a device's name and its own sign-out action: its row. */
@@ -165,6 +205,39 @@ test("a cookie that names no session sends the person to sign in from the first 
   await page.route("**/api/auth/get-session", (route) => json(route, null));
   await page.goto("/settings/two-factor");
   await expect(page).toHaveURL(/\/sign-in$/);
+});
+
+test("a list that needs a fresh sign-in shows that step, not a reload", async ({ page }) => {
+  await signedIn(page);
+  // Better Auth's own freshness rule on list-sessions (freshAge, one day by default).
+  await page.route("**/api/auth/list-sessions", (route) =>
+    refusal(route, 403, "SESSION_NOT_FRESH", "Session is not fresh"),
+  );
+  await page.goto("/settings/devices");
+  const status = page.getByRole("status").filter({ hasText: "Sign in again" });
+  await expect(status).toContainText("needs a recent sign-in");
+  await expect(status).toHaveAttribute("data-tone", "error");
+  await expect(page.getByRole("link", { name: "Sign in again" })).toHaveAttribute(
+    "href",
+    "/sign-in",
+  );
+  await expect(page.getByRole("button", { name: "Reload" })).toHaveCount(0);
+  await expect(page.getByText("could not load your devices")).toHaveCount(0);
+  await expect(page).toHaveURL(/\/settings\/devices$/);
+});
+
+test("a failed read of this browser's session is a failed load, not a list of strangers", async ({
+  page,
+}) => {
+  await signedIn(page);
+  await page.route("**/api/auth/get-session", (route) =>
+    refusal(route, 500, "INTERNAL_SERVER_ERROR", "Internal error"),
+  );
+  await page.goto("/settings/devices");
+  await expect(page.getByRole("status")).toContainText("We could not load your devices");
+  await expect(page.getByRole("button", { name: "Reload" })).toBeVisible();
+  await expect(page.getByText("Chrome on Windows")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Sign out this device" })).toHaveCount(0);
 });
 
 test("devices lists every session as a device row, this browser first", async ({ page }) => {
@@ -320,6 +393,8 @@ test("two-step sign-in moves from the password through the code to the backup co
     password: "correct horse battery",
     issuer: "Tidefern",
   });
+  // The step with the new structure (the drawn code, the open disclosure, two copy blocks, the field).
+  await expectNoAxeViolationsHere(page, "the scan step with the disclosure open");
   await code.fill("000 000");
   await page.getByRole("button", { name: "Turn on two-step sign-in" }).click();
   // Filtered, because each copy block on the step carries its own status region.
@@ -336,6 +411,7 @@ test("two-step sign-in moves from the password through the code to the backup co
   await expect(codes).toContainText("aaaaa-11111");
   await expect(codes).toContainText("ccccc-33333");
   await expect(page.locator(":focus")).toContainText("shown once");
+  await expectNoAxeViolationsHere(page, "the backup codes step with its focused region");
   // Spaces stripped, and never a `trustDevice` (architecture 6.1).
   expect(verifyBodies.map((body) => JSON.parse(body))).toEqual([
     { code: "000000" },

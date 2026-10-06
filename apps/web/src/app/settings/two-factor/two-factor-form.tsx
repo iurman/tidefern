@@ -35,7 +35,7 @@ function leaveForSignIn() {
 }
 
 /** Strips the spaces a person types or pastes between the digits. */
-function normaliseCode(code: string): string {
+function normalizeCode(code: string): string {
   return code.replace(/\s+/g, "");
 }
 
@@ -165,7 +165,7 @@ export function TwoFactorForm() {
   async function submitCode(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (busy || step.kind !== "scan") return;
-    const code = normaliseCode(String(new FormData(event.currentTarget).get("code") ?? ""));
+    const code = normalizeCode(String(new FormData(event.currentTarget).get("code") ?? ""));
     setFailure(null);
     setBusy(true);
     const { error } = await authClient.twoFactor.verifyTotp({ code });

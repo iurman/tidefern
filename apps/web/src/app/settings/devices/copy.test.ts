@@ -47,6 +47,12 @@ describe("devicesCopy", () => {
     expect(devicesCopy.revokeOne.pending).toBe("Signing out");
     expect(devicesCopy.revokeOthers.pending).toBe("Signing out");
   });
+
+  it("names the next step, not a reload, when the list itself needs a fresh sign-in", () => {
+    expect(devicesCopy.freshAuth.list).toContain("Sign in again");
+    expect(devicesCopy.freshAuth.list).not.toContain("Reload");
+    expect(devicesCopy.freshAuth.list).not.toContain("ten minutes");
+  });
 });
 
 describe("freshAuthRequired and sessionGone", () => {

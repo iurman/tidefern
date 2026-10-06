@@ -11,7 +11,11 @@ import { describeRevokeFailure, devicesCopy as copy } from "./copy";
 import styles from "./devices.module.css";
 import { toDevices, type DeviceFacts, type SessionFacts } from "./sessions";
 
-type List = { kind: "loading" } | { kind: "failed" } | { kind: "ready"; devices: DeviceFacts[] };
+type List =
+  | { kind: "loading" }
+  | { kind: "failed" }
+  | { kind: "fresh-auth" }
+  | { kind: "ready"; devices: DeviceFacts[] };
 
 /** Which confirmation is open: one device by its token, or every other device. */
 type Confirm = { kind: "none" } | { kind: "one"; device: DeviceFacts } | { kind: "others" };
@@ -36,17 +40,32 @@ function viewerTimeZone(): string {
   }
 }
 
-/** What the two reads on mount came back with; `gone` means the cookie names no session. */
-type Loaded = { kind: "gone" } | { kind: "failed" } | { kind: "ready"; devices: DeviceFacts[] };
+/**
+ * What the two reads on mount came back with: `gone` means the cookie names
+ * no session, `fresh-auth` that Better Auth's own freshness rule on
+ * `list-sessions` wants a newer sign-in before it lists anything.
+ */
+type Loaded =
+  | { kind: "gone" }
+  | { kind: "failed" }
+  | { kind: "fresh-auth" }
+  | { kind: "ready"; devices: DeviceFacts[] };
 
 async function readDevices(): Promise<Loaded> {
   const [current, sessions] = await Promise.all([
     authClient.getSession(),
     authClient.listSessions(),
   ]);
-  if (sessionGone(sessions.error as SettingsCallError | null)) return { kind: "gone" };
-  if (sessions.error || sessions.data === null) return { kind: "failed" };
-  const currentId = current.data?.session.id ?? null;
+  const sessionsError = sessions.error as SettingsCallError | null;
+  const currentError = current.error as SettingsCallError | null;
+  if (sessionGone(sessionsError) || sessionGone(currentError)) return { kind: "gone" };
+  if (freshAuthRequired(sessionsError)) return { kind: "fresh-auth" };
+  if (sessionsError !== null || sessions.data === null) return { kind: "failed" };
+  // Both reads feed the list: without the current session nothing could say which
+  // row is this browser, so a failed read is a failed load, not a list of strangers.
+  if (currentError !== null) return { kind: "failed" };
+  if (current.data === null) return { kind: "gone" };
+  const currentId = current.data.session.id;
   const rows: SessionFacts[] = sessions.data.map((session) => ({
     id: session.id,
     token: session.token,
@@ -151,13 +170,17 @@ export function DevicesList() {
 
   const devices = list.kind === "ready" ? list.devices : [];
   const othersCount = devices.filter((device) => !device.current).length;
+  // The next step is a fresh sign-in whether the list itself or a revocation was refused.
+  let freshAuth: string | null = null;
+  if (list.kind === "fresh-auth") freshAuth = copy.freshAuth.list;
+  else if (outcome.kind === "fresh-auth") freshAuth = copy.freshAuth.sentence;
 
   return (
     <>
-      {outcome.kind === "fresh-auth" ? (
+      {freshAuth !== null ? (
         <div className={styles.feedback}>
           <InlineFeedback tone="error" cue>
-            {copy.freshAuth.sentence}
+            {freshAuth}
           </InlineFeedback>
           <div className={styles.feedbackAction}>
             <Button href={SIGN_IN_PATH} variant="secondary">

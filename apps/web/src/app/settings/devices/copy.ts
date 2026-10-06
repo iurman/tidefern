@@ -13,7 +13,7 @@ export const devicesCopy = {
   title: "Devices",
   description: "The browsers and phones signed in to your account.",
   heading: "Devices",
-  lede: "Every browser and phone signed in to your account. Sign out any you do not recognise.",
+  lede: "Every browser and phone signed in to your account. Sign out any you do not recognize.",
   loading: "Loading your devices",
   loadFailed: "We could not load your devices. Reload the page to try again.",
   reload: "Reload",
@@ -41,6 +41,8 @@ export const devicesCopy = {
   freshAuth: {
     sentence:
       "For safety, signing out a device needs a sign-in from the last ten minutes. Sign in again, then come back here.",
+    // Better Auth's own rule on listing sessions: the list needs a recent sign-in, not a reload.
+    list: "For safety, this list needs a recent sign-in. Sign in again, then come back here.",
     action: "Sign in again",
   },
   cancel: "Cancel",
