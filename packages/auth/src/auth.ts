@@ -1,8 +1,10 @@
 import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { passkey } from "@better-auth/passkey";
 import { betterAuth } from "better-auth";
+import type { BetterAuthOptions } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
 
+import { EnvKeyProvider } from "@tidefern/crypto";
 // This package and withActor()/withSystem() inside packages/db are the only
 // importers of the raw client: Better Auth owns its tables and reads them as
 // the connection's own role. Importing it builds a pg Pool; nothing connects
@@ -12,6 +14,7 @@ import * as productionSchema from "@tidefern/db/schema";
 
 import { hostFactsFromEnvironment, resolveHosts } from "./hosts";
 import type { HostFacts } from "./hosts";
+import { userKeyDatabaseHooks } from "./keys";
 import { chooseMailer } from "./mail/choose";
 import { passwordResetEmail, verificationEmail } from "./mail/templates";
 import { ConsoleMailer } from "./mailer";
@@ -30,6 +33,12 @@ export interface CreateAuthOptions {
   hosts: HostFacts;
   /** Signs sessions and tokens. Better Auth refuses to run in production without one. */
   secret?: string | undefined;
+  /**
+   * Lifecycle hooks on the identity tables. The module-scope instance passes
+   * `userKeyDatabaseHooks()` so every new user gets a wrapped DEK (task D2);
+   * tests pass the same factory with a fixed provider, or nothing.
+   */
+  databaseHooks?: BetterAuthOptions["databaseHooks"] | undefined;
 }
 
 /**
@@ -44,6 +53,7 @@ export function createAuth(options: CreateAuthOptions) {
   return betterAuth({
     appName: "Tidefern",
     ...(options.secret !== undefined ? { secret: options.secret } : {}),
+    ...(options.databaseHooks !== undefined ? { databaseHooks: options.databaseHooks } : {}),
 
     // Multi-host form: each preview answers on its own host, production stays
     // fixed, and anything else falls back to production. The trusted origins
@@ -117,10 +127,15 @@ export type Session = Auth["$Infer"]["Session"];
  * package reads the environment: BETTER_AUTH_SECRET, BETTER_AUTH_URL, the
  * Vercel variables, and the mail facts `chooseMailer()` picks the transport
  * from (Resend on production, capture under E2E_MAIL_CAPTURE, the console
- * otherwise).
+ * otherwise). The key provider reads TIDEFERN_KEK_V1 on the first sign-up,
+ * not here, so a build without it still starts.
  */
 export const auth: Auth = createAuth({
   hosts: hostFactsFromEnvironment(process.env),
   mailer: chooseMailer(process.env),
   secret: process.env.BETTER_AUTH_SECRET,
+  databaseHooks: userKeyDatabaseHooks({ provider: new EnvKeyProvider() }),
 });
+
+export { createUserKeyHook, userKeyDatabaseHooks } from "./keys";
+export type { DatabaseHooks, UserCreatedHook, UserKeyHookOptions } from "./keys";
