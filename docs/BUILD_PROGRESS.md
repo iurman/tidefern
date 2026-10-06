@@ -1148,3 +1148,34 @@ audit names, and the chapter order fix above.
 
 Owner: owner action 0. Then the lead merges the queue in order and
 continues with E9, G8, I2, B13, B14 and the H routes.
+
+### The merge queue landed; the ninth wave (2026-10-06, lead session 061fed2d)
+
+The owner made the repository public again, which cleared owner action
+0; every CodeQL check passed on a re-run. Merged by squash, in order: the
+progress entry (`9b71557`), J5 (`44dfc5b`; the hand-run uptime check
+37486428840 is green), J8 (`2575f0f`), then one merge agent per pull
+request rebased, regated and merged E6 (`03cdae4`), E7 (`a54deb4`, smoke
+37491754027), E4 (`03d195e`), E5 (`c2d7fdb`), E8 (`f71c654`), E3
+(`75cecb4`), E2 (`d07ddb9`), G7 (`96acd1f`) and G6 (`112afc9`). Each
+resolved the shared-file conflicts per the queue rulings (every registry
+line kept, main's shared edits kept and each branch's own additions such
+as audit action names and the 503 status added), regenerated the
+contract, and passed `pnpm check` (836 unit tests by E4's run) and the
+browser suite before its merge. One design difference is now on main and
+is noted for a later cleanup: the notes area reads the database and keys
+from the request environment while the later areas take them from the
+registry options.
+
+The plan closes J5, J8, E2 to E8, G6 and G7, adds B13 and B14 for the
+schema follow-ups the route reviews raised, and claims the ninth wave:
+E9 (the generated client and the breaking-change gate), G8 (exports and
+the coverage review, with the chapter sequence fix), I2 (the closure
+state machine, including enforcing an open closure in the session
+middleware), H10 (reminder emails through the outbox), B13 and B14.
+Architecture 8.3 gains the invitation audit names.
+
+### Next action
+
+Review and merge the ninth wave, then H1 to H8 over the generated
+client, then J1 to J4 and J6 to J7 with the owner.
