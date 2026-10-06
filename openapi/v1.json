@@ -178,7 +178,7 @@
           "createdAt"
         ]
       },
-      "Note": {
+      "Invitation": {
         "type": "object",
         "properties": {
           "id": {
@@ -186,38 +186,269 @@
             "format": "uuid",
             "description": "Opaque resource identifier"
           },
-          "subjectId": {
+          "householdId": {
             "type": "string",
             "format": "uuid",
-            "description": "Whose note this is"
+            "description": "Opaque resource identifier"
           },
-          "authorId": {
+          "inviteeEmail": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "partner",
+              "guardian"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "When it was sent"
+          },
+          "expiresAt": {
+            "type": "string",
+            "format": "date-time",
+            "description": "72 hours after it was sent"
+          }
+        },
+        "required": [
+          "id",
+          "householdId",
+          "inviteeEmail",
+          "role",
+          "createdAt",
+          "expiresAt"
+        ]
+      },
+      "InvitationInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Optional client-minted UUIDv7 for offline-first clients"
+          },
+          "inviteeEmail": {
+            "type": "string",
+            "maxLength": 254,
+            "format": "email",
+            "description": "The address the invitation is bound to; acceptance needs a sign-in with it"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "partner",
+              "guardian"
+            ]
+          }
+        },
+        "required": [
+          "inviteeEmail",
+          "role"
+        ]
+      },
+      "Invitations": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Invitation"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "InvitationAcceptance": {
+        "type": "object",
+        "properties": {
+          "invitationId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque resource identifier"
+          },
+          "joined": {
+            "type": "boolean",
+            "description": "False when the invitee chose to stay in her current household"
+          },
+          "householdId": {
             "type": [
               "string",
               "null"
             ],
             "format": "uuid",
-            "description": "Who wrote it; null once the author's account is gone"
+            "description": "The household joined, or null when not joined"
+          }
+        },
+        "required": [
+          "invitationId",
+          "joined",
+          "householdId"
+        ]
+      },
+      "InvitationAcceptInput": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{32,128}$"
+          },
+          "household": {
+            "type": "string",
+            "enum": [
+              "move",
+              "stay"
+            ],
+            "description": "Required on the second call when the invitee already belongs to another household: move leaves it, stay keeps it and declines to join"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "SharingPeople": {
+        "type": "object",
+        "properties": {
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharingPerson"
+            }
+          },
+          "nextCursor": {
+            "type": [
+              "string",
+              "null"
+            ]
+          }
+        },
+        "required": [
+          "items",
+          "nextCursor"
+        ]
+      },
+      "SharingPerson": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque resource identifier"
+          },
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "role": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "owner",
+              "partner",
+              "guardian",
+              null
+            ],
+            "description": "Her role in the household shared with the actor"
+          },
+          "householdId": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "uuid",
+            "description": "The household shared with the actor, if any"
+          },
+          "guardianOf": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Opaque resource identifier"
+            },
+            "description": "Children of the actor's that this person also guards"
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SharingGrant"
+            },
+            "description": "Active grants from the actor to this person"
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "The per-person notification switch; true when any grant has it"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 0,
+            "description": "Changes with every grant change for this person; the value If-Match compares"
+          }
+        },
+        "required": [
+          "id",
+          "displayName",
+          "role",
+          "householdId",
+          "guardianOf",
+          "grants",
+          "notify",
+          "version"
+        ],
+        "description": "One person and what the actor shares with her"
+      },
+      "SharingGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque resource identifier"
           },
           "category": {
             "type": "string",
             "enum": [
-              "journal.private",
+              "cycle.status",
+              "cycle.history",
               "cycle.symptoms",
-              "pregnancy.overview"
-            ],
-            "description": "Where the note is filed, which decides who may ever read it"
+              "pregnancy.overview",
+              "pregnancy.photos",
+              "child"
+            ]
           },
-          "date": {
+          "level": {
             "type": "string",
-            "pattern": "^(\\d{4})-(\\d{2})-(\\d{2})$",
-            "description": "Calendar date in the subject's time zone"
+            "enum": [
+              "summary",
+              "read",
+              "contribute"
+            ]
           },
-          "body": {
+          "childId": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 4000,
-            "description": "Decrypted for the owner and a read or contribute grantee; absent for a summary grantee and on a tombstone"
+            "format": "uuid",
+            "description": "The one child a child grant reaches"
+          },
+          "notify": {
+            "type": "boolean",
+            "description": "Whether this person is told when a period starts"
+          },
+          "version": {
+            "type": "integer",
+            "minimum": 1
           },
           "createdAt": {
             "type": "string",
@@ -226,130 +457,103 @@
           "updatedAt": {
             "type": "string",
             "format": "date-time"
-          },
-          "version": {
-            "type": "integer",
-            "minimum": 1,
-            "description": "Sent back as If-Match on an update"
-          },
-          "deletedAt": {
-            "type": "string",
-            "format": "date-time",
-            "description": "Set on a tombstone in a sync list; the row holds nothing else"
           }
         },
         "required": [
           "id",
-          "subjectId",
-          "authorId",
           "category",
-          "date",
+          "level",
+          "notify",
+          "version",
           "createdAt",
-          "updatedAt",
-          "version"
+          "updatedAt"
         ],
-        "description": "A note as the signed-in actor may see it."
+        "description": "A category the actor shares with one person"
       },
-      "NoteCreateInput": {
+      "GrantSetInput": {
         "type": "object",
         "properties": {
-          "id": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Optional client-minted UUIDv7 for offline-first clients"
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/GrantSetting"
+            },
+            "minItems": 1,
+            "maxItems": 20
           },
-          "subject": {
-            "type": "string",
-            "format": "uuid",
-            "description": "Whose note this is: the signed-in person when absent. Another person's id needs a contribute grant from them in the category given."
-          },
-          "date": {
-            "type": "string",
-            "pattern": "^(\\d{4})-(\\d{2})-(\\d{2})$",
-            "description": "Calendar date in the subject's time zone"
-          },
-          "category": {
-            "type": "string",
-            "enum": [
-              "journal.private",
-              "cycle.symptoms",
-              "pregnancy.overview"
-            ],
-            "default": "journal.private",
-            "description": "Your own notes always start in journal.private; the share action re-files one. A note about another person is filed under the category their grant covers."
-          },
-          "body": {
+          "policyVersion": {
             "type": "string",
             "minLength": 1,
-            "maxLength": 4000,
-            "description": "Free text; encrypted at rest with the subject's data key, never logged"
+            "maxLength": 32,
+            "description": "The version of the sharing policy the owner saw when she chose these"
+          },
+          "descriptionVersion": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 32,
+            "description": "The version of the plain-words category descriptions she saw"
           }
         },
         "required": [
-          "date",
-          "body"
-        ],
-        "description": "A new note. The body is the only free text."
+          "grants",
+          "policyVersion",
+          "descriptionVersion"
+        ]
       },
-      "NoteList": {
+      "GrantSetting": {
         "type": "object",
         "properties": {
-          "items": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/Note"
-            }
+          "category": {
+            "type": "string",
+            "enum": [
+              "cycle.status",
+              "cycle.history",
+              "cycle.symptoms",
+              "pregnancy.overview",
+              "pregnancy.photos",
+              "child"
+            ]
           },
-          "nextCursor": {
+          "level": {
             "type": [
               "string",
               "null"
             ],
-            "description": "Opaque; pass back as cursor for the next page"
-          }
-        },
-        "required": [
-          "items",
-          "nextCursor"
-        ],
-        "description": "One page of notes in date order."
-      },
-      "NoteUpdateInput": {
-        "type": "object",
-        "properties": {
-          "date": {
-            "type": "string",
-            "pattern": "^(\\d{4})-(\\d{2})-(\\d{2})$",
-            "description": "Calendar date in the subject's time zone"
+            "enum": [
+              "summary",
+              "read",
+              "contribute",
+              null
+            ],
+            "description": "The level to hold, or null to revoke"
           },
-          "body": {
+          "childId": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 4000,
-            "description": "Free text; encrypted at rest with the subject's data key, never logged"
-          }
-        },
-        "description": "Changes to a note's date or body. The category changes only through the share action."
-      },
-      "NoteShareInput": {
-        "type": "object",
-        "properties": {
-          "category": {
-            "$ref": "#/components/schemas/NoteShareCategory"
+            "format": "uuid",
+            "description": "Required exactly when the category is child"
           }
         },
         "required": [
-          "category"
-        ],
-        "description": "Re-files the note under a shareable category."
+          "category",
+          "level"
+        ]
       },
-      "NoteShareCategory": {
-        "type": "string",
-        "enum": [
-          "cycle.symptoms",
-          "pregnancy.overview"
-        ],
-        "description": "A shareable category the note is re-filed into. The private journal is never granted."
+      "NotifyInput": {
+        "type": "object",
+        "properties": {
+          "personId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque resource identifier"
+          },
+          "notify": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "personId",
+          "notify"
+        ]
       }
     },
     "parameters": {}
@@ -493,105 +697,36 @@
         }
       }
     },
-    "/api/v1/notes": {
+    "/api/v1/sharing/invitations": {
       "post": {
         "tags": [
-          "notes"
+          "sharing"
         ],
-        "summary": "Create a note",
-        "description": "A new note about the signed-in person, filed in the private journal, or about a person who granted contribute access, filed under that grant's category. The body is encrypted with the subject's data key. Requires Idempotency-Key.",
+        "summary": "Invite someone into the actor's household",
+        "description": "Mints a single-use token bound to the invitee's email, stores only its hash with a 72 hour expiry, and sends the link by mail. The actor's own household is created on the first invitation. Needs a fresh authentication and an Idempotency-Key.",
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NoteCreateInput"
+                "$ref": "#/components/schemas/InvitationInput"
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "The note",
+            "description": "The pending invitation",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Note"
+                  "$ref": "#/components/schemas/Invitation"
                 }
               }
             }
           },
           "401": {
-            "description": "No session",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such note, or none the actor may reach",
+            "description": "No session, or one older than the fresh authentication window",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -661,7 +796,7 @@
             }
           },
           "409": {
-            "description": "The version is stale, or the id is taken",
+            "description": "An open invitation to that address already exists, or the id is taken",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -804,59 +939,14 @@
       },
       "get": {
         "tags": [
-          "notes"
+          "sharing"
         ],
-        "summary": "List notes",
-        "description": "The notes of one subject in date order, every category the actor may read; a grantee never sees the private journal and a summary grantee sees no body. With updatedSince the page is a sync feed and includes tombstones.",
+        "summary": "The actor's pending invitations",
+        "description": "Invitations the actor sent that are neither accepted, withdrawn nor expired, oldest first.",
         "parameters": [
           {
             "schema": {
               "type": "string",
-              "format": "uuid",
-              "description": "Whose notes: the signed-in person when absent, or a person who granted access"
-            },
-            "required": false,
-            "description": "Whose notes: the signed-in person when absent, or a person who granted access",
-            "name": "subject",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^(\\d{4})-(\\d{2})-(\\d{2})$",
-              "description": "First date, inclusive"
-            },
-            "required": false,
-            "description": "First date, inclusive",
-            "name": "from",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "pattern": "^(\\d{4})-(\\d{2})-(\\d{2})$",
-              "description": "Last date, inclusive"
-            },
-            "required": false,
-            "description": "Last date, inclusive",
-            "name": "to",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "format": "date-time",
-              "description": "Only notes changed after this instant, tombstones included, for a sync client"
-            },
-            "required": false,
-            "description": "Only notes changed after this instant, tombstones included, for a sync client",
-            "name": "updatedSince",
-            "in": "query"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "maxLength": 200,
               "description": "The nextCursor of the previous page"
             },
             "required": false,
@@ -882,83 +972,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/NoteList"
+                  "$ref": "#/components/schemas/Invitations"
                 }
               }
             }
           },
           "401": {
             "description": "No session",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such note, or none the actor may reach",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1100,586 +1120,12 @@
         }
       }
     },
-    "/api/v1/notes/{id}": {
-      "get": {
-        "tags": [
-          "notes"
-        ],
-        "summary": "Read a note",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Opaque resource identifier"
-            },
-            "required": true,
-            "description": "Opaque resource identifier",
-            "name": "id",
-            "in": "path"
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "The note",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Note"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such note, or none the actor may reach",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      },
-      "put": {
-        "tags": [
-          "notes"
-        ],
-        "summary": "Change a note's date or body",
-        "description": "Takes If-Match with the version last read and answers 409 when it is stale.",
-        "parameters": [
-          {
-            "schema": {
-              "type": "string",
-              "format": "uuid",
-              "description": "Opaque resource identifier"
-            },
-            "required": true,
-            "description": "Opaque resource identifier",
-            "name": "id",
-            "in": "path"
-          },
-          {
-            "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "The version last read"
-            },
-            "required": true,
-            "description": "The version last read",
-            "name": "If-Match",
-            "in": "header"
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/NoteUpdateInput"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "The note",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Note"
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "No session",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "404": {
-            "description": "No such note, or none the actor may reach",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "409": {
-            "description": "The version is stale, or the id is taken",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation failed",
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "type": {
-                      "type": "string",
-                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
-                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
-                    },
-                    "title": {
-                      "type": "string"
-                    },
-                    "status": {
-                      "type": "integer",
-                      "minimum": 400,
-                      "maximum": 599
-                    },
-                    "detail": {
-                      "type": "string"
-                    },
-                    "instance": {
-                      "type": "string"
-                    },
-                    "code": {
-                      "type": "string",
-                      "enum": [
-                        "validation_failed",
-                        "unauthenticated",
-                        "forbidden",
-                        "not_found",
-                        "conflict",
-                        "rate_limited",
-                        "upgrade_required",
-                        "internal"
-                      ],
-                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "path": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "path",
-                          "message"
-                        ]
-                      },
-                      "description": "Field level validation errors when applicable"
-                    }
-                  },
-                  "required": [
-                    "type",
-                    "title",
-                    "status",
-                    "code"
-                  ]
-                }
-              }
-            }
-          }
-        }
-      },
+    "/api/v1/sharing/invitations/{id}": {
       "delete": {
         "tags": [
-          "notes"
+          "sharing"
         ],
-        "summary": "Delete a note",
-        "description": "A hard delete by the owner; nothing of the note remains.",
+        "summary": "Withdraw a pending invitation",
         "parameters": [
           {
             "schema": {
@@ -1695,7 +1141,7 @@
         ],
         "responses": {
           "204": {
-            "description": "Deleted"
+            "description": "Withdrawn; the link no longer works"
           },
           "401": {
             "description": "No session",
@@ -1768,7 +1214,248 @@
             }
           },
           "404": {
-            "description": "No such note, or none the actor may reach",
+            "description": "No open invitation of the actor's by that id",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sharing/invitations/accept": {
+      "post": {
+        "tags": [
+          "sharing"
+        ],
+        "summary": "Accept an invitation",
+        "description": "Joins the household the token names. The actor must be signed in with the verified email the invitation was sent to; anything else is 404. An invitee who already belongs to another household gets 409 and answers with household set to move or stay.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InvitationAcceptInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The outcome",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/InvitationAcceptance"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No open invitation for this token and this signed-in email",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The invitee belongs to another household and has to choose",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1910,13 +1597,197 @@
         }
       }
     },
-    "/api/v1/notes/{id}/share": {
-      "post": {
+    "/api/v1/sharing": {
+      "get": {
         "tags": [
-          "notes"
+          "sharing"
         ],
-        "summary": "Re-file a note under a shareable category",
-        "description": "The only way a note leaves the private journal. The owner alone may share; the change is audited. Requires Idempotency-Key; If-Match is honoured when sent.",
+        "summary": "People and what the actor shares with each",
+        "description": "Everyone in a household the actor belongs to, every co-guardian of a child she guards and everyone holding a grant from her, each with the actor's active grants to her by category and level.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "The nextCursor of the previous page"
+            },
+            "required": false,
+            "description": "The nextCursor of the previous page",
+            "name": "cursor",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 200,
+              "default": 50
+            },
+            "required": false,
+            "name": "limit",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "One page",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharingPeople"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sharing/grants/{personId}": {
+      "put": {
+        "tags": [
+          "sharing"
+        ],
+        "summary": "Set what one person may see",
+        "description": "Sets the level of each listed category for the person, creating, changing or revoking grants; categories not listed stay as they are. The private journal cannot be named. A child grant names the child and needs the actor to be its guardian. Needs a fresh authentication.",
         "parameters": [
           {
             "schema": {
@@ -1926,37 +1797,861 @@
             },
             "required": true,
             "description": "Opaque resource identifier",
-            "name": "id",
+            "name": "personId",
             "in": "path"
           },
           {
             "schema": {
-              "type": "integer",
-              "minimum": 1,
-              "description": "The version last read"
+              "type": "string",
+              "description": "The person's version from the last response; 409 when stale"
             },
             "required": false,
-            "description": "The version last read",
-            "name": "If-Match",
+            "description": "The person's version from the last response; 409 when stale",
+            "name": "if-match",
             "in": "header"
           }
         ],
         "requestBody": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/NoteShareInput"
+                "$ref": "#/components/schemas/GrantSetInput"
               }
             }
           }
         },
         "responses": {
           "200": {
-            "description": "The note",
+            "description": "The person with her grants as they now stand",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/Note"
+                  "$ref": "#/components/schemas/SharingPerson"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session, or one older than the fresh authentication window",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person in the actor's sharing, or a child she does not guard",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "If-Match named a version that is no longer current",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sharing/grants/{personId}/{category}": {
+      "delete": {
+        "tags": [
+          "sharing"
+        ],
+        "summary": "Revoke one category from one person",
+        "description": "Takes effect on the person's next request. A child grant names the child with childId. Revoking never needs a step-up: reducing access is always one step.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Opaque resource identifier"
+            },
+            "required": true,
+            "description": "Opaque resource identifier",
+            "name": "personId",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "cycle.status",
+                "cycle.history",
+                "cycle.symptoms",
+                "pregnancy.overview",
+                "pregnancy.photos",
+                "child"
+              ]
+            },
+            "required": true,
+            "name": "category",
+            "in": "path"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Opaque resource identifier"
+            },
+            "required": false,
+            "description": "Opaque resource identifier",
+            "name": "childId",
+            "in": "query"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Revoked"
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No active grant of that category to that person",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation failed",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sharing/people/{personId}": {
+      "delete": {
+        "tags": [
+          "sharing"
+        ],
+        "summary": "Remove a partner",
+        "description": "Revokes every grant the actor gave the person and ends the household membership they share: the person's when the actor owns the household, the actor's own otherwise. Refused while the person is the only other guardian of a child the actor guards; the co-guardianship is handled first.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Opaque resource identifier"
+            },
+            "required": true,
+            "description": "Opaque resource identifier",
+            "name": "personId",
+            "in": "path"
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Removed"
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No such person in the actor's sharing",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The person is the only other guardian of a child",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/sharing/notify": {
+      "put": {
+        "tags": [
+          "sharing"
+        ],
+        "summary": "Tell this person when my period starts",
+        "description": "The per-person switch, stored on each of the actor's active grants to the person. 404 when nothing is shared with her yet.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "description": "The person's version from the last response; 409 when stale"
+            },
+            "required": false,
+            "description": "The person's version from the last response; 409 when stale",
+            "name": "if-match",
+            "in": "header"
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/NotifyInput"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "The person with her grants as they now stand",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SharingPerson"
                 }
               }
             }
@@ -2032,7 +2727,7 @@
             }
           },
           "404": {
-            "description": "No such note, or none the actor may reach",
+            "description": "No such person, or no active grant to switch",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -2102,7 +2797,7 @@
             }
           },
           "409": {
-            "description": "The version is stale, or the id is taken",
+            "description": "If-Match named a version that is no longer current",
             "content": {
               "application/problem+json": {
                 "schema": {

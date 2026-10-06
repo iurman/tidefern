@@ -134,3 +134,4 @@ export const NoteInput = z.object({
 export type NoteInput = z.infer<typeof NoteInput>;
 
 export * from "./notes";
+export * from "./sharing";
