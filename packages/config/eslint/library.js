@@ -16,7 +16,10 @@ export const libraryRules = {
         { name: "next/headers", message: "Workspace packages must stay framework neutral." },
         { name: "next/navigation", message: "Workspace packages must stay framework neutral." },
       ],
-      patterns: ["next/*", "react", "react-dom", "react/*"],
+      // "better-auth/react" is the browser client entry packages/auth exports for the web app
+      // (task C3); the gitignore-style "react" pattern would otherwise match that segment too.
+      // The package itself still imports nothing from React.
+      patterns: ["next/*", "react", "react-dom", "react/*", "!better-auth/react"],
     },
   ],
   "@typescript-eslint/consistent-type-imports": "error",
