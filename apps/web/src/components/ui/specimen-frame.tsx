@@ -39,7 +39,7 @@ function SpecimenCard({ specimen }: { specimen: Specimen }) {
       {themes.map((theme) => (
         <div key={theme} className={styles.theme} data-theme={theme}>
           <p className={styles.themeLabel}>{theme === "light" ? "Light" : "Dark"}</p>
-          <ol className={styles.states}>
+          <ol className={specimen.wide ? `${styles.states} ${styles.statesWide}` : styles.states}>
             {componentStates.map((state) => (
               <li key={state} className={styles.state}>
                 <p className={styles.stateLabel}>{state}</p>

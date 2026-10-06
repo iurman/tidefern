@@ -30,6 +30,8 @@ export interface Specimen {
   keyboard: string;
   /** States the component has no meaning for; the frame prints "none" instead of rendering. */
   states?: Partial<Record<ComponentState, "none">>;
+  /** A composition (a sheet, a shell) that needs a wide cell; the frame gives its states fewer, wider columns. */
+  wide?: boolean;
   /** The real component in the given state. */
   render: (state: ComponentState) => ReactNode;
 }

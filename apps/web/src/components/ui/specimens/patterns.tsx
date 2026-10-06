@@ -25,6 +25,7 @@ const daySheet: Specimen = {
     "Focus lands on the close button; Tab moves through previous and next day, the period switch, the flow radios (while a period is logged), the symptom chips, the mood radios, the note, the sharing action, Save and Cancel; Space flips the switch and the chips; Escape closes the sheet and focus returns to the opener.",
   // The sheet is a composition: hover, focus and active belong to the controls inside it, and the sheet has no disabled state of its own.
   states: { hover: "none", "focus-visible": "none", active: "none", disabled: "none" },
+  wide: true,
   render: (state: ComponentState) => (
     <DaySheet
       inline
