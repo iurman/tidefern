@@ -1031,3 +1031,33 @@ Merge B11 on its green run. Review and merge E2 to E8 in order, then E9
 (the generated client and the breaking-change gate), I2 after E8 and D2,
 then H1 to H8 over the components and the routes, J1 to J5, and the owner
 tasks A3, A4, B10 when the owner is available.
+
+### Seventh and eighth waves launched (2026-10-06, lead session 061fed2d)
+
+The host wiring merged as `1d1b5e1` (its preview smoke ran the two new
+mutation probes). A local probe found that the cross-site check took the
+request's own origin from the URL, which a Next.js host rewrites to its
+listen name, so a browser on 127.0.0.1 would have had its own Origin
+refused; the check now reads the forwarded host or the Host header, with
+a unit test, and the probe on the deployment's own Origin reaches the
+router. B11 merged as `37525e3` on its own green CI run.
+
+Launched: the seventh wave, E2 to E8 as one workflow over the route
+registry (branches `claude/E<n>-<area>`, ports 3161 to 3167, briefs in
+the scratchpad `wave7/briefs.md`; each fix pass rebases and regenerates
+the OpenAPI document, and the lead merges in order); and the eighth wave,
+G6 (color, motion and foundations chapters), G7 (sound chapter, settings
+sound route with quiet hours, the settle cue, the sound tests), J5 (the
+uptime workflow and the rollback comparison in the deployment smoke) and
+J8 (`docs/INCIDENT.md` and `docs/CLAIMS.md` for the owner's attorney),
+briefs in `wave8/briefs.md`, G6 and G7 under the lead's visual review.
+J5 was started although its plan row needs A2, because the production
+project exists and the work is workflow files only; A2's remaining owner
+items stay in the owner list.
+
+### Next action
+
+Review and merge E2 to E8 in order and the eighth wave as it lands, then
+G8 (exports and the coverage review), E9 (the generated client and the
+breaking-change gate), I2, the H routes over the components and the
+routes, J1 to J4, J6 and J7 with the owner.
