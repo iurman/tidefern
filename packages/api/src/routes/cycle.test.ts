@@ -5,11 +5,23 @@ import { schema } from "@tidefern/db";
 import {
   CycleEntry,
   CycleEntryList,
+  CycleEntryWrite,
   CyclePrediction,
   CycleStatus,
   CycleVocabulary,
+  FLOW_CODES,
+  FLOW_LABELS,
+  FlowLevel,
+  MOOD_CODES,
+  MOOD_LABELS,
+  MoodCode,
+  PERIOD_FLOWS,
   Problem,
+  SYMPTOM_CODES,
+  SYMPTOM_LABELS,
+  SymptomCode,
   cycleVocabulary,
+  isPeriodFlow,
 } from "@tidefern/schemas";
 
 import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "../middleware/idempotency";
@@ -455,6 +467,51 @@ describe("what a grantee receives", () => {
     expect(audited.map((row) => row.category)).toEqual(["cycle.symptoms"]);
   });
 
+  it("never lets a symptoms reader recover a date through her cursor or a date filter", async () => {
+    const all = await list(T.dana, `subject=${ANNA}`);
+    const ids = all.items.map((item) => item.id);
+    // Her list is in id order, so its order says nothing about the days.
+    expect(ids).toEqual([...ids].sort());
+    const seen: string[] = [];
+    let cursor: string | null = null;
+    do {
+      const query: string = cursor === null ? "limit=1" : `limit=1&cursor=${cursor}`;
+      const page = await list(T.dana, `subject=${ANNA}&${query}`);
+      seen.push(...page.items.map((item) => item.id));
+      cursor = page.nextCursor;
+      if (cursor !== null) {
+        const decoded = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")) as object;
+        expect(Object.keys(decoded)).toEqual(["i"]);
+        expect(JSON.stringify(decoded)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
+      }
+    } while (cursor !== null);
+    expect(seen).toEqual(ids);
+
+    const oneDay = await expectProblem(
+      await get(T.dana, `entries?subject=${ANNA}&from=2026-05-29&to=2026-05-29`),
+      422,
+      "validation_failed",
+    );
+    expect(oneDay.errors).toEqual([
+      { path: "from", message: "Date filters need the cycle history." },
+    ]);
+    await expectProblem(
+      await get(T.dana, `entries?subject=${ANNA}&to=2026-05-29`),
+      422,
+      "validation_failed",
+    );
+    // A dated cursor crafted by hand is refused, so it cannot probe days either.
+    const crafted = Buffer.from(
+      JSON.stringify({ d: "2026-05-28", i: "00000000-0000-7000-8000-000000000000" }),
+      "utf8",
+    ).toString("base64url");
+    await expectProblem(
+      await get(T.dana, `entries?subject=${ANNA}&cursor=${crafted}`),
+      422,
+      "validation_failed",
+    );
+  });
+
   it("gives a summary or read grantee the shared prediction and never the owner's extras", async () => {
     for (const token of [T.ben, T.dana, T.ivy]) {
       const body = await prediction(token, ANNA);
@@ -532,8 +589,32 @@ describe("a contributor's writes", () => {
     const response = await put(T.eve, "2026-09-01", { flow: "heavy" }, { subject: HANA });
     expect(response.status).toBe(200);
     expect(await livePredictionRow(HANA)).toBeNull();
+    // Her own read serves the stored row and computes nothing: there is none.
+    const shared = await prediction(T.eve, HANA);
+    expect(Object.keys(shared).sort()).toEqual([...SHARED_PREDICTION_FIELDS].sort());
+    expect(shared).toMatchObject({ basis: "none", nextPeriod: null, fertileWindow: null });
+    expect(await livePredictionRow(HANA)).toBeNull();
     expect(await prediction(T.hana)).toMatchObject({ basis: "none", nextPeriod: null });
-    expect((await auditRows(EVE, HANA)).map((row) => row.category)).toEqual(["cycle.history"]);
+    expect((await auditRows(EVE, HANA)).map((row) => row.category)).toEqual([
+      "cycle.history",
+      "cycle.history",
+    ]);
+    expect((await auditRows(EVE, HANA)).map((row) => row.action)).toEqual([
+      "partner.write",
+      "partner.read",
+    ]);
+  });
+
+  it("never touches the stored prediction on a contributor's write or a grantee's read", async () => {
+    const before = await livePredictionRow(ANNA);
+    expect(before).not.toBeNull();
+    // Eve writes symptoms only; nothing she may write moves the prediction,
+    // and a grantee's read never touches the stored row.
+    expect(
+      (await put(T.eve, "2026-07-24", { symptoms: ["bloating"] }, { subject: ANNA })).status,
+    ).toBe(200);
+    await prediction(T.ivy, ANNA);
+    expect(await livePredictionRow(ANNA)).toEqual(before);
   });
 });
 
@@ -553,17 +634,16 @@ describe("GET /v1/cycle/status", () => {
     });
   });
 
-  it("gives a status grantee the derived facts only and audits the read", async () => {
-    const response = await get(T.ben, `status?subject=${ANNA}`);
-    expect(response.status).toBe(200);
-    const body = (await response.json()) as Record<string, unknown>;
-    expect(Object.keys(body).sort()).toEqual(
-      ["subjectId", "date", "cycleDay", "periodDay", "inFertileWindow"].sort(),
-    );
-    expect(body).toMatchObject({ cycleDay: 2, periodDay: 2 });
-    const rows = await auditRows(BEN, ANNA);
-    expect(rows.map((row) => row.category)).toContain("cycle.status");
+  it("answers 404 to a status grantee until the status function lands, auditing nothing", async () => {
+    // Ben still holds the status card: can() allows it, but no query runs as
+    // anyone but the actor and his own transaction reaches none of the rows
+    // the status rests on. See the report's Blocked section.
+    const before = await auditRows(BEN, ANNA);
+    await expectProblem(await get(T.ben, `status?subject=${ANNA}`), 404, "not_found");
+    expect(await auditRows(BEN, ANNA)).toEqual(before);
   });
+
+  it.todo("gives a status grantee the derived facts only and audits the read");
 
   it("answers null days when nothing is logged", async () => {
     const response = await get(T.cara, "status");
@@ -573,5 +653,113 @@ describe("GET /v1/cycle/status", () => {
       periodDay: null,
       inFertileWindow: false,
     });
+  });
+});
+
+/*
+ * The schemas in packages/schemas/src/cycle.ts. They run here because the
+ * schemas package has no test runner on main; the lead request in the E3
+ * report asks for one, after which these move next to the schemas.
+ */
+
+describe("the cycle vocabulary", () => {
+  it("lists exactly the index enums, in their order, each with a label", () => {
+    expect(FLOW_CODES).toEqual(FlowLevel.options);
+    expect(SYMPTOM_CODES).toEqual(SymptomCode.options);
+    expect(MOOD_CODES).toEqual(MoodCode.options);
+    for (const code of FlowLevel.options) expect(FLOW_LABELS[code]).toMatch(/^[A-Z]/);
+    for (const code of SymptomCode.options) expect(SYMPTOM_LABELS[code]).toMatch(/^[A-Z]/);
+    for (const code of MoodCode.options) expect(MOOD_LABELS[code]).toMatch(/^[A-Z]/);
+  });
+
+  it("answers the pickers' lists with codes and labels", () => {
+    const vocabulary = cycleVocabulary();
+    expect(vocabulary.flow.map((item) => item.code)).toEqual(FlowLevel.options);
+    expect(vocabulary.symptoms.map((item) => item.code)).toEqual(SymptomCode.options);
+    expect(vocabulary.moods.map((item) => item.code)).toEqual(MoodCode.options);
+    expect(vocabulary.symptoms.find((item) => item.code === "tender_breasts")?.label).toBe(
+      "Tender breasts",
+    );
+    const labels = [...vocabulary.flow, ...vocabulary.symptoms, ...vocabulary.moods];
+    for (const item of labels) expect(item.label).not.toContain("\u2014");
+  });
+
+  it("counts light, medium and heavy as period days and nothing else", () => {
+    expect(PERIOD_FLOWS).toEqual(["light", "medium", "heavy"]);
+    expect(isPeriodFlow("medium")).toBe(true);
+    expect(isPeriodFlow("spotting")).toBe(false);
+    expect(isPeriodFlow("none")).toBe(false);
+    expect(isPeriodFlow(null)).toBe(false);
+    expect(isPeriodFlow(undefined)).toBe(false);
+  });
+});
+
+describe("CycleEntryWrite", () => {
+  it("accepts vocabulary values and an empty body", () => {
+    expect(CycleEntryWrite.parse({})).toEqual({});
+    expect(
+      CycleEntryWrite.parse({ flow: "heavy", symptoms: ["cramps", "fatigue"], mood: "low" }),
+    ).toEqual({ flow: "heavy", symptoms: ["cramps", "fatigue"], mood: "low" });
+    expect(CycleEntryWrite.parse({ flow: null, mood: null })).toEqual({ flow: null, mood: null });
+  });
+
+  it("refuses free text, unknown keys, unknown codes and a repeated symptom", () => {
+    expect(CycleEntryWrite.safeParse({ note: "slept badly" }).success).toBe(false);
+    expect(CycleEntryWrite.safeParse({ flow: "torrential" }).success).toBe(false);
+    expect(CycleEntryWrite.safeParse({ symptoms: ["cramps", "cramps"] }).success).toBe(false);
+    expect(CycleEntryWrite.safeParse({ mood: "happy" }).success).toBe(false);
+    expect(CycleEntryWrite.safeParse({ symptoms: "cramps" }).success).toBe(false);
+  });
+});
+
+describe("the cycle response shapes", () => {
+  const instant = "2026-10-05T12:00:00.000Z";
+  const id = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f10";
+
+  it("allow a projected entry with only the keys and the sync facts", () => {
+    expect(
+      CycleEntry.safeParse({ id, subjectId: id, version: 2, updatedAt: instant, deletedAt: null })
+        .success,
+    ).toBe(true);
+    expect(
+      CycleEntry.safeParse({
+        id,
+        subjectId: id,
+        date: "2026-02-30",
+        version: 1,
+        updatedAt: instant,
+        deletedAt: null,
+      }).success,
+    ).toBe(false);
+  });
+
+  it("allow a prediction without the owner only fields", () => {
+    const shared = {
+      subjectId: id,
+      computedAt: instant,
+      basis: "estimate",
+      cycleLength: 28,
+      sampleSize: 3,
+      nextPeriod: { expected: "2026-08-21", start: "2026-08-19", end: "2026-08-23" },
+      ovulation: { expected: "2026-08-07", start: "2026-08-05", end: "2026-08-09" },
+      fertileWindow: { start: "2026-08-02", end: "2026-08-07" },
+      uncertaintyDays: 2,
+      ovulationBandDays: 2,
+    };
+    expect(CyclePrediction.safeParse(shared).success).toBe(true);
+    expect(CyclePrediction.safeParse({ ...shared, basis: "guess" }).success).toBe(false);
+  });
+
+  it("keep the status to the derived facts", () => {
+    expect(
+      CycleStatus.parse({
+        subjectId: id,
+        date: "2026-10-05",
+        cycleDay: 3,
+        periodDay: 3,
+        inFertileWindow: false,
+      }).cycleDay,
+    ).toBe(3);
+    expect(CycleStatus.safeParse({ subjectId: id, date: "2026-10-05" }).success).toBe(false);
   });
 });

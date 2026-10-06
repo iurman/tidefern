@@ -1,4 +1,4 @@
 {
   "extends": "@tidefern/config/tsconfig/library.json",
-  "include": ["src/**/*.ts", "vitest.config.ts"]
+  "include": ["src/**/*.ts"]
 }

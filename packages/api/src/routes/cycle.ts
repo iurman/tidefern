@@ -103,6 +103,10 @@ type CycleCategory = (typeof CYCLE_CATEGORIES)[number];
  * bleeding day further than this from the previous one starts a new period;
  * core's plausibility range (21 to 45 days) then decides whether the cycle
  * between two starts counts.
+ *
+ * [OWNER] Neither the architecture record, core nor a cited source defines
+ * this tolerance. Two days is a proposal awaiting the owner's answer; the
+ * answer is a change to this one constant and its test.
  */
 export const PERIOD_GAP_DAYS = 2;
 
@@ -176,7 +180,7 @@ async function auditPartnerRead(
   tx: Transaction,
   actor: RequestActor,
   subjectId: string,
-  categories: readonly ("cycle.history" | "cycle.symptoms" | "cycle.status")[],
+  categories: readonly CycleCategory[],
 ): Promise<void> {
   const day = todayIn(
     await subjectTimeZone(tx, subjectId, actor.profile?.timeZone ?? DEFAULT_TIME_ZONE),
@@ -340,9 +344,12 @@ async function livePrediction(tx: Transaction, subjectId: string): Promise<Predi
 /**
  * Keeps the one live `cycle_predictions` row equal to core's result: a new
  * row when none is live, an update when the facts changed, a tombstone when
- * no date is offered any more, and nothing when nothing changed. Runs in the
- * writer's transaction (B8 lets a contributor who logs a period write it)
- * and in the owner's reads, so a grantee's read can serve the row as it is.
+ * no date is offered any more, and nothing when nothing changed. Runs only
+ * in the subject's own transactions (her writes, deletes and reads), because
+ * only she sees every row the prediction rests on: a pregnancy filed under
+ * `pregnancy.overview` suspends or bounds it (architecture record 8.4), and
+ * a grantee's transaction would predict through one it cannot see. A
+ * grantee's read serves the row as it is.
  */
 async function storePrediction(
   tx: Transaction,
@@ -383,27 +390,6 @@ async function storePrediction(
       version: live.version + 1,
     })
     .where(eq(schema.cyclePredictions.id, live.id));
-}
-
-/**
- * Recomputes and stores the subject's prediction in a transaction opened as
- * the subject. Only for a grantee whose request `can()` has already allowed:
- * the prediction rests on rows outside the grant (a pregnancy filed under
- * `pregnancy.overview` ends or suspends it, architecture record 8.4), and
- * the grantee's own transaction would not see them and would predict
- * through a pregnancy. Nothing but the derived facts leaves this
- * transaction, and the only write is the derived cache row.
- */
-async function refreshAsSubject(subjectId: string, now: Date): Promise<Computed> {
-  return withActor(
-    subjectId,
-    async (tx) => {
-      const computed = await computePrediction(tx, subjectId);
-      await storePrediction(tx, subjectId, computed.prediction, now);
-      return computed;
-    },
-    runtime.db,
-  );
 }
 
 /* ------------------------------------------------------------------------ */
@@ -504,18 +490,35 @@ function ownerExtras(
 /* Cursors and headers                                                       */
 /* ------------------------------------------------------------------------ */
 
-const CursorFacts = z.object({ d: z.iso.date(), i: z.uuid() });
+/**
+ * A reader who holds `cycle.history` pages by (date, id). A reader without
+ * it never receives a date (the storage map files `date` under history), so
+ * her list is ordered and paged by the entry id alone and her cursor carries
+ * nothing but the id of the last item she already holds. Each kind refuses
+ * the other's cursor, so a crafted dated cursor cannot probe dates.
+ */
+const DatedCursor = z.object({ d: z.iso.date(), i: z.uuid() }).strict();
+const UndatedCursor = z.object({ i: z.uuid() }).strict();
 
-function encodeCursor(date: CalendarDate, id: string): string {
-  return Buffer.from(JSON.stringify({ d: date, i: id }), "utf8").toString("base64url");
+interface CursorPosition {
+  date: CalendarDate | null;
+  id: string;
 }
 
-function decodeCursor(cursor: string): { date: CalendarDate; id: string } | null {
+function encodeCursor(position: CursorPosition): string {
+  const facts = position.date === null ? { i: position.id } : { d: position.date, i: position.id };
+  return Buffer.from(JSON.stringify(facts), "utf8").toString("base64url");
+}
+
+function decodeCursor(cursor: string, dated: boolean): CursorPosition | null {
   try {
-    const parsed = CursorFacts.safeParse(
-      JSON.parse(Buffer.from(cursor, "base64url").toString("utf8")),
-    );
-    return parsed.success ? { date: parsed.data.d, id: parsed.data.i } : null;
+    const raw: unknown = JSON.parse(Buffer.from(cursor, "base64url").toString("utf8"));
+    if (dated) {
+      const parsed = DatedCursor.safeParse(raw);
+      return parsed.success ? { date: parsed.data.d, id: parsed.data.i } : null;
+    }
+    const parsed = UndatedCursor.safeParse(raw);
+    return parsed.success ? { date: null, id: parsed.data.i } : null;
   } catch {
     return null;
   }
@@ -572,13 +575,13 @@ export const listEntriesRoute = createRoute({
   tags: [TAG],
   summary: "Day entries by date range",
   description:
-    "The subject's day entries, oldest first, projected to the categories the actor holds: dates and flow under cycle.history, symptoms and mood under cycle.symptoms. With updatedSince the list is a sync feed and carries tombstones.",
+    "The subject's day entries, projected to the categories the actor holds: dates and flow under cycle.history, symptoms and mood under cycle.symptoms. A reader with cycle.history gets them oldest first and may filter by from and to. A reader without it never receives a date: her entries come in id order, her cursor names only an id, and from or to answers 422. With updatedSince the list is a sync feed and carries tombstones.",
   middleware: [requireActor] as const,
   request: {
     query: z.object({
       subject: SubjectQuery,
-      from: z.iso.date().optional().describe("First day, inclusive"),
-      to: z.iso.date().optional().describe("Last day, inclusive"),
+      from: z.iso.date().optional().describe("First day, inclusive; needs cycle.history"),
+      to: z.iso.date().optional().describe("Last day, inclusive; needs cycle.history"),
       updatedSince: z.iso
         .datetime()
         .optional()
@@ -601,7 +604,7 @@ export const putEntryRoute = createRoute({
   tags: [TAG],
   summary: "Write one day",
   description:
-    "Creates or replaces the day's flow, symptoms and mood in every category the actor may write; a field left out is cleared there. The subject is the actor unless a subject she may contribute to is given. The prediction is recomputed in the same transaction.",
+    "Creates or replaces the day's flow, symptoms and mood in every category the actor may write; a field left out is cleared there. The subject is the actor unless a subject she may contribute to is given. The subject's own write recomputes the prediction in the same transaction; a contributor's write leaves the stored prediction as it is until the subject's next read or write.",
   middleware: [requireActor] as const,
   request: {
     params: DateParam,
@@ -653,7 +656,7 @@ export const predictionsRoute = createRoute({
   tags: [TAG],
   summary: "The cycle prediction",
   description:
-    "Computed through core from the subject's logged period starts and kept in cycle_predictions: the next period as a band, ovulation as a band, the fertile window, the basis and the counts the copy templates need. The words are the client's. Under cycle.history.",
+    "Computed through core from the subject's logged period starts and kept in cycle_predictions: the next period as a band, ovulation as a band, the fertile window, the basis and the counts the copy templates need. The subject's read recomputes it; a grantee reads the stored row as it is, with basis none when there is none. The words are the client's. Under cycle.history.",
   middleware: [requireActor] as const,
   request: { query: z.object({ subject: SubjectQuery }) },
   responses: {
@@ -673,7 +676,7 @@ export const statusRoute = createRoute({
   tags: [TAG],
   summary: "The derived status for today",
   description:
-    "Day of the cycle, day of the period while bleeding, and whether today is in the fertile window: what a partner with cycle.status sees. Derived on read, never stored, never the entries.",
+    "Day of the cycle, day of the period while bleeding, and whether today is in the fertile window. Derived on read, never stored, never the entries. The subject only for now: a cycle.status grantee answers 404 until a database function derives the status under her own grant.",
   middleware: [requireActor] as const,
   request: { query: z.object({ subject: SubjectQuery }) },
   responses: {
@@ -739,14 +742,27 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         errors: [{ path: "to", message: "Must not be before from." }],
       });
     }
-    const after = query.cursor === undefined ? null : decodeCursor(query.cursor);
+    const access = cycleAccess(actor, subjectId, "read");
+    if (access === null) return fail(c, 404, "not_found");
+    // Without cycle.history the reader never learns a date, not even by
+    // filtering one day at a time or by reading her cursor.
+    const dated = access.reason === "owner" || access.categories.includes("cycle.history");
+    if (!dated && (query.from !== undefined || query.to !== undefined)) {
+      return fail(c, 422, "validation_failed", {
+        errors: [
+          {
+            path: query.from === undefined ? "to" : "from",
+            message: "Date filters need the cycle history.",
+          },
+        ],
+      });
+    }
+    const after = query.cursor === undefined ? null : decodeCursor(query.cursor, dated);
     if (query.cursor !== undefined && after === null) {
       return fail(c, 422, "validation_failed", {
         errors: [{ path: "cursor", message: "Not a cursor from this list." }],
       });
     }
-    const access = cycleAccess(actor, subjectId, "read");
-    if (access === null) return fail(c, 404, "not_found");
 
     const limit = query.limit;
     const page = await withActor(
@@ -761,18 +777,22 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         if (query.from !== undefined) conditions.push(gte(entries.date, query.from));
         if (query.to !== undefined) conditions.push(lte(entries.date, query.to));
         if (after !== null) {
+          const afterDate = after.date;
           conditions.push(
-            or(
-              gt(entries.date, after.date),
-              and(eq(entries.date, after.date), gt(entries.id, after.id)),
-            )!,
+            afterDate === null
+              ? gt(entries.id, after.id)
+              : or(
+                  gt(entries.date, afterDate),
+                  and(eq(entries.date, afterDate), gt(entries.id, after.id)),
+                )!,
           );
         }
+        const order = dated ? [asc(entries.date), asc(entries.id)] : [asc(entries.id)];
         const rows = await tx
           .select()
           .from(entries)
           .where(and(...conditions))
-          .orderBy(asc(entries.date), asc(entries.id))
+          .orderBy(...order)
           .limit(limit + 1);
         const shown = rows.slice(0, limit);
         const symptoms =
@@ -785,7 +805,9 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         const items = shown.map((row) => entryItem(row, symptoms.get(row.id) ?? [], access));
         const last = shown.at(-1);
         const nextCursor =
-          rows.length > limit && last !== undefined ? encodeCursor(last.date, last.id) : null;
+          rows.length > limit && last !== undefined
+            ? encodeCursor({ date: dated ? last.date : null, id: last.id })
+            : null;
         return { items, nextCursor };
       },
       runtime.db,
@@ -897,6 +919,8 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
             });
           }
         }
+        // Only the subject's own transaction sees every row the prediction
+        // rests on; a contributor's write leaves the stored row as it is.
         if (writesHistory && access.reason === "owner") {
           const computed = await computePrediction(tx, subjectId);
           await storePrediction(tx, subjectId, computed.prediction, now);
@@ -908,7 +932,6 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
     if (outcome.kind === "stale") {
       return fail(c, 409, "conflict", { detail: VERSION_MISMATCH });
     }
-    if (writesHistory && access.reason === "grant") await refreshAsSubject(subjectId, new Date());
     return c.json(outcome.item, 200, { ETag: etag(outcome.item.version) });
   });
 
@@ -971,14 +994,21 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
 
     const now = new Date();
     if (decision.reason !== "owner") {
-      await withActor(
+      // The stored row as it is, read and audited in the grantee's own
+      // transaction, and the shared part only: the owner's extras never
+      // reach a grantee. With no live row there is nothing to offer.
+      const shared = await withActor(
         actor.id,
-        (tx) => auditPartnerRead(tx, actor, subjectId, ["cycle.history"]),
+        async (tx): Promise<CyclePrediction> => {
+          await auditPartnerRead(tx, actor, subjectId, ["cycle.history"]);
+          const live = await livePrediction(tx, subjectId);
+          return live === null
+            ? predictionBody(subjectId, now, factsOf(null))
+            : predictionBody(subjectId, live.computedAt, factsOfRow(live));
+        },
         runtime.db,
       );
-      // The shared part only: the owner's extras never reach a grantee.
-      const computed = await refreshAsSubject(subjectId, now);
-      return c.json(predictionBody(subjectId, now, factsOf(computed.prediction)), 200);
+      return c.json(shared, 200);
     }
     const body = await withActor(
       actor.id,
@@ -1004,19 +1034,14 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
     const decision = can(actor, "summary", { subjectId, category: "cycle.status" });
     if (!decision.allowed || decision.reason === "denied") return fail(c, 404, "not_found");
 
-    if (decision.reason !== "owner") {
-      await withActor(
-        actor.id,
-        (tx) => auditPartnerRead(tx, actor, subjectId, ["cycle.status"]),
-        runtime.db,
-      );
-    }
-    // cycle.status is derived from rows the B8 policies file under
-    // cycle.history and cycle.symptoms, which a status grant does not reach.
-    // After can() has approved the status, the few facts it needs are read as
-    // the subject and only the derived numbers leave this transaction.
+    // Blocked on the lead: cycle.status is derived from rows the B8 policies
+    // file under cycle.history, which a status grant does not reach, and a
+    // query never runs as anyone but the actor. Until a SECURITY DEFINER
+    // function re-checks the grant and returns only the derived numbers, a
+    // grantee gets the 404 a denial gets and no read is audited.
+    if (decision.reason !== "owner") return fail(c, 404, "not_found");
     const status = await withActor(
-      subjectId,
+      actor.id,
       async (tx): Promise<CycleStatus> => {
         const timeZone = await subjectTimeZone(
           tx,
