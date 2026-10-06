@@ -1,0 +1,116 @@
+/* The two-step sign-in route inside the settings shell: one column, tokens only, both themes through them. */
+
+.page {
+  max-width: var(--size-reading);
+}
+
+.heading {
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  margin-bottom: var(--space-3);
+}
+
+.stepHeading {
+  font-size: var(--type-subheading);
+  line-height: var(--leading-heading);
+  margin: 0 0 var(--space-2);
+}
+
+.lede {
+  color: var(--muted);
+  margin-bottom: var(--space-6);
+}
+
+.pending {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.feedback {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.feedbackAction {
+  display: flex;
+}
+
+.status {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+  margin-bottom: var(--space-6);
+}
+
+.statusLine {
+  margin: 0;
+  font-weight: var(--weight-sans-strong);
+}
+
+.statusDetail {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
+}
+
+.step {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+/* The code is an image: dark modules on a light tile in both themes, never inverted. */
+.qr {
+  display: block;
+  width: min(100%, 220px);
+  height: auto;
+  border-radius: var(--radius-control);
+}
+
+.qrTile {
+  fill: var(--palette-mist);
+}
+
+.qrModules {
+  fill: var(--palette-fern);
+}
+
+.manual {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.manualText {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.codes {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.related {
+  margin-top: var(--space-8);
+  font-size: var(--type-small);
+}
