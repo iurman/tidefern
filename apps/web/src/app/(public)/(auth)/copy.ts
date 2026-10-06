@@ -98,7 +98,6 @@ export const authCopy = {
     title: "Today",
     description: "Your home screen.",
     signOut: "Sign out",
-    loadFailed: "We could not load your account. Reload the page to try again.",
   },
 } as const;
 

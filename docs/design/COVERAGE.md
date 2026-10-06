@@ -93,7 +93,7 @@ Gaps:
   chapter points at clearing site data instead (G6 request).
 - Type: 13.8 asks for editable specimens. The page on main has no editable
   text: the G3 review describes a `contentEditable` reading specimen, but
-  it is not in `apps/web/src/app/design/type/page.tsx` today.
+  it is not in `apps/web/src/app/(public)/design/type/page.tsx` today.
 - Components: groups render real components in both themes with a width
   control. The theme is shown side by side rather than switched, which
   covers the same need. The six gaps above apply here.
