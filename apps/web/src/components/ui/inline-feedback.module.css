@@ -1,0 +1,39 @@
+.feedback {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-2);
+  max-width: 60ch;
+  padding: var(--space-2) 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--text);
+}
+
+.icon {
+  flex: none;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  margin-top: 1px;
+}
+
+.success .icon {
+  color: var(--success);
+}
+
+.error .icon {
+  color: var(--danger);
+}
+
+.info .icon {
+  color: var(--accent);
+}
+
+.error .text {
+  color: var(--danger);
+}
+
+.text {
+  flex: 1 1 auto;
+}

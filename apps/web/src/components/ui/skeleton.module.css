@@ -1,0 +1,46 @@
+.skeleton {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.block,
+.line {
+  display: block;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--panel);
+  animation: pulse var(--duration-settle) var(--ease-interface) 6 alternate;
+}
+
+.block {
+  width: 100%;
+  min-height: var(--size-action);
+  height: var(--space-24);
+  border-radius: var(--radius-card);
+}
+
+.line {
+  height: 1em;
+  width: 100%;
+}
+
+.line[data-last] {
+  width: 62%;
+}
+
+@keyframes pulse {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0.55;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .block,
+  .line {
+    animation-duration: 0ms;
+  }
+}
