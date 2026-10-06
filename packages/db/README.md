@@ -111,6 +111,7 @@ generated. The journal after task B8:
 | `0005_children`               | `children.ts`                 | `children`, `child_guardians`, `child_events`, `child_measurements`, plus the foreign key from `grants.child_id`            |
 | `0006_platform`               | `platform.ts`                 | `notes`, `photos`, `photo_variants`, `audit_events`, `jobs`, `idempotency_keys`, `data_requests`, `product_events`, `disclosures` |
 | `0007_row_level_security`     | hand-written                  | the policy helpers, `FORCE ROW LEVEL SECURITY` and four policies on every RLS table, three indexes (see Row level security below) |
+| `0008_idempotency_response`   | `platform.ts`                 | `response_status` and `response_hash` on `idempotency_keys`, with the check that a `done` row carries both (task E1)        |
 
 ### Rules every table follows
 

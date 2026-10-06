@@ -126,6 +126,7 @@ describe("the journal", () => {
       "0005_children",
       "0006_platform",
       "0007_row_level_security",
+      "0008_idempotency_response",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

@@ -188,11 +188,13 @@ export const jobs = pgTable(
 
 /**
  * Idempotency rows (architecture record 5.3): one per actor and key, written
- * `in_flight` before the handler runs and set to `done` with the created
- * resource's id afterwards. A replay re-reads `resource_id` through `can()`;
- * no response body is ever stored here, because for notes it would hold
- * decrypted text outside the encrypted column. The sweep deletes rows older
- * than 24 hours. Not subject-scoped, so no RLS.
+ * `in_flight` before the handler runs and set to `done` afterwards with the
+ * created resource's id, the response status and a hash of the response
+ * body (task E1). A replay answers the stored status and, for a created
+ * resource, its id and location; no request or response body is ever stored
+ * here, because for notes it would hold decrypted text outside the encrypted
+ * column. The sweep deletes rows older than 24 hours. Not subject-scoped, so
+ * no RLS.
  */
 export const idempotencyKeys = pgTable(
   "idempotency_keys",
@@ -206,10 +208,18 @@ export const idempotencyKeys = pgTable(
     requestHash: text("request_hash").notNull(),
     state: idempotencyStateEnum("state").notNull().default("in_flight"),
     resourceId: uuid("resource_id"),
+    responseStatus: integer("response_status"),
+    responseHash: text("response_hash"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [uniqueIndex("idempotency_keys_actor_key_unique").on(table.actorId, table.key)],
+  (table) => [
+    uniqueIndex("idempotency_keys_actor_key_unique").on(table.actorId, table.key),
+    check(
+      "idempotency_keys_done_has_response",
+      sql`(${table.state} = 'done') = (${table.responseStatus} is not null and ${table.responseHash} is not null)`,
+    ),
+  ],
 );
 
 /**

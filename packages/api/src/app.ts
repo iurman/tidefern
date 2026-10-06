@@ -5,6 +5,8 @@ import { withSession } from "./auth";
 import type { SessionAuth } from "./auth";
 import type { ApiEnv, Defer, DrainJobs } from "./context";
 import { drainEnqueued } from "./jobs/index";
+import { crossSite, idempotency, logger, rateLimit } from "./middleware/index";
+import type { CrossSiteOptions, LoggerOptions } from "./middleware/index";
 import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
 import { internalJobs } from "./routes/internal/jobs";
@@ -51,6 +53,18 @@ export interface ApiOptions {
    * `/api/internal/jobs/run` is not mounted.
    */
   jobs?: JobsOptions;
+  /**
+   * The origins a `/v1` mutation may come from besides the request's own
+   * (architecture 8.3): the host passes the trusted origins `packages/auth`
+   * resolves (the production origin and the team's preview pattern).
+   * Without it only the request's own origin is trusted.
+   */
+  crossSite?: CrossSiteOptions;
+  /**
+   * The allowlist logger's secret (`LOG_HMAC_SECRET`, architecture 9.1) and
+   * sink. Without a secret the lines carry no actor field at all.
+   */
+  log?: LoggerOptions;
 }
 
 /**
@@ -125,6 +139,16 @@ export function createApp(options: ApiOptions = {}) {
   // Every other /v1 request learns its session and actor first (architecture
   // 8.3 step 1); routes that need one add requireActor.
   app.use("/v1/*", withSession(auth, options.db));
+
+  // Then, with the actor known (task E1): one allowlisted log line per
+  // request (architecture 9.1), and for every mutation the cross-site
+  // check, the per-actor rate limit and the idempotency rule (architecture
+  // 8.3 and 5.3), in that order, so a forged request costs no database
+  // write and a replay never reaches a handler.
+  app.use("/v1/*", logger(options.log));
+  app.use("/v1/*", crossSite(options.crossSite));
+  app.use("/v1/*", rateLimit(options.db));
+  app.use("/v1/*", idempotency(options.db));
 
   // Outside /v1 and outside the OpenAPI document: a plain sub-app, not app.openapi().
   if (jobs) {

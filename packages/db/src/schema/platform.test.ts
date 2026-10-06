@@ -396,7 +396,7 @@ describe("jobs and idempotency keys", () => {
 
     await harness.db
       .update(schema.idempotencyKeys)
-      .set({ state: "done", resourceId: id(1) })
+      .set({ state: "done", resourceId: id(1), responseStatus: 201, responseHash: "r1" })
       .where(eq(schema.idempotencyKeys.id, id(50)));
 
     const columns = await columnNames("idempotency_keys");
@@ -407,6 +407,8 @@ describe("jobs and idempotency keys", () => {
       "key",
       "request_hash",
       "resource_id",
+      "response_hash",
+      "response_status",
       "route",
       "state",
       "updated_at",

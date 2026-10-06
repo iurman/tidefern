@@ -5,14 +5,23 @@ import type { Problem } from "@tidefern/schemas";
 const PROBLEM_BASE = "urn:tidefern:problem:";
 
 export type ProblemCode =
-  "not_found" | "validation_failed" | "unauthenticated" | "forbidden" | "rate_limited" | "internal";
+  | "not_found"
+  | "validation_failed"
+  | "unauthenticated"
+  | "forbidden"
+  | "conflict"
+  | "rate_limited"
+  | "upgrade_required"
+  | "internal";
 
 const TITLES: Record<ProblemCode, string> = {
   not_found: "Not found",
   validation_failed: "Validation failed",
   unauthenticated: "Sign in required",
   forbidden: "Not allowed",
+  conflict: "Conflict",
   rate_limited: "Too many requests",
+  upgrade_required: "Update required",
   internal: "Something went wrong",
 };
 
