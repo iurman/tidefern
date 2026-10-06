@@ -153,7 +153,16 @@ export type GrantSetting = z.infer<typeof GrantSetting>;
 
 export const GrantSetInput = z
   .object({
-    grants: z.array(GrantSetting).min(1).max(20),
+    grants: z
+      .array(GrantSetting)
+      .min(1)
+      .max(20)
+      .refine(
+        (grants) =>
+          new Set(grants.map((grant) => `${grant.category}/${grant.childId ?? ""}`)).size ===
+          grants.length,
+        { message: "Each category, and each child, appears once" },
+      ),
     policyVersion: z
       .string()
       .min(1)

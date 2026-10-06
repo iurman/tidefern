@@ -122,7 +122,7 @@ export const removePersonRoute = createRoute({
   tags: ["sharing"],
   summary: "Remove a partner",
   description:
-    "Revokes every grant the actor gave the person and ends the household membership they share: the person's when the actor owns the household, the actor's own otherwise. Refused while the person is the only other guardian of a child the actor guards; the co-guardianship is handled first.",
+    "Revokes every grant the actor gave the person and ends the household membership they share: the person's when the actor owns the household, the actor's own when the person is its owner, and none between two members who do not own it. Refused while the person is the only other guardian of a child the actor guards; the co-guardianship is handled first.",
   middleware: [requireActor] as const,
   request: { params: z.object({ personId: Id }) },
   responses: {
@@ -378,9 +378,12 @@ export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>): void {
 
 /**
  * Ends what the two share: in a household the actor owns, the person's
- * membership; in one she does not own, her own, because B8 lets a member
- * end only her own row or, as owner, anyone's. Grants are already revoked,
- * and guardianship is its own table, untouched here.
+ * membership; when the person removed is that household's owner, the
+ * actor's own, because B8 lets a member end only her own row or, as owner,
+ * anyone's. Between two members neither of whom owns the household only
+ * the grants end: removing a fellow partner is not leaving, and the
+ * membership is the owner's to end. Grants are already revoked, and
+ * guardianship is its own table, untouched here.
  */
 async function endSharedMemberships(
   tx: Transaction,
@@ -402,7 +405,10 @@ async function endSharedMemberships(
     );
   if (mine.length === 0) return;
   const theirs = await tx
-    .select({ householdId: schema.householdMembers.householdId })
+    .select({
+      householdId: schema.householdMembers.householdId,
+      role: schema.householdMembers.role,
+    })
     .from(schema.householdMembers)
     .where(
       and(
@@ -416,7 +422,9 @@ async function endSharedMemberships(
     );
   for (const shared of theirs) {
     const own = mine.find((row) => row.householdId === shared.householdId);
-    const leaving = own?.role === "owner" ? personId : actorId;
+    const leaving =
+      own?.role === "owner" ? personId : shared.role === "owner" ? actorId : undefined;
+    if (leaving === undefined) continue;
     await tx
       .update(schema.householdMembers)
       .set({ status: "ended", endedAt: now, updatedAt: now })

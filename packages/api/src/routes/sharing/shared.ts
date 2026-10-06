@@ -1,11 +1,11 @@
 import type { Context } from "hono";
 import type { OpenAPIHono } from "@hono/zod-openapi";
-import { schema } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
 import { jobId as uuidv7 } from "@tidefern/db/jobs";
 
 import type { ApiEnv } from "../../context";
 import type { Mailer } from "../../jobs/notice";
+import { audit, auditActions } from "../../middleware/audit";
 import { problem } from "../../problem";
 import type { ProblemCode } from "../../problem";
 
@@ -17,9 +17,11 @@ export { uuidv7 };
  * built on, and the clock. Routes are registered by `createApp` through the
  * registry in `routes/index.ts`, which hands them the app and nothing else,
  * so the host attaches these to the app it got back with
- * `configureSharing(app, ...)`. Without a mailer the console transport of
- * 10.2 renders the mail to standard output, as `createAuth()` does for its
- * own mail; production passes `chooseMailer(process.env)`. Without a
+ * `configureSharing(app, ...)`. The Next.js host passes the mailer
+ * `@tidefern/auth/server` chose for Better Auth, so invitation mail takes
+ * the same transport. Without a mailer the invitation route fails closed
+ * with a 503 and sends nothing: there is no console fallback that would
+ * print the address and the live link into a function log. Without a
  * database `withActor()` opens its transactions on the db package's
  * production client, which is the one the host passes `createApp` anyway;
  * tests pass PGlite.
@@ -44,19 +46,6 @@ export function sharingDependencies(app: OpenAPIHono<ApiEnv>): SharingDependenci
 }
 
 /**
- * Renders the invitation mail to standard output, the development and test
- * transport of architecture 10.2, in the same two lines `ConsoleMailer` in
- * `@tidefern/auth` prints. The address and the link are printed because a
- * developer has to open the link; the mail carries nothing else.
- */
-export const consoleMailer: Mailer = {
-  async send(message) {
-    console.log(`mail to=${message.to} subject=${JSON.stringify(message.subject)}`);
-    console.log(message.text);
-  },
-};
-
-/**
  * Aborts the actor transaction and answers a problem. Thrown inside
  * `withActor` so nothing the handler wrote before the refusal commits; the
  * route's `answering` turns it into the response.
@@ -65,7 +54,7 @@ export class SharingRefusal extends Error {
   override readonly name = "SharingRefusal";
 
   constructor(
-    readonly status: 404 | 409 | 422,
+    readonly status: 404 | 409 | 422 | 503,
     readonly code: ProblemCode,
     readonly detail?: string,
   ) {
@@ -108,6 +97,10 @@ export const sharingDetails = {
   invitationPending: "invitation_pending",
   /** 409 on an update: `If-Match` named a version that is no longer current. */
   staleVersion: "stale_version",
+  /** 409 on an invitation: the actor belongs to a household she does not own, so she cannot start a second one. */
+  memberOfAnotherHousehold: "member_of_another_household",
+  /** 503 on an invitation: the host configured no mail transport, so nothing is created or sent. */
+  mailUnavailable: "mail_unavailable",
 } as const;
 
 /** The actor the route middleware guaranteed; a missing one is a programming error, not a 401. */
@@ -173,17 +166,16 @@ export function requireCurrent(expected: number | null, current: number): void {
 }
 
 /**
- * The invitation events in the activity view. E1's `audit()` accepts only
- * the actions 8.3 names (reads, writes and grant changes), so these three
- * are written with the same row shape here until they join `auditActions`.
- * The subject is the actor herself: the inviter for a sent or withdrawn
- * invitation, the invitee for an accepted one, which is also the one row
- * B8's insert policy lets each of them write before any grant exists.
+ * The invitation events in the activity view, written through E1's
+ * `audit()`. The subject is the actor herself: the inviter for a sent or
+ * withdrawn invitation, the invitee for an accepted one, which is also the
+ * one row B8's insert policy lets each of them write before any grant
+ * exists.
  */
 export const invitationAuditActions = {
-  create: "invitation.create",
-  withdraw: "invitation.withdraw",
-  accept: "invitation.accept",
+  create: auditActions.invitationCreate,
+  withdraw: auditActions.invitationWithdraw,
+  accept: auditActions.invitationAccept,
 } as const;
 
 export async function auditInvitation(
@@ -192,11 +184,5 @@ export async function auditInvitation(
   action: (typeof invitationAuditActions)[keyof typeof invitationAuditActions],
   occurredAt: Date,
 ): Promise<void> {
-  await tx.insert(schema.auditEvents).values({
-    id: uuidv7(),
-    actorId,
-    action,
-    subjectId: actorId,
-    occurredAt,
-  });
+  await audit(tx, { actorId, action, subjectId: actorId, occurredAt });
 }

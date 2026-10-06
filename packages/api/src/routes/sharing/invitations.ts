@@ -25,7 +25,6 @@ import {
   actorOf,
   answering,
   auditInvitation,
-  consoleMailer,
   decodeCursor,
   invitationAuditActions,
   page,
@@ -88,7 +87,7 @@ export const createInvitationRoute = createRoute({
   tags: ["sharing"],
   summary: "Invite someone into the actor's household",
   description:
-    "Mints a single-use token bound to the invitee's email, stores only its hash with a 72 hour expiry, and sends the link by mail. The actor's own household is created on the first invitation. Needs a fresh authentication and an Idempotency-Key.",
+    "Mints a single-use token bound to the invitee's email, stores only its hash with a 72 hour expiry, and sends the link by mail. The actor's own household is created on the first invitation, unless she already belongs to a household she does not own (409 member_of_another_household). Needs a fresh authentication and an Idempotency-Key.",
   middleware: [requireActor, requireFreshAuth()] as const,
   request: {
     body: { content: { "application/json": { schema: InvitationInput } }, required: true },
@@ -99,8 +98,11 @@ export const createInvitationRoute = createRoute({
       content: { "application/json": { schema: Invitation } },
     },
     401: ProblemResponse("No session, or one older than the fresh authentication window"),
-    409: ProblemResponse("An open invitation to that address already exists, or the id is taken"),
+    409: ProblemResponse(
+      "An open invitation to that address already exists, the id is taken, or the actor belongs to a household she does not own",
+    ),
     422: ProblemResponse("Validation failed"),
+    503: ProblemResponse("No mail transport is configured; nothing was created or sent"),
   },
 });
 
@@ -182,7 +184,10 @@ function openInvitation(now: Date) {
 /**
  * The household the actor owns, created on first use: a household row and
  * her owner membership, which B8's policies let any signed-in actor write
- * once on an empty household.
+ * once on an empty household. An actor who already belongs to a household
+ * she does not own is refused instead of being given a second one, the
+ * same one-household rule acceptance holds an invitee to (8.3): she leaves
+ * that household first, then invites.
  */
 async function ownedHousehold(tx: Transaction, actorId: string, now: Date): Promise<string> {
   const [owned] = await tx
@@ -198,6 +203,19 @@ async function ownedHousehold(tx: Transaction, actorId: string, now: Date): Prom
     .orderBy(schema.householdMembers.joinedAt, schema.householdMembers.id)
     .limit(1);
   if (owned !== undefined) return owned.householdId;
+  const [member] = await tx
+    .select({ householdId: schema.householdMembers.householdId })
+    .from(schema.householdMembers)
+    .where(
+      and(
+        eq(schema.householdMembers.userId, actorId),
+        eq(schema.householdMembers.status, "active"),
+      ),
+    )
+    .limit(1);
+  if (member !== undefined) {
+    throw new SharingRefusal(409, "conflict", sharingDetails.memberOfAnotherHousehold);
+  }
   const householdId = uuidv7();
   await tx.insert(schema.households).values({ id: householdId, createdAt: now, updatedAt: now });
   await tx.insert(schema.householdMembers).values({
@@ -237,6 +255,10 @@ export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
     const link = `${origin}${INVITATION_PATH}#invitation=${token}`;
     const inviteeEmail = input.inviteeEmail.toLowerCase();
     return answering(c, async () => {
+      const mailer = deps.mailer;
+      if (mailer === undefined) {
+        throw new SharingRefusal(503, "internal", sharingDetails.mailUnavailable);
+      }
       const row = await withActor(
         actor.id,
         async (tx) => {
@@ -279,7 +301,7 @@ export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
           if (inserted === undefined) throw new Error("the invitation insert returned no row");
           await auditInvitation(tx, actor.id, invitationAuditActions.create, now);
           // Inside the transaction on purpose: a transport failure leaves no row behind.
-          await (deps.mailer ?? consoleMailer).send(invitationMail(inviteeEmail, link));
+          await mailer.send(invitationMail(inviteeEmail, link));
           return inserted;
         },
         deps.db,

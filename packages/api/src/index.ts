@@ -12,6 +12,8 @@ export type { SessionAuth, SessionLookup } from "./auth";
 export { loadActor } from "./actor";
 export type { HeldGrant, ProfileSummary, RequestActor } from "./actor";
 export { Me } from "./routes/me";
+export { configureSharing } from "./routes/sharing/index";
+export type { SharingDependencies } from "./routes/sharing/index";
 export { problem } from "./problem";
 export { jobHandlers } from "./jobs/handlers";
 export type { JobContext, JobHandler, JobHandlers } from "./jobs/index";

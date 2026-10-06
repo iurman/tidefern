@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import { and, eq } from "drizzle-orm";
 import { schema } from "@tidefern/db";
 import {
@@ -19,6 +19,7 @@ import { FRESH_AUTHENTICATION_REQUIRED } from "../../auth";
 import type { MailMessage } from "../../jobs/notice";
 import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "../../middleware/index";
 import { sessionHeaders } from "../../test/auth-fake";
+import type { FakeAuth } from "../../test/auth-fake";
 import { ANNA, BEN, CARA, OWN_ORIGIN, TOKENS, createActorFixture } from "../../test/actors";
 import type { ApiTestDatabase } from "../../test/database";
 import {
@@ -42,6 +43,7 @@ const MO = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f11";
 const ATTESTED_AT = new Date("2026-10-04T18:30:00Z");
 
 let harness: ApiTestDatabase;
+let auth: FakeAuth;
 let app: ReturnType<typeof createApp>;
 const sent: MailMessage[] = [];
 let keyCount = 0;
@@ -177,7 +179,7 @@ beforeAll(async () => {
     { id: "018f5e7a-2000-7000-8000-00000000a001", childId: MO, userId: ANNA },
     { id: "018f5e7a-2000-7000-8000-00000000a002", childId: MO, userId: BEN },
   ]);
-  const auth = fixture.auth;
+  auth = fixture.auth;
   auth.signIn("dana", DANA, "dana@example.com", 60);
   auth.signIn("fred", FRED, "fred@example.com", 60);
   auth.signIn("gus", GUS, "gus@example.com", 60);
@@ -378,13 +380,21 @@ describe("PUT /v1/sharing/grants/{personId}", () => {
     );
   });
 
-  it("validates the body: the private journal, a child without its child, an empty list", async () => {
+  it("validates the body: the private journal, a child without its child, an empty list, a category twice", async () => {
     for (const grants of [
       [{ category: "journal.private", level: "read" }],
       [{ category: "child", level: "read" }],
       [{ category: "cycle.status", level: "read", childId: MO }],
       [{ category: "cycle.status", level: "full" }],
       [],
+      [
+        { category: "cycle.history", level: "read" },
+        { category: "cycle.history", level: "summary" },
+      ],
+      [
+        { category: "child", level: "read", childId: MO },
+        { category: "child", level: null, childId: MO },
+      ],
     ]) {
       const response = await request(TOKENS.anna, "PUT", `/api/v1/sharing/grants/${DANA}`, {
         ...body,
@@ -625,6 +635,37 @@ describe("invitations", () => {
     expect(sent).toHaveLength(0);
   });
 
+  it("fails closed with 503 and prints nothing when the host configured no mailer", async () => {
+    const bare = createApp({ auth, db: harness.db, log: { sink: () => undefined } });
+    const printed = vi.spyOn(console, "log").mockImplementation(() => undefined);
+    try {
+      const response = await bare.request("/api/v1/sharing/invitations", {
+        method: "POST",
+        headers: {
+          ...sessionHeaders(TOKENS.anna),
+          origin: OWN_ORIGIN,
+          [IDEMPOTENCY_KEY_HEADER]: key(),
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ inviteeEmail: "nobody@example.com", role: "partner" }),
+      });
+      expect(response.status).toBe(503);
+      const problem = await problemOf(response);
+      expect(problem.code).toBe("internal");
+      expect(problem.detail).toBe(sharingDetails.mailUnavailable);
+      expect(JSON.stringify(problem)).not.toContain("nobody@example.com");
+      expect(printed).not.toHaveBeenCalled();
+    } finally {
+      printed.mockRestore();
+    }
+    const rows = await harness.db
+      .select({ id: schema.invitations.id })
+      .from(schema.invitations)
+      .where(eq(schema.invitations.inviteeEmail, "nobody@example.com"));
+    expect(rows).toEqual([]);
+    expect(sent).toHaveLength(0);
+  });
+
   it("sends one mail with the link, stores only the hash, audits, and replays the create", async () => {
     const idempotencyKey = key();
     const send = () =>
@@ -841,18 +882,38 @@ describe("invitations", () => {
   });
 
   it("creates the inviter's household on her first invitation", async () => {
-    const response = await request("dana", "POST", "/api/v1/sharing/invitations", {
-      inviteeEmail: "fred@example.com",
+    const before = sent.length;
+    const response = await request("fred", "POST", "/api/v1/sharing/invitations", {
+      inviteeEmail: "gus@example.com",
       role: "partner",
     });
     expect(response.status).toBe(201);
     const invitation = Invitation.parse(await response.json());
     expect(invitation.householdId).not.toBe(HOUSEHOLD);
-    expect(await membership(DANA, invitation.householdId)).toEqual({
+    expect(await membership(FRED, invitation.householdId)).toEqual({
       status: "active",
       role: "owner",
     });
+    expect(sent).toHaveLength(before + 1);
+  });
+
+  it("refuses a partner in another household instead of giving her a second one", async () => {
+    const before = sent.length;
+    const response = await request("dana", "POST", "/api/v1/sharing/invitations", {
+      inviteeEmail: "fred@example.com",
+      role: "partner",
+    });
+    expect(response.status).toBe(409);
+    expect((await problemOf(response)).detail).toBe(sharingDetails.memberOfAnotherHousehold);
+    const owned = await harness.db
+      .select({ id: schema.householdMembers.id })
+      .from(schema.householdMembers)
+      .where(
+        and(eq(schema.householdMembers.userId, DANA), eq(schema.householdMembers.role, "owner")),
+      );
+    expect(owned).toEqual([]);
     expect(await membership(DANA, HOUSEHOLD)).toEqual({ status: "active", role: "partner" });
+    expect(sent).toHaveLength(before);
   });
 });
 
@@ -862,6 +923,25 @@ describe("DELETE /v1/sharing/people/{personId}", () => {
     expect(response.status).toBe(409);
     expect((await problemOf(response)).detail).toBe(sharingDetails.coGuardianshipUnresolved);
     expect(await membership(BEN, HOUSEHOLD)).toMatchObject({ status: "active" });
+  });
+
+  it("between two partners revokes the remover's grants and ends no membership", async () => {
+    const granted = await request(TOKENS.ben, "PUT", `/api/v1/sharing/grants/${DANA}`, {
+      grants: [{ category: "cycle.status", level: "read" }],
+      policyVersion: "2026-10",
+      descriptionVersion: "2026-10",
+    });
+    expect(granted.status).toBe(200);
+    const response = await request(TOKENS.ben, "DELETE", `/api/v1/sharing/people/${DANA}`);
+    expect(response.status).toBe(204);
+    expect((await auditRows(BEN)).at(-1)).toMatchObject({
+      actorId: BEN,
+      action: "grant.revoke",
+      category: "cycle.status",
+    });
+    expect((await personFor(TOKENS.ben, DANA)).grants).toEqual([]);
+    expect(await membership(BEN, HOUSEHOLD)).toMatchObject({ status: "active" });
+    expect(await membership(DANA, HOUSEHOLD)).toMatchObject({ status: "active" });
   });
 
   it("revokes every grant and ends the membership, with 404 for a stranger", async () => {

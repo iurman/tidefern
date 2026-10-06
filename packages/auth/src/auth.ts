@@ -123,6 +123,15 @@ export type Auth = ReturnType<typeof createAuth>;
 export type Session = Auth["$Infer"]["Session"];
 
 /**
+ * The one transport this process sends mail through, chosen once from the
+ * environment. The host hands the same instance to the API for the mail it
+ * sends itself (the sharing invitation), because `chooseMailer()` also
+ * decides which capture mailer the E2E endpoint reads: a second call would
+ * leave Better Auth's messages in a mailer nobody reads.
+ */
+export const mailer: Mailer = chooseMailer(process.env);
+
+/**
  * The instance the Hono app mounts (task C2). This is the one place the
  * package reads the environment: BETTER_AUTH_SECRET, BETTER_AUTH_URL, the
  * Vercel variables, and the mail facts `chooseMailer()` picks the transport
@@ -132,7 +141,7 @@ export type Session = Auth["$Infer"]["Session"];
  */
 export const auth: Auth = createAuth({
   hosts: hostFactsFromEnvironment(process.env),
-  mailer: chooseMailer(process.env),
+  mailer,
   secret: process.env.BETTER_AUTH_SECRET,
   databaseHooks: userKeyDatabaseHooks({ provider: new EnvKeyProvider() }),
 });
