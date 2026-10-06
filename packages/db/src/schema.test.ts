@@ -125,6 +125,7 @@ describe("the journal", () => {
       "0004_pregnancy",
       "0005_children",
       "0006_platform",
+      "0007_row_level_security",
     ]);
 
     const files = readMigrationFiles(migrationConfig);
@@ -325,35 +326,35 @@ describe("row level security", () => {
     );
     expect(flags).toEqual([
       { relname: "account", relrowsecurity: false, relforcerowsecurity: false },
-      { relname: "audit_events", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "child_events", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "child_guardians", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "child_measurements", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "children", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "consents", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "cycle_entries", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "cycle_predictions", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "data_requests", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "disclosures", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "due_date_changes", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "entry_symptoms", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "grants", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "household_members", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "households", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "audit_events", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "child_events", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "child_guardians", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "child_measurements", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "children", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "consents", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "cycle_entries", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "cycle_predictions", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "data_requests", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "disclosures", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "due_date_changes", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "entry_symptoms", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "grants", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "household_members", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "households", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "idempotency_keys", relrowsecurity: false, relforcerowsecurity: false },
-      { relname: "invitations", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "invitations", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "jobs", relrowsecurity: false, relforcerowsecurity: false },
-      { relname: "notes", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "notes", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "passkey", relrowsecurity: false, relforcerowsecurity: false },
-      { relname: "photo_variants", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "photos", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "pregnancies", relrowsecurity: true, relforcerowsecurity: false },
-      { relname: "pregnancy_events", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "photo_variants", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "photos", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "pregnancies", relrowsecurity: true, relforcerowsecurity: true },
+      { relname: "pregnancy_events", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "product_events", relrowsecurity: false, relforcerowsecurity: false },
-      { relname: "profiles", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "profiles", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "rate_limit", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "session", relrowsecurity: false, relforcerowsecurity: false },
-      { relname: "subject_keys", relrowsecurity: true, relforcerowsecurity: false },
+      { relname: "subject_keys", relrowsecurity: true, relforcerowsecurity: true },
       { relname: "two_factor", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "user", relrowsecurity: false, relforcerowsecurity: false },
       { relname: "verification", relrowsecurity: false, relforcerowsecurity: false },
@@ -361,19 +362,27 @@ describe("row level security", () => {
     ]);
   });
 
-  test("has no policies yet, which is the baseline B8 adds to", async () => {
+  test("has the B8 policies on exactly the forced tables, four per table", async () => {
     const policies = rows(
-      await harness.db.execute(sql`select policyname from pg_catalog.pg_policies`),
+      await harness.db.execute(
+        sql`select tablename, count(*)::int as policies from pg_catalog.pg_policies group by tablename order by tablename`,
+      ),
     );
-    expect(policies).toEqual([]);
+    const forced = rows(
+      await harness.db.execute(
+        sql`select relname from pg_catalog.pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' and relforcerowsecurity order by relname`,
+      ),
+    );
+    expect(policies).toEqual(forced.map((row) => ({ tablename: row.relname, policies: 4 })));
   });
 
   // What this proves: the grants and default privileges from 0000 reach a
   // table created by a later migration (the privilege check passes and the
   // query is not refused with "permission denied"), and RLS applies to the
-  // app role inside withActor: with no policy, a read sees zero rows and a
-  // write is refused by the row-level security check, not by a grant.
-  test("leaves the app role with a grant but zero rows and no insert until B8's policies", async () => {
+  // app role inside withActor: the B8 policies show the actor her own rows
+  // and a write for a foreign subject is refused by the row-level security
+  // check, not by a grant. src/rls.test.ts covers the policies themselves.
+  test("leaves the app role with a grant, her own rows and no foreign insert", async () => {
     await insertUser(ANNA, "anna@example.test");
     await harness.db.insert(schema.profiles).values({
       userId: ANNA,
@@ -397,8 +406,11 @@ describe("row level security", () => {
     );
     expect(seen).toEqual({
       privileges: { can_select: true, can_insert: true, can_select_keys: true },
-      profiles: 0,
-      keys: 0,
+      // Her own profile, and her own key row left over from the round trip
+      // above (it has no foreign key, so the cascade did not take it). The
+      // child's key stays hidden: she is no guardian here.
+      profiles: 1,
+      keys: 1,
     });
 
     const message = await refusal(
