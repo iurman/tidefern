@@ -337,7 +337,9 @@ its image index with the version in a comment, and runs these steps in this
 order before `pnpm build`:
 
 1. `pnpm db:migrate` with `DATABASE_URL_UNPOOLED` set to the service's
-   `postgres` superuser, which stands in for the Neon owner role. Migration
+   `postgres` superuser, which stands in for the Neon owner role. That URL
+   is written on this step and the next two only, never on the job, so the
+   servers started later do not inherit it. Migration
    `0000_create_app_role` creates `tidefern_app` `NOLOGIN`, exactly as it
    does on Neon.
 2. `scripts/grant-login.ts`, the role-login helper, with both URLs set. It
@@ -368,13 +370,21 @@ keys on it; `CRON_SECRET` stays unset on purpose, so the job runner answers
 `DATABASE_URL_UNPOOLED` removed from its environment then serves the
 `@smoke` subset, proving those tests never need a database; the rule in
 `apps/web/tests/e2e/smoke-rule.ts` fails any tagged test that reaches
-`/api/auth` or holds a session cookie. CI never holds a real database
-credential: the service database and its throwaway passwords live and die
-with the job.
+`/api/auth`, injects cookies or storage state, or holds a session cookie
+in any context it used, the fixture's or one it opened through
+`browser.newContext()`. The smoke run writes its html report inside the
+full suite's (`playwright-report/smoke`), so the report a failure left is
+still there when the job uploads the folder. CI never holds a real
+database credential: the service database and its throwaway passwords
+live and die with the job.
 
 The same sequence works locally against a throwaway container, for example
 `podman run -d -e POSTGRES_PASSWORD=... -e POSTGRES_DB=tidefern -p 127.0.0.1:54331:5432 docker.io/library/postgres:18.6`,
-with the two URLs pointing at it.
+with the two URLs pointing at it. Start the server the way the job does,
+`setsid nohup pnpm --filter web start --port 3151 --hostname 127.0.0.1 > server.log 2>&1 &`
+with the pid saved from `$!`, and stop it with `kill -- -<pid>`: the saved
+pid leads the process group, and the negative form kills the `next-server`
+child with it, which a plain `kill <pid>` leaves listening.
 
 ## Seed data
 

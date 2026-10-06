@@ -7,8 +7,8 @@ import type { APIRequestContext, BrowserContext, TestInfo } from "@playwright/te
  * (architecture 15). A spec that carries a `@smoke` test imports `test` from
  * this file instead of `@playwright/test`; the fixtures below watch every
  * smoke test and fail it when it reaches `/api/auth`, injects cookies or
- * storage state, or ends with a session cookie in its context. Tests without
- * the tag get the plain fixtures. Nothing here is itself tagged.
+ * storage state, or ends with a session cookie in any of its contexts. Tests
+ * without the tag get the plain fixtures. Nothing here is itself tagged.
  *
  * How a violation is detected:
  *
@@ -20,8 +20,12 @@ import type { APIRequestContext, BrowserContext, TestInfo } from "@playwright/te
  *   so each HTTP method reports its URL before the call goes out.
  * - `context.addCookies` and `context.setStorageState` are wrapped the same
  *   way, and a `storageState` set through `test.use` is refused at setup.
- * - After the body ran, the context's cookies are read: a cookie whose name
- *   carries Better Auth's prefix means a sign-in happened somewhere.
+ * - Every context the test gets is watched: the `context` fixture, and any
+ *   the test opens itself through `browser.newContext()`, which the worker's
+ *   `browser` fixture wraps while a smoke test runs.
+ * - When a watched context closes, and again at teardown for one still open,
+ *   its cookies are read: a cookie whose name carries Better Auth's prefix
+ *   means a sign-in happened somewhere.
  */
 
 export const SMOKE_TAG = "@smoke";
@@ -65,12 +69,15 @@ const REQUEST_METHODS = ["fetch", "get", "post", "put", "patch", "delete", "head
 
 /**
  * Collects what a smoke test did that it must not. One per test; the
- * fixtures attach it to the context and the request client, and fail the
- * test from the report at teardown.
+ * fixtures attach it to every context and request client the test gets, and
+ * fail the test from the report at teardown.
  */
 export class SmokeGuard {
   readonly violations: SmokeViolation[] = [];
   readonly #baseURL: string | undefined;
+  /** Every context handed to `watchContext`, in order; each is inspected once. */
+  readonly #contexts: BrowserContext[] = [];
+  readonly #inspected = new WeakSet<BrowserContext>();
 
   constructor(baseURL?: string) {
     this.#baseURL = baseURL;
@@ -91,8 +98,14 @@ export class SmokeGuard {
     this.violations.push({ kind: "storage-state", detail: "storageState was set" });
   }
 
-  /** Reads the cookies the context ended with and records a session cookie. */
+  /**
+   * Reads the cookies the context holds and records a session cookie. Once
+   * per context: the close wrapper, the fixture and `finish()` may each ask,
+   * and only the first look counts.
+   */
   async inspectCookies(context: BrowserContext): Promise<void> {
+    if (this.#inspected.has(context)) return;
+    this.#inspected.add(context);
     const cookies = await context.cookies();
     for (const cookie of cookies) {
       if (isSessionCookie(cookie.name)) {
@@ -101,8 +114,16 @@ export class SmokeGuard {
     }
   }
 
-  /** Watches a context: its requests, its cookie writes and its request client. */
+  /**
+   * Watches a context: its requests, its cookie writes, its request client,
+   * and its cookies at the moment it closes. Watching the same context twice
+   * is a no-op, so the `context` fixture and the wrapped `browser.newContext`
+   * can both hand over the fixture's context without double counting.
+   */
   watchContext(context: BrowserContext): void {
+    if (this.#contexts.includes(context)) return;
+    this.#contexts.push(context);
+
     context.on("request", (request) => this.noteRequest(request.url()));
 
     const addCookies = context.addCookies.bind(context);
@@ -115,6 +136,13 @@ export class SmokeGuard {
     context.setStorageState = async (state) => {
       this.noteStorageState();
       return setStorageState(state);
+    };
+
+    // A context the test closes itself is gone before teardown, so its cookies are read on the way out.
+    const close = context.close.bind(context);
+    context.close = async (options) => {
+      await this.inspectCookies(context);
+      return close(options);
     };
 
     // `request` is a getter on the prototype; the instance gets its own that hands out the guarded client.
@@ -142,6 +170,13 @@ export class SmokeGuard {
     });
   }
 
+  /** Inspects every watched context the test left open; the fixture calls it at teardown. */
+  async finish(): Promise<void> {
+    for (const context of this.#contexts) {
+      await this.inspectCookies(context);
+    }
+  }
+
   /** The failure message, or undefined when the test behaved. */
   report(): string | undefined {
     if (this.violations.length === 0) return undefined;
@@ -160,6 +195,15 @@ interface SmokeFixtures {
   smokeGuard: SmokeGuard;
 }
 
+interface SmokeWorkerFixtures {
+  /**
+   * The guard of the smoke test running on this worker, or undefined between
+   * tests and during an untagged one. The wrapped `browser.newContext` reads
+   * it, so a context a smoke test opens itself is watched too.
+   */
+  smokeHook: { guard: SmokeGuard | undefined };
+}
+
 /**
  * `test` with the rule attached. The guard is an automatic fixture, so a
  * smoke test that uses neither `page` nor `request` is still checked, and
@@ -168,13 +212,36 @@ interface SmokeFixtures {
  * Playwright's customary `use`, because the web app's React hooks lint reads
  * `use` as a hook.
  */
-export const test = base.extend<SmokeFixtures>({
+export const test = base.extend<SmokeFixtures, SmokeWorkerFixtures>({
+  smokeHook: [{ guard: undefined } as SmokeWorkerFixtures["smokeHook"], { scope: "worker" }],
+
+  // Same worker scope as Playwright's own `browser` (an override may not change it). The browser is
+  // shared by every test on the worker, so the wrapper stays and the hook decides per test.
+  browser: [
+    async ({ browser, smokeHook }, provide) => {
+      const newContext = browser.newContext.bind(browser);
+      browser.newContext = async (options) => {
+        const context = await newContext(options);
+        smokeHook.guard?.watchContext(context);
+        return context;
+      };
+      await provide(browser);
+      browser.newContext = newContext;
+    },
+    { scope: "worker" },
+  ],
+
   smokeGuard: [
-    async ({ baseURL }, provide, testInfo) => {
+    async ({ baseURL, smokeHook }, provide, testInfo) => {
       const guard = new SmokeGuard(baseURL);
+      const tagged = isSmokeTest(testInfo);
+      if (tagged) smokeHook.guard = guard;
       await provide(guard);
+      smokeHook.guard = undefined;
+      if (!tagged) return;
+      await guard.finish();
       const report = guard.report();
-      if (isSmokeTest(testInfo) && report) {
+      if (report) {
         throw new Error(report);
       }
     },
@@ -188,7 +255,9 @@ export const test = base.extend<SmokeFixtures>({
     await provide(storageState);
   },
 
-  context: async ({ context, smokeGuard }, provide, testInfo) => {
+  // `smokeGuard` is listed first so the hook is in place when the base context is created; the
+  // explicit call below keeps the result the same whichever order Playwright sets them up in.
+  context: async ({ smokeGuard, context }, provide, testInfo) => {
     if (isSmokeTest(testInfo)) {
       smokeGuard.watchContext(context);
     }

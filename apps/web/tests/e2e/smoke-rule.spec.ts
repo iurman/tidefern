@@ -3,8 +3,8 @@ import { SmokeGuard, expect, isAuthUrl, isSessionCookie, isSmokeTest, test } fro
 /**
  * The detector behind the smoke rule, tested on its own: the pure checks,
  * the guard against a real context and request client (routed so nothing
- * here needs a database), and the fixture end to end through one test that
- * carries the tag, breaks the rule on purpose and is expected to fail.
+ * here needs a database), and the fixture end to end through two tests that
+ * carry the tag, break the rule on purpose and are expected to fail.
  */
 
 const CANNED = { status: 200, contentType: "application/json", body: "null" };
@@ -121,6 +121,48 @@ test.describe("the guard on a real context", () => {
     await context.close();
   });
 
+  test("inspects a watched context once, at the finish or when it closes", async ({
+    browser,
+    baseURL,
+  }) => {
+    const context = await browser.newContext();
+    const guard = new SmokeGuard(baseURL);
+    guard.watchContext(context);
+    guard.watchContext(context);
+    await context.route("**/api/auth/**", (route) => route.fulfill(CANNED));
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.evaluate(() => fetch("/api/auth/get-session"));
+    await context.addCookies([
+      { name: "better-auth.session_token", value: "not-a-real-token", url: baseURL ?? "" },
+    ]);
+    // Watching twice records the request once; the session cookie waits for an inspection.
+    expect(guard.violations.map((v) => v.kind)).toEqual(["auth-request", "cookies-added"]);
+
+    await guard.finish();
+    expect(guard.violations.map((v) => v.kind)).toEqual([
+      "auth-request",
+      "cookies-added",
+      "session-cookie",
+    ]);
+
+    // Neither the close nor a second finish looks again.
+    await context.close();
+    await guard.finish();
+    expect(guard.violations).toHaveLength(3);
+
+    const closedByTheTest = await browser.newContext();
+    guard.watchContext(closedByTheTest);
+    await closedByTheTest.addCookies([
+      { name: "better-auth.session_data", value: "not-real-either", url: baseURL ?? "" },
+    ]);
+    await closedByTheTest.close();
+    expect(guard.violations.slice(3)).toEqual([
+      { kind: "cookies-added", detail: "better-auth.session_data" },
+      { kind: "session-cookie", detail: "better-auth.session_data" },
+    ]);
+  });
+
   test("wraps the request client, the context's and the page's", async ({
     browser,
     request,
@@ -161,16 +203,53 @@ test.describe("the fixture", () => {
     expect(smokeGuard.violations).toEqual([]);
   });
 
-  // The one tagged test in this file breaks the rule on purpose. Playwright
-  // reports an expected failure as passed and a pass as a failure, so a
-  // guard that stops firing turns this test red. It makes one routed request
-  // that never leaves the browser, so it is as safe on a deployment as any
+  test("leaves a context an untagged test opens itself alone", async ({
+    browser,
+    baseURL,
+    smokeGuard,
+  }) => {
+    const context = await browser.newContext();
+    await context.addCookies([
+      { name: "better-auth.session_token", value: "not-a-real-token", url: baseURL ?? "" },
+    ]);
+    await context.close();
+    expect(smokeGuard.violations).toEqual([]);
+  });
+
+  // The tagged tests in this file break the rule on purpose. Each checks
+  // what the guard recorded first, so a detector that saw nothing fails the
+  // test outright, and only then declares the test expected to fail, which
+  // Playwright reports as passed once the rule throws at teardown and as a
+  // failure if the rule lets the test through. Each makes one routed request
+  // that never leaves the browser, so they are as safe on a deployment as any
   // other smoke test.
   test("fails a tagged test that calls the auth mount @smoke", async ({ page, smokeGuard }) => {
-    test.fail(true, "the smoke rule must fail this test at teardown");
     await page.route("**/api/auth/**", (route) => route.fulfill(CANNED));
     await page.goto("/");
     await page.evaluate(() => fetch("/api/auth/get-session"));
     expect(smokeGuard.violations.map((v) => v.kind)).toEqual(["auth-request"]);
+    test.fail(true, "the smoke rule must fail this test at teardown");
+  });
+
+  test("fails a tagged test that signs in through a context of its own @smoke", async ({
+    browser,
+    baseURL,
+    smokeGuard,
+  }) => {
+    const context = await browser.newContext();
+    await context.route("**/api/auth/**", (route) => route.fulfill(CANNED));
+    const page = await context.newPage();
+    await page.goto("/");
+    await page.evaluate(() => fetch("/api/auth/get-session"));
+    await context.addCookies([
+      { name: "better-auth.session_token", value: "not-a-real-token", url: baseURL ?? "" },
+    ]);
+    await context.close();
+    expect(smokeGuard.violations.map((v) => v.kind)).toEqual([
+      "auth-request",
+      "cookies-added",
+      "session-cookie",
+    ]);
+    test.fail(true, "the smoke rule must fail this test at teardown");
   });
 });

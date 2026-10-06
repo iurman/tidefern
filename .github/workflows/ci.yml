@@ -48,10 +48,10 @@ jobs:
       # Test-only values for the seeded browser suite. None of them is a secret and none exists
       # anywhere outside this job: the database lives in the service container above and is gone
       # with the job, and CI never holds a real credential (architecture 16.1). Every variable here
-      # is listed in turbo.json globalEnv so the build hash keys on it.
+      # is listed in turbo.json globalEnv so the build hash keys on it. The owner URL (the service's
+      # postgres superuser) is not job env: it sits on the three database steps that need it and on
+      # nothing else, so neither server below inherits it.
       #
-      # The service's postgres superuser is the owner role (it runs the migrations and the seed).
-      DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
       # Migration 0000 creates tidefern_app NOLOGIN; the grant-login step below gives it LOGIN with
       # this throwaway password, then next build and next start connect as it (architecture 7.2).
       DATABASE_URL: postgresql://tidefern_app:ci-only-app-password@127.0.0.1:5432/tidefern
@@ -130,7 +130,12 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
+      # The service's postgres superuser is the owner role in CI: it runs the migrations, the grant
+      # and the seed. Its URL is written on these three steps only (the same literal each time; the
+      # workflow has no way to name it once without making it job env).
       - name: Migrate the service database as its owner
+        env:
+          DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: pnpm db:migrate
 
       # psql is on the runner image, but the helper in packages/db is what runs here: it takes the
@@ -138,12 +143,15 @@ jobs:
       # was provisioned, and it connects back as tidefern_app to prove the login works and that the
       # role still cannot bypass row level security.
       - name: Let the app role log in with the throwaway password
+        env:
+          DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: pnpm --filter @tidefern/db exec tsx scripts/grant-login.ts
 
-      # The seed runs through withSystem(), which the app role is refused for, so it takes the owner URL.
+      # The seed runs through withSystem(), which the app role is refused for, so DATABASE_URL is the
+      # owner URL on this step.
       - name: Seed the synthetic cast as the owner at the frozen date
         env:
-          DATABASE_URL: ${{ env.DATABASE_URL_UNPOOLED }}
+          DATABASE_URL: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: pnpm db:seed
 
       - name: Production build
@@ -152,9 +160,12 @@ jobs:
       - name: Install Playwright Chromium
         run: pnpm --filter web exec playwright install --with-deps chromium
 
-      # The server gets its environment spelled out here rather than inherited, so what the browser
-      # suite runs against is readable in one place. It is started once, outside Playwright's own
-      # webServer (PLAYWRIGHT_BASE_URL turns that off), and stopped at the end of the job.
+      # Every variable the server needs is listed here, so what the browser suite runs against is
+      # readable in one place (a step's env adds to the job's, it does not replace it; the job env
+      # carries the same values and the owner URL is on no step from here on). The server is started
+      # once in a session of its own, outside Playwright's webServer (PLAYWRIGHT_BASE_URL turns that
+      # off); the saved pid leads its process group, which is what the stop step kills, next-server
+      # child included.
       - name: Start the production server against the seeded database
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -167,7 +178,7 @@ jobs:
           BETTER_AUTH_TELEMETRY: ${{ env.BETTER_AUTH_TELEMETRY }}
         run: |
           cd apps/web
-          nohup node_modules/.bin/next start --port 3000 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-seeded.log" 2>&1 &
+          setsid nohup node_modules/.bin/next start --port 3000 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-seeded.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/next-seeded.pid"
           for attempt in $(seq 1 60); do
             if curl --silent --fail --max-time 5 http://127.0.0.1:3000/api/v1/health > /dev/null; then
@@ -187,8 +198,9 @@ jobs:
 
       # The smoke subset also runs against production deployments, which have no seeded users and
       # no test database, so it must pass against a server that has no database at all. This second
-      # server is started with both database variables removed from its environment; the smoke rule
-      # in apps/web/tests/e2e/smoke-rule.ts is what keeps the tagged tests from authenticating.
+      # server is started with both database variables removed from its environment (the owner URL
+      # is on no step here anyway; the unset keeps the proof true if that ever changes); the smoke
+      # rule in apps/web/tests/e2e/smoke-rule.ts is what keeps the tagged tests from authenticating.
       # The two browser assertions are independent, so this one runs even when the full suite
       # failed (the job still fails); only a cancellation skips it.
       - name: Start a second server with no database
@@ -205,7 +217,7 @@ jobs:
         run: |
           cd apps/web
           env --unset=DATABASE_URL --unset=DATABASE_URL_UNPOOLED \
-            nohup node_modules/.bin/next start --port 3001 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-database-free.log" 2>&1 &
+            setsid nohup node_modules/.bin/next start --port 3001 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-database-free.log" 2>&1 &
           echo $! > "$RUNNER_TEMP/next-database-free.pid"
           for attempt in $(seq 1 60); do
             if curl --silent --fail --max-time 5 http://127.0.0.1:3001/api/v1/health > /dev/null; then
@@ -218,23 +230,29 @@ jobs:
           cat "$RUNNER_TEMP/next-database-free.log"
           exit 1
 
+      # The html reporter empties its folder on every run, so this run writes inside the full
+      # suite's folder rather than over it: a failure's traces from the step above survive, and the
+      # one artifact below holds both reports (index.html and smoke/index.html).
       - name: The smoke subset passes with DATABASE_URL unset
         if: ${{ !cancelled() && steps.database_free.outcome == 'success' }}
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3001
+          PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/smoke
         run: pnpm test:e2e --grep "@smoke"
 
+      # Each saved pid is the leader of the session setsid opened for it, so its negative names the
+      # whole process group: the next CLI and the next-server child it spawned.
       - name: Stop both servers
         if: always()
         run: |
           for name in seeded database-free; do
             pidfile="$RUNNER_TEMP/next-$name.pid"
             if [ -f "$pidfile" ]; then
-              kill "$(cat "$pidfile")" 2>/dev/null || true
+              kill -- -"$(cat "$pidfile")" 2>/dev/null || true
             fi
           done
 
-      - name: Keep the Playwright report when something fails
+      - name: Keep the Playwright reports when something fails
         if: failure()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
