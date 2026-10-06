@@ -649,7 +649,8 @@ response contains no field outside the granted categories.
 5. Run the query inside `withActor()` so RLS enforces the same rule
    underneath.
 6. Write an audit event for every partner read of a shared category
-   (summarized per day), every partner write, and every grant change.
+   (summarized per day), every partner write, and every grant change. Invitations write
+   `invitation.create`, `invitation.withdraw` and `invitation.accept`.
 
 The scaffold already ships `can()` with tests for owner, guardian, summary
 versus read, revoked grants, per-child scoping, the private journal and the
