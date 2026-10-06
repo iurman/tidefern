@@ -8,6 +8,7 @@ import { registerNotes } from "./notes";
 import { registerSharing } from "./sharing/index";
 import { registerPregnancy } from "./pregnancy/index";
 import { registerChildren } from "./children";
+import { registerAccount } from "./account";
 
 /** What every resource area needs from the host: the actor database and the key provider. */
 export interface RouteOptions {
@@ -34,4 +35,5 @@ export function registerRoutes(app: OpenAPIHono<ApiEnv>, options: RouteOptions =
   registerSharing(app);
   registerPregnancy(app, resolved);
   registerChildren(app);
+  registerAccount(app);
 }

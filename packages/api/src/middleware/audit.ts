@@ -21,6 +21,12 @@ export const auditActions = {
   invitationCreate: "invitation.create",
   invitationWithdraw: "invitation.withdraw",
   invitationAccept: "invitation.accept",
+  /** The person streamed an export of her own data (task E8). */
+  exportCreate: "export.create",
+  /** The person asked to close her account; every other session and every grant went with it (task E8). */
+  accountClose: "account.close",
+  /** The person cancelled the closure inside its undo window (task E8). */
+  accountCloseUndo: "account.close.undo",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
