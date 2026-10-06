@@ -1,0 +1,121 @@
+/* The sound route inside the settings shell: one column, tokens only, both themes through them. */
+
+.page {
+  max-width: var(--size-reading);
+}
+
+.heading {
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  margin-bottom: var(--space-3);
+}
+
+.subheading {
+  font-size: var(--type-subheading);
+  line-height: var(--leading-heading);
+  margin: var(--space-8) 0 var(--space-3);
+}
+
+.lede {
+  color: var(--muted);
+  margin-bottom: var(--space-6);
+}
+
+.group {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.help,
+.zone {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.quiet {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.switchRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-6);
+}
+
+.switchLabel {
+  display: block;
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.switchDescription {
+  margin: var(--space-1) 0 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.times {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.time {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: var(--size-control);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  transition:
+    border-color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+.time:hover {
+  border-color: var(--accent);
+}
+
+.time:disabled {
+  color: var(--muted);
+  background: var(--panel);
+  border-color: var(--soft-border);
+  cursor: not-allowed;
+}
+
+.status {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.sample {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+.sampleResult {
+  max-width: 100%;
+}
+
+.related {
+  margin-top: var(--space-8);
+  font-size: var(--type-small);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .time {
+    transition-duration: 0ms;
+  }
+}

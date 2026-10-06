@@ -1,0 +1,258 @@
+/* The sound chapter's own pieces: cue cards, the meter, the live state and the haptics note. Tokens only. */
+
+.cueGrid {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
+  gap: var(--space-4);
+}
+
+.cueCard {
+  display: grid;
+  min-width: 0;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.cueCard h3 {
+  margin: 0;
+  font-size: var(--type-subheading);
+}
+
+.cueWhen {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.cueTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--type-small);
+  font-variant-numeric: tabular-nums;
+}
+
+.cueTable th,
+.cueTable td {
+  text-align: left;
+  vertical-align: top;
+  padding: 6px 10px 6px 0;
+  border-bottom: 1px solid var(--soft-border);
+}
+
+.cueTable th {
+  font-weight: var(--weight-sans-strong);
+}
+
+.cueTokens {
+  margin: 0;
+  font-size: var(--type-caption);
+  color: var(--muted);
+  line-height: 1.6;
+}
+
+.cueTokens code {
+  color: var(--text);
+}
+
+.envelope {
+  display: block;
+  width: 100%;
+  height: auto;
+  border-radius: var(--radius-control);
+  background: var(--panel);
+}
+
+.envelopeLine {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.envelopeSecond {
+  stroke: var(--tide);
+}
+
+.envelopeFloor {
+  stroke: var(--soft-border);
+  stroke-width: 1;
+}
+
+.cueAction {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+}
+
+.cueResult {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.meter {
+  padding: var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.meterFacts,
+.state {
+  margin: 0;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.meterFacts > div,
+.state > div {
+  display: grid;
+  grid-template-columns: minmax(140px, 200px) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  align-items: baseline;
+}
+
+.meterFacts dt,
+.state dt {
+  font-weight: var(--weight-sans-strong);
+  font-size: var(--type-small);
+}
+
+.meterFacts dd,
+.state dd {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+  font-variant-numeric: tabular-nums;
+}
+
+.meterFacts > div:has(.meterRow) {
+  align-items: center;
+}
+
+.meterRow {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+/* The native meter draws in the browser's own colors; these paint the track and the bar with tokens in both themes. */
+.meterBar {
+  appearance: none;
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 420px;
+  height: 12px;
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+  overflow: hidden;
+}
+
+.meterBar::-webkit-meter-inner-element {
+  display: block;
+}
+
+.meterBar::-webkit-meter-bar {
+  height: 100%;
+  border: 0;
+  border-radius: 0;
+  background: var(--panel);
+}
+
+.meterBar::-webkit-meter-optimum-value,
+.meterBar::-webkit-meter-suboptimum-value,
+.meterBar::-webkit-meter-even-less-good-value {
+  background: var(--accent);
+}
+
+.meterBar::-moz-meter-bar {
+  background: var(--accent);
+}
+
+.meterValue {
+  flex: none;
+  white-space: nowrap;
+}
+
+.state {
+  padding: var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-6);
+  padding: var(--space-6);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.controlNote {
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.haptics {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.hapticsSupport {
+  margin: 0;
+  font-size: var(--type-small);
+}
+
+.hapticsButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.rules {
+  margin: 0;
+  padding-left: var(--space-6);
+  list-style: disc;
+  display: grid;
+  gap: var(--space-2);
+  max-width: 68ch;
+  line-height: 1.6;
+}
+
+.rules li::marker {
+  color: var(--muted);
+}
+
+@media (max-width: 600px) {
+  .meterFacts > div,
+  .state > div {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 400px) {
+  .cueCard {
+    padding: var(--space-4);
+  }
+
+  .cueTable th,
+  .cueTable td {
+    padding-right: 6px;
+  }
+}
