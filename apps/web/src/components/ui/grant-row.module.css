@@ -1,0 +1,59 @@
+.row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: start;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+}
+
+.text {
+  display: grid;
+  /* An explicit track: the implicit one takes the label's longest word as its minimum and pushes under the switch. */
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.label {
+  min-width: 0;
+  font-size: var(--type-body);
+  font-weight: var(--weight-sans-strong);
+  /* A single long word breaks inside the text column instead of sliding under the switch. */
+  overflow-wrap: anywhere;
+}
+
+.description {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  color: var(--danger);
+}
+
+.error:empty {
+  display: none;
+}
+
+.row:hover .label,
+[data-specimen-state="hover"] > .row .label {
+  color: var(--accent);
+}
+
+[data-specimen-state="focus-visible"] > .row [role="switch"] {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+[data-specimen-state="active"] > .row [role="switch"] [aria-hidden] > span {
+  transform: scale(0.94);
+}
+
+[data-specimen-state="active"] > .row [role="switch"][aria-checked="true"] [aria-hidden] > span {
+  transform: translateX(18px) scale(0.94);
+}

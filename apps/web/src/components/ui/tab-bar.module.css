@@ -1,0 +1,135 @@
+.bar {
+  position: sticky;
+  bottom: 0;
+  /* The bar is its own inline-size container so the labels can scale with its width (cqi below), wherever it renders. */
+  container-type: inline-size;
+  z-index: var(--elevation-z-sticky);
+  border-top: 1px solid var(--soft-border);
+  background: var(--surface);
+  /* The inset is 0 until the viewport declares viewport-fit=cover; the padding then grows with the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.list {
+  display: flex;
+  justify-content: space-around;
+  margin: 0;
+  /* No side padding: every pixel goes to the cells, whose content is centered away from the edges anyway. */
+  padding: 0;
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+}
+
+.link,
+.quickLog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-1) 0;
+  /* No border: the two transparent pixels would come out of the label's budget in a narrow cell. */
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  transition:
+    color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+/* The 24px icon sits in the same 32px box as the quick-log mark so every label lands on one line. */
+.link > svg {
+  margin-block: 4px;
+}
+
+.link[aria-current="page"] {
+  color: var(--accent);
+}
+
+.link:hover,
+[data-specimen-state="hover"] > .bar .link[aria-current="page"] {
+  color: var(--text);
+  background: var(--panel);
+}
+
+/* The twin restates the global :focus-visible rule (2px at 4px) so the chapter shows the ring the product draws. */
+[data-specimen-state="focus-visible"] > .bar .link[aria-current="page"] {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.link:active,
+[data-specimen-state="active"] > .bar .link[aria-current="page"] {
+  transform: scale(0.94);
+}
+
+.label {
+  /*
+   * 12px in a bar 400px or wider (the 13px caption token does not fit seven
+   * cells), scaling with the bar's width down to 10px, the platform tab bar
+   * size, at 333px: the longest label, "Calendar", then stays whole in the
+   * seven cells of a 312px bar and in the five cells of the frame's 220px
+   * cell, with 2px to spare.
+   */
+  font-size: clamp(0.625rem, 3cqi, 0.75rem);
+  letter-spacing: -0.02em;
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.2;
+  white-space: nowrap;
+  /*
+   * The label spans its cell (a fit-to-text box with negative letter-spacing
+   * draws a stray ellipsis in Chromium) with 1px each side, so neighboring
+   * labels never touch, and a cell narrower than its word clips it with an
+   * ellipsis instead of running into the next.
+   */
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 1px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
+}
+
+.quickLog {
+  color: var(--text);
+}
+
+.quickLogMark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--action);
+  border-radius: var(--radius-round);
+  background: var(--action);
+  color: var(--action-text);
+  transition:
+    transform var(--duration-feedback) var(--ease-interface),
+    filter var(--duration-feedback) var(--ease-interface);
+}
+
+.quickLog:hover .quickLogMark {
+  filter: brightness(1.06);
+}
+
+.quickLog:active .quickLogMark {
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link,
+  .quickLog,
+  .quickLogMark {
+    transition-duration: 0ms;
+  }
+}
