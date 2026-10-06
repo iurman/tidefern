@@ -139,3 +139,11 @@ export * from "./pregnancy";
 export * from "./children";
 export * from "./account";
 export * from "./cycle";
+/** Task E2: the profile, consent and data summary shapes. */
+export * from "./profile";
+/**
+ * The account and profile modules each declare `DataCategory` with the same
+ * seven values (both mirror `dataCategoryValues` in packages/db, and their
+ * tests pin the list); this names the one the package exports.
+ */
+export { DataCategory } from "./account";
