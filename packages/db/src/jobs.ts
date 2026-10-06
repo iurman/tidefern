@@ -18,6 +18,7 @@ import type { PgColumn } from "drizzle-orm/pg-core";
 
 import { isActorId, withSystem } from "./actor";
 import type { ActorDatabase, Transaction } from "./actor";
+import { closuresWithoutJob, purgeClosureTombstones } from "./closure";
 import * as schema from "./schema/index";
 import type { JobPayload } from "./schema/platform";
 
@@ -365,8 +366,13 @@ export interface SweepCounts {
   tombstones: Record<string, number>;
   auditEvents: number;
   productEvents: number;
-  /** Always 0 until I2 defines the closure window. */
+  /**
+   * Open closures past their undo window whose `account.delete` job was
+   * missing or dead, each given a fresh job due now (task I2).
+   */
   closures: number;
+  /** Closure tombstones removed after their 30 days (architecture 11). */
+  closureTombstones: number;
   /** Jobs sitting in `dead` after the sweep; the owner notice reports this count. */
   deadJobs: number;
 }
@@ -435,8 +441,9 @@ export async function assertSweepRole(db: ActorDatabase): Promise<void> {
 /**
  * The retention purges of 10.1, in one system transaction, with the number
  * of rows each removed. Idempotency rows go after 24 hours, tombstoned rows
- * after 30 days, audit events after a year, daily counters after 90 days.
- * Closure windows are I2's; until then the count is 0. The purges run under
+ * after 30 days, audit events after a year, daily counters after 90 days,
+ * closure tombstones after 30 days; and every open closure whose window has
+ * passed without a live deletion job gets one (task I2). The purges run under
  * forced row level security, so the connection must be the owner role:
  * on the app role `is_system()` is false and the sweep refuses rather than
  * silently removing nothing.
@@ -464,6 +471,14 @@ export async function sweep(db: ActorDatabase, now: Date = new Date()): Promise<
       schema.productEvents,
       lt(schema.productEvents.day, dayBefore(now, RETENTION.productEventDays)),
     );
+    let closures = 0;
+    for (const { requestId, userId } of await closuresWithoutJob(tx, now)) {
+      await enqueue(tx, "account.delete", userId === null ? { requestId } : { requestId, userId }, {
+        runAfter: now,
+      });
+      closures += 1;
+    }
+    const closureTombstones = await purgeClosureTombstones(tx, now);
     const [dead] = await tx
       .select({ count: sql<number>`count(*)::int` })
       .from(schema.jobs)
@@ -473,7 +488,8 @@ export async function sweep(db: ActorDatabase, now: Date = new Date()): Promise<
       tombstones,
       auditEvents,
       productEvents,
-      closures: 0,
+      closures,
+      closureTombstones,
       deadJobs: dead?.count ?? 0,
     };
   }, db);
