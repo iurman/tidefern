@@ -1,0 +1,194 @@
+/* Foundations chapter. Every sample is drawn at its own token through a
+   custom property set inline, so the drawing is whatever the stylesheet
+   says. */
+
+.split {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: var(--space-8);
+  margin-bottom: var(--space-6);
+}
+
+.caption {
+  caption-side: top;
+  text-align: left;
+  padding-bottom: var(--space-2);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.gutters {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: grid;
+  gap: var(--space-3);
+  font-size: var(--type-small);
+}
+
+.gutters li {
+  display: grid;
+  grid-template-columns: 240px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.gutterFrame {
+  display: block;
+  height: 24px;
+  padding-inline: var(--gutter);
+  border-radius: var(--radius-control);
+  background: var(--panel);
+  border: 1px solid var(--soft-border);
+}
+
+.gutterBar {
+  display: block;
+  height: 100%;
+  min-width: 4px;
+  background: var(--surface);
+  border-inline: 1px dashed var(--border);
+}
+
+.scale {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+  font-size: var(--type-small);
+}
+
+.scale li {
+  display: grid;
+  grid-template-columns: 96px 48px 104px minmax(0, 1fr);
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.bar {
+  display: block;
+  width: var(--bar);
+  height: 12px;
+  border-radius: var(--radius-round);
+  background: var(--accent);
+}
+
+.use {
+  color: var(--muted);
+}
+
+.radii {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--space-4);
+  font-size: var(--type-small);
+}
+
+.radii li {
+  display: grid;
+  gap: var(--space-1);
+  justify-items: start;
+}
+
+.radiusSample {
+  display: block;
+  width: 96px;
+  height: 64px;
+  border-radius: var(--sample-radius);
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.tiers {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 0;
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.tier {
+  padding: var(--space-6) var(--space-4);
+  background: var(--tier);
+  font-size: var(--type-small);
+}
+
+.tags {
+  list-style: none;
+  margin: 0 0 var(--space-4);
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.tags li {
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-round);
+  background: var(--panel);
+  border: 1px solid var(--soft-border);
+  font-size: var(--type-small);
+}
+
+.subhead {
+  margin: var(--space-8) 0 var(--space-2);
+}
+
+.specimen {
+  max-width: 560px;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--page);
+  border: 1px solid var(--soft-border);
+}
+
+.rules {
+  margin: 0 0 var(--space-6);
+  padding-left: 1.2em;
+  max-width: 68ch;
+  display: grid;
+  gap: var(--space-3);
+}
+
+.gates {
+  margin: 0 0 var(--space-6);
+  padding-left: 1.6em;
+  display: grid;
+  gap: var(--space-3);
+  max-width: 820px;
+}
+
+.gates li {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.gates li span {
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+@media (max-width: 600px) {
+  .scale li {
+    grid-template-columns: 88px 44px minmax(0, 1fr);
+  }
+
+  .scale .use {
+    grid-column: 1 / -1;
+  }
+
+  .gutters li {
+    grid-template-columns: 1fr;
+  }
+}

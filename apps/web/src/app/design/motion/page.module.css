@@ -1,0 +1,83 @@
+/* Motion chapter layout: the duration demos in a responsive grid and the
+   four easing curves drawn from the tokens. The demos carry their own
+   styles in components/design/motion-demo.module.css. */
+
+.demos {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: var(--space-4);
+  align-items: start;
+}
+
+.curves {
+  list-style: none;
+  margin: 0 0 var(--space-6);
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: var(--space-4);
+}
+
+.curve {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-4);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  border: 1px solid var(--soft-border);
+}
+
+.curveTitle {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+}
+
+.curveSvg {
+  display: block;
+  width: 100%;
+  max-width: 168px;
+  height: auto;
+  overflow: visible;
+}
+
+.curveBox {
+  fill: var(--panel);
+  stroke: var(--soft-border);
+  stroke-width: 1;
+}
+
+.curveHandle {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.curvePath {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.curvePoint {
+  fill: var(--surface);
+  stroke: var(--text);
+  stroke-width: 1.5;
+}
+
+.rules {
+  margin: 0 0 var(--space-6);
+  padding-left: 1.2em;
+  max-width: 68ch;
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* The usage snippets, one per language, spaced like the demos. */
+.usage {
+  display: grid;
+  gap: var(--space-4);
+}
