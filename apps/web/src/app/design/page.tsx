@@ -46,7 +46,7 @@ export default function DesignHome() {
           {chapters.map((chapter) => (
             <li key={chapter.slug}>
               <h3>
-                {chapter.slug === "type" || chapter.slug === "brand" ? (
+                {chapter.slug === "type" || chapter.slug === "brand" || chapter.slug === "sound" ? (
                   <Link href={`/design/${chapter.slug}`} prefetch={false}>
                     {chapter.title}
                   </Link>
