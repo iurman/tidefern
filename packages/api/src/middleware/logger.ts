@@ -44,20 +44,40 @@ export interface LogLine {
 /** The response header that echoes the request id, so a person can quote it to support. */
 export const REQUEST_ID_HEADER = "X-Request-Id";
 
-/** A request id from the platform (`x-vercel-id`) or the client; anything else is replaced by a fresh one. */
-const REQUEST_ID = /^[A-Za-z0-9:._-]{1,128}$/;
+/**
+ * The platform's request id (`x-vercel-id`): one or more region labels
+ * joined by `::`, then the function's own token, a timestamp and a hash,
+ * all lower-case. Nothing a person could type a word into.
+ */
+const VERCEL_ID = /^[a-z0-9]{1,16}(?:::[a-z0-9]{1,16})+-[0-9]{1,20}-[0-9a-z]{1,32}$/;
 
-/** `<platform>/<semver>` (architecture 5.1); anything else is left out of the line. */
-const CLIENT = /^[a-z]+\/[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]{1,32})?$/;
+/** A client-chosen `x-request-id` is kept only when it is a UUID; anything else is replaced by a fresh one. */
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * `<platform>/<semver>` (architecture 5.1); anything else is left out of
+ * the line. The prerelease or build part is capped at 16 characters so the
+ * field cannot carry a sentence.
+ */
+const CLIENT = /^[a-z]+\/[0-9]+\.[0-9]+\.[0-9]+(?:[-+][0-9A-Za-z.-]{1,16})?$/;
 
 /** HMAC-SHA256 of an id under the per-environment secret, base64url. */
 export function hashId(id: string, secret: string): string {
   return createHmac("sha256", secret).update(id).digest("base64url");
 }
 
+/**
+ * The platform's id first, so a line can be matched to the host's own
+ * request log; a client's id only when it is a UUID; a fresh UUID
+ * otherwise. Both accepted shapes are closed, so no free text reaches the
+ * line either way.
+ */
 function requestIdFrom(headers: Headers): string {
-  const given = headers.get("x-request-id") ?? headers.get("x-vercel-id");
-  return given !== null && REQUEST_ID.test(given) ? given : randomUUID();
+  const platform = headers.get("x-vercel-id");
+  if (platform !== null && VERCEL_ID.test(platform)) return platform;
+  const client = headers.get("x-request-id");
+  if (client !== null && UUID.test(client)) return client.toLowerCase();
+  return randomUUID();
 }
 
 /**

@@ -45,3 +45,14 @@ export const RATE_LIMIT_KEY_PREFIX = "tidefern:v1:mutation:";
  * day and a row can outlive the window by up to a day.
  */
 export const IDEMPOTENCY_TTL_MS = 24 * 60 * 60_000;
+
+/**
+ * How long an `in_flight` row is believed. A function that dies between
+ * the claim and the `done` update (a host timeout, a crash) never releases
+ * its row, and without this bound an honest retry with the same key would
+ * be refused as in flight until the sweep. Five minutes is the host's
+ * longest function duration on the Hobby plan (the entry file pins 60
+ * seconds), so an `in_flight` row older than this was abandoned, not still
+ * running; the middleware drops it and claims again.
+ */
+export const IDEMPOTENCY_IN_FLIGHT_MAX_MS = 5 * 60_000;

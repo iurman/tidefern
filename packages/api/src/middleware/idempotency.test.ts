@@ -18,7 +18,7 @@ import {
   IDEMPOTENCY_REPLAYED_HEADER,
   requestFingerprint,
 } from "./idempotency";
-import { IDEMPOTENCY_TTL_MS } from "./limits";
+import { IDEMPOTENCY_IN_FLIGHT_MAX_MS, IDEMPOTENCY_TTL_MS } from "./limits";
 
 const KEYS = {
   create: "018f5e7a-3000-7000-8000-000000000001",
@@ -31,6 +31,8 @@ const KEYS = {
   upsert: "018f5e7a-3000-7000-8000-000000000008",
   anonymous: "018f5e7a-3000-7000-8000-000000000009",
   noResource: "018f5e7a-3000-7000-8000-00000000000a",
+  abandoned: "018f5e7a-3000-7000-8000-00000000000b",
+  stillRunning: "018f5e7a-3000-7000-8000-00000000000c",
 };
 
 // A health word on purpose: the test proves it never reaches the row.
@@ -290,6 +292,54 @@ describe("an old row", () => {
     expect(fresh?.id).not.toBe("018f5e7a-5000-7000-8000-000000000001");
     expect(fresh?.resourceId).toBe(created[before]);
     expect(fresh?.createdAt.getTime()).toBeGreaterThan(stale.getTime());
+  });
+
+  it("drops an in_flight row a dead function left behind, so an honest retry runs", async () => {
+    // Older than the in-flight bound but well inside the 24 hour window.
+    const abandonedAt = new Date(Date.now() - IDEMPOTENCY_IN_FLIGHT_MAX_MS - 60_000);
+    expect(IDEMPOTENCY_IN_FLIGHT_MAX_MS + 60_000).toBeLessThan(IDEMPOTENCY_TTL_MS);
+    await harness.db.insert(schema.idempotencyKeys).values({
+      id: "018f5e7a-5000-7000-8000-000000000002",
+      actorId: ANNA,
+      key: KEYS.abandoned,
+      route: "POST /api/v1/_items",
+      requestHash: "stale",
+      state: "in_flight",
+      createdAt: abandonedAt,
+      updatedAt: abandonedAt,
+    });
+    const before = created.length;
+    const response = await post("/_items", KEYS.abandoned);
+    expect(response.status).toBe(201);
+    expect(response.headers.get(IDEMPOTENCY_REPLAYED_HEADER)).toBeNull();
+    expect(created).toHaveLength(before + 1);
+    const fresh = await row(ANNA, KEYS.abandoned);
+    expect(fresh?.id).not.toBe("018f5e7a-5000-7000-8000-000000000002");
+    expect(fresh).toMatchObject({
+      state: "done",
+      responseStatus: 201,
+      resourceId: created[before],
+    });
+  });
+
+  it("still answers 409 for an in_flight row younger than the bound", async () => {
+    const recentAt = new Date(Date.now() - IDEMPOTENCY_IN_FLIGHT_MAX_MS + 60_000);
+    await harness.db.insert(schema.idempotencyKeys).values({
+      id: "018f5e7a-5000-7000-8000-000000000003",
+      actorId: ANNA,
+      key: KEYS.stillRunning,
+      route: "POST /api/v1/_items",
+      requestHash: "stale",
+      state: "in_flight",
+      createdAt: recentAt,
+      updatedAt: recentAt,
+    });
+    const before = created.length;
+    const response = await post("/_items", KEYS.stillRunning);
+    expect(response.status).toBe(409);
+    expect(Problem.parse(await response.json()).detail).toBe(IDEMPOTENCY_KEY_IN_FLIGHT);
+    expect(created).toHaveLength(before);
+    expect((await row(ANNA, KEYS.stillRunning))?.id).toBe("018f5e7a-5000-7000-8000-000000000003");
   });
 });
 

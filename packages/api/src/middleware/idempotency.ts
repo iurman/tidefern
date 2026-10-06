@@ -9,7 +9,7 @@ import { jobId as uuidv7 } from "@tidefern/db/jobs";
 import type { ApiEnv } from "../context";
 import { problem } from "../problem";
 import type { ProblemCode } from "../problem";
-import { IDEMPOTENCY_TTL_MS, isMutation } from "./limits";
+import { IDEMPOTENCY_IN_FLIGHT_MAX_MS, IDEMPOTENCY_TTL_MS, isMutation } from "./limits";
 import { routeTemplate } from "./route";
 
 export const IDEMPOTENCY_KEY_HEADER = "Idempotency-Key";
@@ -27,6 +27,8 @@ export interface IdempotencyOptions {
   now?: (() => number) | undefined;
   /** How long a row answers replays; `IDEMPOTENCY_TTL_MS` unless a test narrows it. */
   ttlMs?: number | undefined;
+  /** How long an `in_flight` row blocks its key; `IDEMPOTENCY_IN_FLIGHT_MAX_MS` unless a test narrows it. */
+  inFlightMaxMs?: number | undefined;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -90,9 +92,11 @@ function resourceIdIn(bytes: ArrayBuffer, contentType: string | null): string | 
  * finished row answers a replay with the same method, path and body from
  * what was stored (the status, and for a created resource its id and
  * location), a different body with the same key is the 409 problem, and a
- * row older than the window is dropped and the request runs again. A
- * handler answer of 5xx releases the row, so a client may retry it. No
- * request or response body is ever stored, only their hashes.
+ * row older than the window is dropped and the request runs again, as is
+ * an `in_flight` row older than `IDEMPOTENCY_IN_FLIGHT_MAX_MS`, which a
+ * function that died before its `done` update left behind. A handler
+ * answer of 5xx releases the row, so a client may retry it. No request or
+ * response body is ever stored, only their hashes.
  */
 export function idempotency(
   db: ActorDatabase | undefined,
@@ -100,6 +104,7 @@ export function idempotency(
 ): MiddlewareHandler<ApiEnv> {
   const now = options.now ?? Date.now;
   const ttlMs = options.ttlMs ?? IDEMPOTENCY_TTL_MS;
+  const inFlightMaxMs = options.inFlightMaxMs ?? IDEMPOTENCY_IN_FLIGHT_MAX_MS;
 
   return async (c, next) => {
     const actor = c.var.actor;
@@ -173,8 +178,14 @@ export function idempotency(
         db,
       );
 
+    /** A row past the window, or an `in_flight` row nothing can still be running, is gone. */
+    const abandoned = (existing: StoredRow): boolean => {
+      const age = startedAt - existing.createdAt.getTime();
+      return age >= ttlMs || (existing.state === "in_flight" && age >= inFlightMaxMs);
+    };
+
     let claimed = await claim();
-    if ("existing" in claimed && claimed.existing.createdAt.getTime() <= startedAt - ttlMs) {
+    if ("existing" in claimed && abandoned(claimed.existing)) {
       await forget(claimed.existing.id);
       claimed = await claim();
     }

@@ -11,6 +11,8 @@ import type { LogLine } from "./logger";
 
 const SECRET = "test-only-log-secret";
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+const CLIENT_REQUEST_ID = "018f5e7a-7000-7000-8000-000000000001";
+const PLATFORM_REQUEST_ID = "iad1::abc12-1700000000000-0123456789ab";
 
 let harness: ApiTestDatabase;
 let auth: FakeAuth;
@@ -56,7 +58,7 @@ describe("the allowlist logger", () => {
         origin: OWN_ORIGIN,
         "content-type": "application/json",
         "x-tidefern-client": "ios/1.2.3",
-        "x-request-id": "req-abc-123",
+        "x-request-id": CLIENT_REQUEST_ID,
       },
       body: JSON.stringify({ note: "nausea after breakfast" }),
     });
@@ -69,7 +71,7 @@ describe("the allowlist logger", () => {
       true,
     );
     expect(line).toMatchObject({
-      requestId: "req-abc-123",
+      requestId: CLIENT_REQUEST_ID,
       method: "PUT",
       route: "/api/v1/_probe",
       status: 200,
@@ -78,7 +80,7 @@ describe("the allowlist logger", () => {
     expect(line.latencyMs).toBeGreaterThanOrEqual(0);
     expect(line.actor).toBe(hashId(ANNA, SECRET));
     expect(line.actor).not.toBe(ANNA);
-    expect(response.headers.get(REQUEST_ID_HEADER)).toBe("req-abc-123");
+    expect(response.headers.get(REQUEST_ID_HEADER)).toBe(CLIENT_REQUEST_ID);
 
     for (const forbidden of [
       "nausea",
@@ -109,7 +111,7 @@ describe("the allowlist logger", () => {
     expect(hashId(ANNA, "one")).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it("mints a request id when the given one is not a plain token, and echoes it", async () => {
+  it("mints a request id when the client's is not a UUID, and echoes it", async () => {
     const response = await app.request("/api/v1/_things/x", {
       headers: { "x-request-id": 'bad id "with spaces"' },
     });
@@ -118,13 +120,45 @@ describe("the allowlist logger", () => {
     expect(response.headers.get(REQUEST_ID_HEADER)).toBe(id);
     expect(lines.at(-1)).not.toContain("spaces");
 
+    // A plain token that is not a UUID is free text to the log and is replaced too.
     await app.request("/api/v1/_things/x", {
-      headers: { "x-vercel-id": "iad1::abc12-1700000000000-0123456789ab" },
+      headers: { "x-request-id": "nausea-tracker-req-123" },
     });
-    expect(last().requestId).toBe("iad1::abc12-1700000000000-0123456789ab");
+    expect(last().requestId).toMatch(UUID);
+    expect(lines.at(-1)).not.toContain("nausea");
+
+    await app.request("/api/v1/_things/x", {
+      headers: { "x-request-id": CLIENT_REQUEST_ID.toUpperCase() },
+    });
+    expect(last().requestId).toBe(CLIENT_REQUEST_ID);
   });
 
-  it("drops a client header that is not platform/semver", async () => {
+  it("prefers the platform's request id and keeps only its own shape", async () => {
+    await app.request("/api/v1/_things/x", {
+      headers: { "x-vercel-id": PLATFORM_REQUEST_ID, "x-request-id": CLIENT_REQUEST_ID },
+    });
+    expect(last().requestId).toBe(PLATFORM_REQUEST_ID);
+
+    await app.request("/api/v1/_things/x", {
+      headers: { "x-vercel-id": `sfo1::${PLATFORM_REQUEST_ID}` },
+    });
+    expect(last().requestId).toBe(`sfo1::${PLATFORM_REQUEST_ID}`);
+
+    // A platform id that is not the platform's shape falls through to the client's UUID.
+    await app.request("/api/v1/_things/x", {
+      headers: { "x-vercel-id": "nausea-tracker", "x-request-id": CLIENT_REQUEST_ID },
+    });
+    expect(last().requestId).toBe(CLIENT_REQUEST_ID);
+    expect(lines.at(-1)).not.toContain("nausea");
+
+    await app.request("/api/v1/_things/x", {
+      headers: { "x-vercel-id": "iad1::nausea after breakfast-1700000000000-0123456789ab" },
+    });
+    expect(last().requestId).toMatch(UUID);
+    expect(lines.at(-1)).not.toContain("nausea");
+  });
+
+  it("drops a client header that is not platform/semver, or whose prerelease runs long", async () => {
     await app.request("/api/v1/_things/x", { headers: { "x-tidefern-client": "nausea tracker" } });
     expect(last().client).toBeUndefined();
     expect(lines.at(-1)).not.toContain("nausea");
@@ -132,6 +166,12 @@ describe("the allowlist logger", () => {
       headers: { "x-tidefern-client": "android/2.0.0-beta.1" },
     });
     expect(last().client).toBe("android/2.0.0-beta.1");
+
+    await app.request("/api/v1/_things/x", {
+      headers: { "x-tidefern-client": "android/2.0.0-nausea.after.breakfast" },
+    });
+    expect(last().client).toBeUndefined();
+    expect(lines.at(-1)).not.toContain("nausea");
   });
 
   it("logs a 404 under the middleware's own pattern, not the unknown path", async () => {
