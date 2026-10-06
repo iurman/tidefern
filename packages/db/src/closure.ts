@@ -91,8 +91,10 @@ function deleteWhere(table: PgTable, condition: (userId: string) => ReturnType<t
  */
 export const closureDeletions: readonly ClosureDeletion[] = [
   {
-    // Outbox rows still waiting to act for her (a reminder, a mail). The
-    // closure's own `account.delete` jobs stay: they carry this run.
+    // Outbox rows that name her (a reminder, a mail), waiting or already
+    // finished, so no job row keeps her id after the closure. The
+    // closure's own `account.delete` jobs stay: they carry this run, and
+    // the tombstone step strips her id from them (`forgetClosureJobs`).
     table: "jobs",
     remove: (tx, userId) =>
       removed(
@@ -101,7 +103,7 @@ export const closureDeletions: readonly ClosureDeletion[] = [
           .where(
             and(
               sql`${schema.jobs.type} <> 'account.delete'`,
-              inArray(schema.jobs.status, ["queued", "failed", "dead"]),
+              inArray(schema.jobs.status, ["queued", "failed", "dead", "done"]),
               sql`${schema.jobs.payloadJson}::text like ${`%${userId}%`}`,
             ),
           )
@@ -277,6 +279,56 @@ export const closureDeletions: readonly ClosureDeletion[] = [
 ];
 
 /**
+ * Whether the closure of this person will have stored objects to remove:
+ * a photo of hers, or of a child she is the only guardian of (that child
+ * is deleted with her). The `account.delete` handler asks this before it
+ * destroys anything, so a closure that would stop at the photos for want
+ * of an object store never starts.
+ */
+export async function closureHasPhotos(tx: Transaction, userId: string): Promise<boolean> {
+  const [row] = await tx
+    .select({ one: sql<number>`1` })
+    .from(schema.photos)
+    .where(
+      or(
+        eq(schema.photos.subjectId, userId),
+        sql`${schema.photos.subjectId} in (
+          select mine.child_id from ${schema.childGuardians} mine
+          where mine.user_id = ${userId}
+            and not exists (
+              select 1 from ${schema.childGuardians} other
+              where other.child_id = mine.child_id and other.user_id <> ${userId}
+            )
+        )`,
+      ),
+    )
+    .limit(1);
+  return row !== undefined;
+}
+
+/**
+ * Strips the person's id from her closure's own `account.delete` jobs,
+ * finished or not, so that once the tombstone is written no job row links
+ * the closure to her. The handler needs only the request id. Returns how
+ * many payloads changed.
+ */
+export async function forgetClosureJobs(tx: Transaction, requestId: string): Promise<number> {
+  return removed(
+    tx
+      .update(schema.jobs)
+      .set({ payloadJson: sql`${schema.jobs.payloadJson} - 'userId'` })
+      .where(
+        and(
+          eq(schema.jobs.type, "account.delete"),
+          sql`${schema.jobs.payloadJson} ->> 'requestId' = ${requestId}`,
+          sql`${schema.jobs.payloadJson} ->> 'userId' is not null`,
+        ),
+      )
+      .returning({ one: sql<number>`1` }),
+  );
+}
+
+/**
  * Runs the deletions in order and stops after the first that removed
  * anything, so one call is one bounded step and a call with nothing left
  * to delete returns null. A step that already ran removes nothing the
@@ -303,7 +355,7 @@ export async function deleteNextUserRows(
 export async function closuresWithoutJob(
   tx: Transaction,
   now: Date,
-): Promise<{ requestId: string; userId: string | null }[]> {
+): Promise<{ requestId: string }[]> {
   const live = tx
     .select({ one: sql`1` })
     .from(schema.jobs)
@@ -315,7 +367,7 @@ export async function closuresWithoutJob(
       ),
     );
   return tx
-    .select({ requestId: schema.dataRequests.id, userId: schema.dataRequests.userId })
+    .select({ requestId: schema.dataRequests.id })
     .from(schema.dataRequests)
     .where(
       and(

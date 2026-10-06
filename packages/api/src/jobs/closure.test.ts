@@ -10,7 +10,7 @@ import {
   provisionChildKey,
   unwrapForSubject,
 } from "@tidefern/crypto";
-import { closureDeletions, emailHmac, schema } from "@tidefern/db";
+import { closureDeletions, closureHasPhotos, emailHmac, schema, withSystem } from "@tidefern/db";
 import { claimDue } from "@tidefern/db/jobs";
 import type { Job } from "@tidefern/db/jobs";
 
@@ -32,6 +32,7 @@ import {
 import type { AccountFixture } from "../test/account";
 import {
   ClosureConfigurationError,
+  OBJECT_REMOVE_BATCH,
   advanceClosure,
   createClosureHandler,
   processorNotice,
@@ -72,7 +73,9 @@ class Inbox implements Mailer {
 
 class Bucket implements ObjectStore {
   readonly removed: string[] = [];
+  readonly batches: number[] = [];
   async remove(keys: readonly string[]): Promise<void> {
+    this.batches.push(keys.length);
     this.removed.push(...keys);
   }
 }
@@ -226,6 +229,11 @@ function count(world: World, table: PgTable, where: SQL | undefined): Promise<nu
   return world.fixture.harness.db.$count(table, where);
 }
 
+/** Every job row, payload included, as one string, to look for an id in. */
+async function allJobsText(world: World): Promise<string> {
+  return JSON.stringify(await world.fixture.harness.db.select().from(schema.jobs));
+}
+
 describe("a closure with the undo window, walked one step at a time", () => {
   let world: World;
   let requestId: string;
@@ -296,8 +304,8 @@ describe("a closure with the undo window, walked one step at a time", () => {
     expect(await revokes()).toBe(before + 1);
   });
 
-  it("refuses to start deleting without the secret, the mailer or the owner address, and changes nothing", async () => {
-    for (const missing of ["hmacSecret", "mailer", "ownerEmail"] as const) {
+  it("refuses to start deleting without the secret, the mailer, the owner address or (with photos) an object store, and changes nothing", async () => {
+    for (const missing of ["hmacSecret", "mailer", "ownerEmail", "objects"] as const) {
       const settings = { ...world.settings, [missing]: undefined };
       await expect(advance(afterWindow(), settings)).rejects.toBeInstanceOf(
         ClosureConfigurationError,
@@ -319,6 +327,7 @@ describe("a closure with the undo window, walked one step at a time", () => {
   it("destroys her key first: the note rows are still there and no longer decrypt", async () => {
     expect(await advance(afterWindow())).toEqual({ step: "key", state: "in_progress" });
     expect(await count(world, schema.subjectKeys, eq(schema.subjectKeys.subjectId, ANNA))).toBe(0);
+    expect(world.bucket.batches).toEqual([]);
     const [note] = await db()
       .select()
       .from(schema.notes)
@@ -449,6 +458,11 @@ describe("a closure with the undo window, walked one step at a time", () => {
       .from(schema.childEvents)
       .where(eq(schema.childEvents.id, CO_EVENT));
     expect(event?.authorId).toBeNull();
+    // Her closure's own jobs, E8's first one included, keep the request id only.
+    const jobs = await closureJobs(world);
+    expect(jobs.length).toBeGreaterThan(0);
+    for (const job of jobs) expect(job.payloadJson).toEqual({ requestId });
+    expect(await allJobsText(world)).not.toContain(ANNA);
   });
 
   it("sends the owner the content-free processor notice and finishes", async () => {
@@ -571,6 +585,8 @@ describe("delete now", () => {
     expect(await count(world, schema.children, eq(schema.children.id, CHILD))).toBe(0);
     // No follow-up was needed.
     expect((await closureJobs(world)).filter((job) => job.status !== "done")).toEqual([]);
+    // The finished job no longer names her.
+    expect(await allJobsText(world)).not.toContain(ANNA);
   });
 });
 
@@ -601,7 +617,7 @@ describe("a run that spends its budget", () => {
     expect(await count(world, schema.subjectKeys, eq(schema.subjectKeys.subjectId, BEN))).toBe(1);
     const queued = (await closureJobs(world)).filter((row) => row.status === "queued");
     expect(queued).toHaveLength(1);
-    expect(queued[0]?.payloadJson).toEqual({ requestId, userId: BEN });
+    expect(queued[0]?.payloadJson).toEqual({ requestId });
     expect(queued[0]?.runAfter.getTime()).toBe(now.getTime());
   });
 
@@ -641,5 +657,112 @@ describe("a run that spends its budget", () => {
         },
       ),
     ).rejects.toBeInstanceOf(TypeError);
+  });
+});
+
+describe("the object store check before anything is destroyed", () => {
+  let world: World;
+  const db = () => world.fixture.harness.db;
+  const withoutStore = (): ClosureSettings => ({ ...world.settings, objects: undefined });
+  beforeAll(async () => {
+    world = await createWorld();
+  });
+  afterAll(async () => {
+    await world.fixture.harness.close();
+  });
+
+  it("counts her own photos and those of a child she guards alone, not a co-guarded child's", async () => {
+    const has = (userId: string) => withSystem((tx) => closureHasPhotos(tx, userId), db());
+    // Anna: her own photo, and the lone child's.
+    expect(await has(ANNA)).toBe(true);
+    // Ben guards only the co-guarded child, which has no photo yet.
+    expect(await has(BEN)).toBe(false);
+    await db().insert(schema.photos).values({
+      id: "018f5e7a-d000-7000-8000-000000000003",
+      subjectId: CO_CHILD,
+      childId: CO_CHILD,
+      authorId: BEN,
+      category: "child",
+      objectKey: "objects/co1",
+      contentType: "image/jpeg",
+      byteLength: 10,
+    });
+    // Still false: Anna stays with that child, so its photo stays too.
+    expect(await has(BEN)).toBe(false);
+    expect(await has(CARA)).toBe(false);
+  });
+
+  it("lets a closure with no photo to remove start without a store", async () => {
+    const { requestId } = await close(world, "now", TOKENS.ben);
+    expect(await advanceClosure(db(), requestId, withoutStore(), new Date())).toEqual({
+      step: "started",
+      state: "in_progress",
+    });
+    expect(await advanceClosure(db(), requestId, withoutStore(), new Date())).toEqual({
+      step: "key",
+      state: "in_progress",
+    });
+  });
+
+  it("refuses a closure with photos and no store, before her key goes, even once started", async () => {
+    const { requestId } = await close(world, "now", TOKENS.anna);
+    await expect(
+      advanceClosure(db(), requestId, withoutStore(), new Date()),
+    ).rejects.toBeInstanceOf(ClosureConfigurationError);
+    expect((await requestRow(world, requestId))?.state).toBe("requested");
+    expect(await count(world, schema.session, eq(schema.session.userId, ANNA))).toBe(1);
+    // Started with a store, then run by a host that has none: the key stays.
+    expect(await advanceClosure(db(), requestId, world.settings, new Date())).toEqual({
+      step: "started",
+      state: "in_progress",
+    });
+    await expect(
+      advanceClosure(db(), requestId, withoutStore(), new Date()),
+    ).rejects.toBeInstanceOf(ClosureConfigurationError);
+    expect(await count(world, schema.subjectKeys, eq(schema.subjectKeys.subjectId, ANNA))).toBe(1);
+    expect(await count(world, schema.children, eq(schema.children.id, CHILD))).toBe(1);
+    expect(world.bucket.removed).toEqual([]);
+  });
+});
+
+describe("a photo library larger than one object store request", () => {
+  let world: World;
+  const extra = OBJECT_REMOVE_BATCH + 200;
+  beforeAll(async () => {
+    world = await createWorld();
+    const rows = Array.from({ length: extra }, (_, index) => ({
+      id: `018f5e7a-e000-7000-8000-${index.toString(16).padStart(12, "0")}`,
+      subjectId: ANNA,
+      authorId: ANNA,
+      category: "pregnancy.photos" as const,
+      objectKey: `objects/many-${index}`,
+      contentType: "image/jpeg",
+      byteLength: 10,
+    }));
+    await world.fixture.harness.db.insert(schema.photos).values(rows);
+  });
+  afterAll(async () => {
+    await world.fixture.harness.close();
+  });
+
+  it("removes every object in requests of at most the batch limit", async () => {
+    const { requestId } = await close(world, "now");
+    for (;;) {
+      const result = await advanceClosure(
+        world.fixture.harness.db,
+        requestId,
+        world.settings,
+        new Date(),
+      );
+      if (result.step === "objects") break;
+      expect(result.step).not.toBe("rows");
+    }
+    // The lone child's photo went first, in its own request.
+    expect(world.bucket.batches).toEqual([1, OBJECT_REMOVE_BATCH, extra + 2 - OBJECT_REMOVE_BATCH]);
+    const removed = new Set(world.bucket.removed);
+    expect(removed.size).toBe(extra + 3);
+    expect(removed.has("objects/a1-thumb")).toBe(true);
+    expect(removed.has(`objects/many-${extra - 1}`)).toBe(true);
+    expect(await count(world, schema.photos, eq(schema.photos.subjectId, ANNA))).toBe(0);
   });
 });

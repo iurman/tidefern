@@ -10,6 +10,7 @@ import {
   closuresWithoutJob,
   deleteNextUserRows,
   emailHmac,
+  forgetClosureJobs,
   openClosureOf,
   purgeClosureTombstones,
 } from "./closure";
@@ -169,18 +170,44 @@ describe("deleteNextUserRows", () => {
     await harness.db.delete(schema.households);
   });
 
-  test("leaves the closure's own job and takes every other job that names her", async () => {
+  test("leaves the closure's own job and takes every other job that names her, finished ones too", async () => {
     await harness.db.insert(schema.jobs).values([
       { id: id(301), type: "account.delete", payloadJson: { requestId: id(1), userId: CARA } },
       { id: id(302), type: "reminder.send", payloadJson: { subjectId: CARA } },
       { id: id(303), type: "reminder.send", payloadJson: { subjectId: BEN } },
+      { id: id(304), type: "reminder.send", payloadJson: { subjectId: CARA }, status: "done" },
     ]);
     expect(await withSystem((tx) => deleteNextUserRows(tx, CARA), harness.db)).toEqual({
       table: "jobs",
-      removed: 1,
+      removed: 2,
     });
     const left = await harness.db.select({ id: schema.jobs.id }).from(schema.jobs);
     expect(left.map((row) => row.id).sort()).toEqual([id(301), id(303)]);
+  });
+
+  test("forgetClosureJobs strips her id from that closure's jobs only, finished or not", async () => {
+    await harness.db.insert(schema.jobs).values([
+      { id: id(311), type: "account.delete", payloadJson: { requestId: id(1), userId: CARA } },
+      {
+        id: id(312),
+        type: "account.delete",
+        payloadJson: { requestId: id(1), userId: CARA },
+        status: "done",
+      },
+      { id: id(313), type: "account.delete", payloadJson: { requestId: id(2), userId: BEN } },
+      { id: id(314), type: "reminder.send", payloadJson: { requestId: id(1), userId: CARA } },
+    ]);
+    expect(await withSystem((tx) => forgetClosureJobs(tx, id(1)), harness.db)).toBe(2);
+    const rows = await harness.db
+      .select({ id: schema.jobs.id, payloadJson: schema.jobs.payloadJson })
+      .from(schema.jobs);
+    const payloadOf = (jobId: string) => rows.find((row) => row.id === jobId)?.payloadJson;
+    expect(payloadOf(id(311))).toEqual({ requestId: id(1) });
+    expect(payloadOf(id(312))).toEqual({ requestId: id(1) });
+    expect(payloadOf(id(313))).toEqual({ requestId: id(2), userId: BEN });
+    expect(payloadOf(id(314))).toEqual({ requestId: id(1), userId: CARA });
+    // A second call finds nothing left to strip.
+    expect(await withSystem((tx) => forgetClosureJobs(tx, id(1)), harness.db)).toBe(0);
   });
 });
 
@@ -228,11 +255,9 @@ describe("the sweep's closure duties", () => {
       .from(schema.jobs)
       .where(eq(schema.jobs.status, "queued"));
     const added = fresh.filter((job) => job.id !== id(414));
+    // The request id alone: no new job names the person.
     expect(added.map((job) => job.payloadJson)).toEqual(
-      expect.arrayContaining([
-        { requestId: stuck, userId: ANNA },
-        { requestId: orphan, userId: BEN },
-      ]),
+      expect.arrayContaining([{ requestId: stuck }, { requestId: orphan }]),
     );
     expect(added).toHaveLength(2);
     for (const job of added) {

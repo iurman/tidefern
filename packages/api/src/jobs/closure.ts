@@ -1,6 +1,14 @@
 import { and, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { destroySubjectKey } from "@tidefern/crypto";
-import { deleteNextUserRows, emailHmac, isActorId, schema, withSystem } from "@tidefern/db";
+import {
+  closureHasPhotos,
+  deleteNextUserRows,
+  emailHmac,
+  forgetClosureJobs,
+  isActorId,
+  schema,
+  withSystem,
+} from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
 import { enqueue } from "@tidefern/db/jobs";
 import type { Job } from "@tidefern/db/jobs";
@@ -79,8 +87,15 @@ export interface ClosureAdvance {
  * slice, so the API takes the host's client without depending on it.
  */
 export interface ObjectStore {
+  /** Never called with more than `OBJECT_REMOVE_BATCH` keys. */
   remove(keys: readonly string[]): Promise<void>;
 }
+
+/**
+ * The most keys one `ObjectStore.remove` call carries: the S3
+ * DeleteObjects limit of 1000 keys per request, which R2 implements.
+ */
+export const OBJECT_REMOVE_BATCH = 1000;
 
 export interface ClosureSettings {
   /** `LOG_HMAC_SECRET` (17.1): keys the HMAC of the email the tombstone keeps. */
@@ -216,10 +231,13 @@ async function removePhotos(
     .from(schema.photoVariants)
     .where(inArray(schema.photoVariants.photoId, ids));
   const store = need(settings, "objects", "an object store");
-  await store.remove([
+  const keys = [
     ...photos.map((photo) => photo.objectKey),
     ...variants.map((variant) => variant.objectKey),
-  ]);
+  ];
+  for (let start = 0; start < keys.length; start += OBJECT_REMOVE_BATCH) {
+    await store.remove(keys.slice(start, start + OBJECT_REMOVE_BATCH));
+  }
   await tx.delete(schema.photoVariants).where(inArray(schema.photoVariants.photoId, ids));
   await tx.delete(schema.photos).where(inArray(schema.photos.id, ids));
   return true;
@@ -275,6 +293,27 @@ async function nextChild(
 }
 
 /**
+ * Everything a closure needs to run to its end, checked before anything is
+ * destroyed: the secret for the tombstone, the mailer and the owner's
+ * address for the processor notice, and an object store when she, or a
+ * child she guards alone, has a photo. A closure that would otherwise stop
+ * halfway (her key gone, the photos stuck) refuses here instead and
+ * changes nothing.
+ */
+async function requireFinishable(
+  tx: Transaction,
+  userId: string,
+  settings: Settings,
+): Promise<void> {
+  need(settings, "hmacSecret", "LOG_HMAC_SECRET");
+  need(settings, "mailer", "a mailer");
+  need(settings, "ownerEmail", "OWNER_EMAIL");
+  if (await closureHasPhotos(tx, userId)) {
+    need(settings, "objects", "an object store");
+  }
+}
+
+/**
  * Advances one closure by exactly one step in one system transaction and
  * reports which. Idempotent: run it again after any step and it either
  * does the next one or, once the closure is finished, nothing.
@@ -303,9 +342,7 @@ export async function advanceClosure(
         return { step: "waiting", state: "requested", undoUntil: row.undoUntil };
       }
       // Nothing is destroyed until the run could also finish.
-      need(settings, "hmacSecret", "LOG_HMAC_SECRET");
-      need(settings, "mailer", "a mailer");
-      need(settings, "ownerEmail", "OWNER_EMAIL");
+      await requireFinishable(tx, row.userId, settings);
       await tx.delete(schema.session).where(eq(schema.session.userId, row.userId));
       await tx
         .update(schema.dataRequests)
@@ -329,6 +366,9 @@ export async function advanceClosure(
       return { step: "done", state: "completed" };
     }
 
+    // Checked again on every destructive step, since the settings are read
+    // per run and a host may have changed them since `started`.
+    await requireFinishable(tx, userId, settings);
     if (await destroySubjectKey(tx, userId)) {
       return { step: "key", state: "in_progress" };
     }
@@ -356,6 +396,8 @@ export async function advanceClosure(
       })
       .where(eq(schema.dataRequests.id, row.id));
     await tx.delete(schema.user).where(eq(schema.user.id, userId));
+    // Her own closure jobs, finished ones included, keep only the request id.
+    await forgetClosureJobs(tx, row.id);
     return { step: "tombstone", state: "in_progress" };
   }, db);
 }
@@ -363,7 +405,8 @@ export async function advanceClosure(
 /**
  * Makes sure a later run will pick the closure up: one `account.delete`
  * job for the request, due at `runAfter`, unless another live one (not the
- * job running now) already exists. Ids only in the payload.
+ * job running now) already exists. The payload is the request id alone, so
+ * no follow-up names the person.
  */
 async function ensureFollowUp(
   db: ActorDatabase,
@@ -385,13 +428,7 @@ async function ensureFollowUp(
       )
       .limit(1);
     if (live !== undefined) return;
-    const userId = current.payloadJson["userId"];
-    await enqueue(
-      tx,
-      "account.delete",
-      typeof userId === "string" ? { requestId, userId } : { requestId },
-      { runAfter },
-    );
+    await enqueue(tx, "account.delete", { requestId }, { runAfter });
   }, db);
 }
 

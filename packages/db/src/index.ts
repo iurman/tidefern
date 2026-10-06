@@ -7,9 +7,11 @@ export {
   CLOSURE_TOMBSTONE_MS,
   OPEN_CLOSURE_STATES,
   closureDeletions,
+  closureHasPhotos,
   closuresWithoutJob,
   deleteNextUserRows,
   emailHmac,
+  forgetClosureJobs,
   openClosureOf,
   purgeClosureTombstones,
 } from "./closure";

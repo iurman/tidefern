@@ -472,10 +472,8 @@ export async function sweep(db: ActorDatabase, now: Date = new Date()): Promise<
       lt(schema.productEvents.day, dayBefore(now, RETENTION.productEventDays)),
     );
     let closures = 0;
-    for (const { requestId, userId } of await closuresWithoutJob(tx, now)) {
-      await enqueue(tx, "account.delete", userId === null ? { requestId } : { requestId, userId }, {
-        runAfter: now,
-      });
+    for (const { requestId } of await closuresWithoutJob(tx, now)) {
+      await enqueue(tx, "account.delete", { requestId }, { runAfter: now });
       closures += 1;
     }
     const closureTombstones = await purgeClosureTombstones(tx, now);
