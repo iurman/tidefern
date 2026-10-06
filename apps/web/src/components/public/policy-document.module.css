@@ -1,0 +1,208 @@
+.document {
+  padding-block: var(--space-12) var(--space-8);
+}
+
+.head {
+  display: grid;
+  max-width: var(--size-reading);
+  margin-bottom: var(--space-8);
+}
+
+.title {
+  margin-bottom: var(--space-3);
+  text-wrap: balance;
+}
+
+.updated {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.draft {
+  margin: var(--space-4) 0 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--type-small);
+  color: var(--text);
+}
+
+.body,
+.bodyWithContents {
+  display: grid;
+  gap: var(--space-8);
+}
+
+.reading {
+  min-width: 0;
+  max-width: var(--size-reading);
+}
+
+.contentsWide {
+  display: none;
+}
+
+.contentsNarrow {
+  min-width: 0;
+  max-width: var(--size-reading);
+}
+
+.contentsTitle {
+  margin: 0 0 var(--space-2);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.contentsList {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+}
+
+.contentsLink {
+  display: flex;
+  align-items: center;
+  min-height: var(--size-control);
+  padding-inline: var(--space-2);
+  margin-inline: calc(-1 * var(--space-2));
+  border-radius: var(--radius-control);
+  color: var(--text);
+  font-size: var(--type-small);
+  text-decoration: none;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    color var(--duration-feedback) var(--ease-interface);
+}
+
+.contentsLink:hover {
+  background: var(--panel);
+  color: var(--accent);
+}
+
+.section {
+  padding-top: var(--space-6);
+}
+
+.section + .section {
+  margin-top: var(--space-6);
+  border-top: 1px solid var(--soft-border);
+}
+
+.section p,
+.section ul,
+.section ol {
+  max-width: 68ch;
+}
+
+.section :last-child {
+  margin-bottom: 0;
+}
+
+/* The Tailwind reset strips list markers; a reading column keeps them. */
+.section ul,
+.section ol {
+  margin: 0 0 var(--space-4);
+  padding-left: 1.25em;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.section ul {
+  list-style: disc;
+}
+
+.section ol {
+  list-style: decimal;
+}
+
+.heading {
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: 1.2;
+  margin-bottom: var(--space-4);
+}
+
+.owner {
+  display: inline;
+  padding: 0 0.3em;
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--text);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
+  font-size: 0.85em;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.facts {
+  margin: 0 0 var(--space-4);
+  display: grid;
+  gap: var(--space-3);
+}
+
+.fact {
+  display: grid;
+  grid-template-columns: minmax(0, 12rem) minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  padding-block: var(--space-3);
+  border-top: 1px solid var(--soft-border);
+}
+
+.factTerm {
+  font-weight: var(--weight-sans-strong);
+}
+
+.factDetail {
+  margin: 0;
+  color: var(--text);
+}
+
+.factDetail p {
+  margin: 0;
+}
+
+.factDetail p + p {
+  margin-top: var(--space-2);
+}
+
+@media (min-width: 1024px) {
+  .bodyWithContents {
+    grid-template-columns: 240px minmax(0, var(--size-reading));
+    gap: var(--space-16);
+    align-items: start;
+  }
+
+  .contentsWide {
+    display: block;
+    position: sticky;
+    top: var(--space-8);
+    z-index: var(--elevation-z-sticky);
+  }
+
+  .contentsNarrow {
+    display: none;
+  }
+}
+
+@media (max-width: 600px) {
+  .document {
+    padding-block: var(--space-8) var(--space-6);
+  }
+
+  .fact {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--space-1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .contentsLink {
+    transition-duration: 0ms;
+  }
+}
