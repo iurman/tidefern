@@ -60,3 +60,46 @@ export async function passkeyAutofillAvailable(host: PasskeyHost | undefined): P
     return false;
   }
 }
+
+/** Where a page sends a visitor whose session is missing or too old for what they asked. */
+export const SIGN_IN_PATH = "/sign-in";
+
+/** The `detail` the API's `requireFreshAuth` puts on its 401 problem (packages/api, task C2). */
+export const FRESH_AUTHENTICATION_REQUIRED = "fresh_authentication_required";
+
+/**
+ * The error a settings call can answer with. Better Auth's own refusals
+ * carry `code`; a refusal from a `/v1` route is an RFC 9457 problem whose
+ * `detail` names the reason. The client surfaces the body's fields on the
+ * error, so both shapes arrive on one object.
+ */
+export interface SettingsCallError extends AuthClientError {
+  detail?: string | undefined;
+}
+
+/**
+ * Whether a refusal means "sign in again, then retry": the API's ten-minute
+ * rule from architecture 6.1 (`fresh_authentication_required` on a 401) or
+ * Better Auth's own freshness rule on the session routes
+ * (`SESSION_NOT_FRESH` on a 403). Both are answered the same way on the
+ * page: the next step is a fresh sign-in, never a retry.
+ */
+export function freshAuthRequired(error: SettingsCallError | null | undefined): boolean {
+  if (error === null || error === undefined) return false;
+  if (error.status === 401 && error.detail === FRESH_AUTHENTICATION_REQUIRED) return true;
+  return error.code === "SESSION_NOT_FRESH";
+}
+
+/**
+ * Whether a refusal means there is no session at all (the cookie is stale
+ * or gone), in which case the page sends the person to sign in rather than
+ * showing a failure it cannot help with. Keyed on the code, not the status
+ * alone: Better Auth's session middleware answers `UNAUTHORIZED` and the
+ * API's problem answers `unauthenticated`, while a wrong one-time code is
+ * also a 401 (`INVALID_CODE`) and must stay on the page.
+ */
+export function sessionGone(error: SettingsCallError | null | undefined): boolean {
+  if (error === null || error === undefined || error.status !== 401) return false;
+  if (freshAuthRequired(error)) return false;
+  return error.code === "UNAUTHORIZED" || error.code === "unauthenticated";
+}

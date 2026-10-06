@@ -1,0 +1,41 @@
+/* The devices route inside the settings shell: one column, tokens only, both themes through them. */
+
+.page {
+  max-width: var(--size-reading);
+}
+
+.heading {
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  margin-bottom: var(--space-3);
+}
+
+.lede {
+  color: var(--muted);
+  margin-bottom: var(--space-6);
+}
+
+.list {
+  border-bottom: 1px solid var(--soft-border);
+}
+
+.pending {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.feedback {
+  display: grid;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.feedbackAction {
+  display: flex;
+}
+
+.related {
+  margin-top: var(--space-8);
+  font-size: var(--type-small);
+}
