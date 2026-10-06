@@ -11,6 +11,8 @@ database access goes through. Imported by `packages/api` (and later
 | `DATABASE_URL`          | `src/client.ts` (the app)                    | The pooled Neon string (host contains `-pooler`)        |
 | `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`    | The owner role's direct string; migrations only         |
 | `MIGRATE_DESTRUCTIVE`   | the owner-triggered migration workflow (B12) | `1` lets the runner apply a contract migration (DROP, RENAME, ALTER COLUMN ... TYPE, TRUNCATE) |
+| `TIDEFERN_KEK_V1`       | `scripts/seed.ts`                            | The KEK the seed seals its free text under; base64 of 32 bytes, the environment's own value |
+| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`                            | An ISO 8601 instant that freezes the seed's "today"; refused when `VERCEL_ENV` is `production` |
 
 ## Commands
 
@@ -19,7 +21,7 @@ From the repository root:
 ```sh
 pnpm db:generate   # drizzle-kit generate: writes SQL and journal from src/schema
 pnpm db:migrate    # applies the committed journal to DATABASE_URL_UNPOOLED
-pnpm db:seed       # synthetic data; arrives with task B9
+pnpm db:seed       # the synthetic cast of two households against DATABASE_URL (see Seed data)
 ```
 
 A hand-written migration (grants, functions, anything drizzle-kit cannot
@@ -171,8 +173,10 @@ revoked_at IS NULL`, so two active grants on one tuple cannot exist,
   `mood` are enums, symptoms are `entry_symptoms` rows unique per entry
   and code. `cycle_predictions` stores the shape core's `predictCycle`
   returns, one live row per subject. `vocabulary` is seeded by
-  `seedVocabulary(tx)` in `src/seed/vocabulary.ts` from the Zod enums with
-  `ON CONFLICT DO NOTHING`; the second run inserts nothing.
+  `seedVocabulary(tx, { createdAt })` in `src/seed/vocabulary.ts` from the
+  Zod enums with `ON CONFLICT DO NOTHING`; the second run inserts nothing,
+  and the full seed passes its own instant so the rows do not take the
+  clock.
 - Pregnancy: one open pregnancy per subject (`ended_at IS NULL`);
   `ended_at` and `ended_reason` are set together; `due_date_changes` is
   the append-only history core's `changeDueDate` writes; `pregnancy_events`
@@ -320,6 +324,103 @@ REPLACE FUNCTION`, both additive; drizzle-kit does not model the helpers,
 the policies, `FORCE` or the three indexes (`due_date_changes_subject_idx`,
 `photos_child_idx`, `invitations_invitee_email_idx`), so they live only in
 the SQL and `drizzle-kit push` must never run against a database.
+
+## Seed data
+
+`pnpm db:seed` (`scripts/seed.ts`) writes the synthetic cast of
+architecture record 7.5 through `seed(db, { now, kek })` in
+`src/seed/index.ts`: two households that between them cover every stage
+and every grant state, with verified users a browser test can sign in as.
+It runs inside one `withSystem()` transaction against `DATABASE_URL`, so
+the connection must belong to a role that can act as the system (the owner
+role on Neon, Postgres itself in CI); when `is_system()` is false, which is
+what a `DATABASE_URL` belonging to `tidefern_app` gives, the script prints
+`SeedRoleError` and writes nothing. "Today" is `TIDEFERN_FAKE_NOW` when
+set and the clock otherwise, read once and turned into a `YYYY-MM-DD`
+date in each profile's own time zone; every calendar fact in the cast is an
+offset from that date. The free text (note bodies, event labels, a child
+event note) is sealed under each subject's DEK with D2's helpers
+(`provisionSubjectKey`, `unwrapForSubject`, `encryptFieldFor`), the DEKs
+wrapped under `TIDEFERN_KEK_V1`, so a database seeded under one KEK reads
+only under that KEK. Passwords are hashed by Better Auth's own
+`hashPassword` (`better-auth/crypto`), the function its sign-in verifies
+against, and the `account` row has `provider_id` `credential`.
+
+The seed is idempotent: every insert is `ON CONFLICT DO NOTHING` on its
+primary key, the ids are fixed (`018f5e7a-5eed-7<block>-8000-<n>`, one
+block per table in `src/seed/cast.ts`), key provisioning goes through the
+idempotent D2 helper, and the script prints how many rows each table
+gained, all zeros on a database seeded before. A second run with a later
+`now` still adds nothing: the dates stay where the first run put them, so a
+local database that should follow the calendar is reset and seeded again.
+Every `created_at` and `updated_at` is set by the seed to the row's own
+moment (a sign-up, a join, a logged day, a revocation, a read), never left
+to the database clock, so two databases seeded from the same `now` match
+column for column; the test proves it against a second PGlite. What cannot
+be fixed is not: the DEKs, the IVs under them and the password salts are
+random each run, as the envelope and scrypt require, so `account.password`,
+`subject_keys.wrapped_dek`, `notes.body`, `pregnancy_events.label` and
+`child_events.note` are the only columns that differ.
+
+### The cast
+
+Every person is synthetic; the emails sit on the reserved `example.test`
+domain. The passwords are test-only values for browser tests and nothing
+else; never reuse one anywhere real.
+
+| Persona | Email | Password | Zone, stage | Household | What she or he can see |
+| --- | --- | --- | --- | --- | --- |
+| Noor | `noor@example.test` | `tidefern-seed-noor` | Europe/Berlin, `cycle` | A, owner | Her own day sheet (17 days, 14 symptoms, 3 period starts 28 days apart), the live prediction, a private note and a shared one, 4 consents, the invitations she sent, the grants she made |
+| Theo | `theo@example.test` | `tidefern-seed-theo` | Europe/Berlin, `none` | A, partner | Noor's day sheet through a `read` grant on `cycle.symptoms` and a status card through a `summary` grant on `cycle.status` (notify on); his `read` grant on `cycle.history` was revoked 20 days ago, so no prediction; the shared note, never the private journal |
+| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events, 5 measurements, 5 checked milestones, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there) |
+| Lena | `lena@example.test` | `tidefern-seed-lena` | America/Vancouver, `pregnancy` | B, partner | Her open pregnancy (22 weeks, redated by 8 days at the 14 week scan; the `due_date_changes` row is hers alone), 4 events, 2 notes under `pregnancy.overview`, both children as a guardian; nothing of Mira's history |
+| Pia | `pia@example.test` | `tidefern-seed-pia` | America/New_York, `none`, imperial | none | Sol alone, through a `read` grant on `child` for that child: Sol's events and measurements, Sol's key, never Ilo and never the guardians |
+
+Invitations, all from household A unless noted: Theo's accepted one, a
+pending one to `kim@example.test` (expires in two days), an expired one to
+`rafa@example.test` (guardian role, expired seven days ago), a withdrawn one
+to `uma@example.test`, and Lena's accepted one in household B. The stored
+`token_hash` is the SHA-256 hex of a plaintext token exported as
+`invitationToken(id)` in `src/seed/cast.ts` (the pending one is
+`seed-invitation-kim`); the mail that would carry it is never sent.
+
+Rows per table, which `src/seed/seed.test.ts` pins:
+
+| Table | Rows | Table | Rows |
+| --- | --- | --- | --- |
+| `user`, `account`, `profiles` | 5 each | `cycle_entries` | 17 |
+| `subject_keys` | 7 (5 users, 2 children) | `entry_symptoms` | 14 |
+| `households` | 2 | `cycle_predictions` | 1 |
+| `household_members` | 4 | `pregnancies` | 2 |
+| `invitations` | 5 | `pregnancy_events` | 5 |
+| `grants` | 5 | `due_date_changes` | 1 |
+| `consents` | 11 | `child_events` | 10 |
+| `children` | 2 | `child_measurements` | 5 |
+| `child_guardians` | 4 | `notes` | 5 |
+| `vocabulary` | 27 | `audit_events` | 18 |
+
+The audit trail holds one `session.sign_in` per person, every grant made
+and the one revoked, the pending invitation's creation and the withdrawn
+one's withdrawal, Theo's two reads of Noor's symptoms (one row per actor,
+subject, category and day, keyed by `dedupe_key`, the day being the
+reader's own calendar day), Pia's read of Sol, and
+Mira's two writes for Lena. `photos`, `jobs`, `idempotency_keys`,
+`data_requests`, `product_events` and `disclosures` stay empty, as do the
+Better Auth session tables. No name, email, id or action name carries a
+health word; the test scans them.
+
+### Why `@tidefern/crypto` and `better-auth` are peer dependencies
+
+The seed calls D2's helpers and Better Auth's hasher, but
+`packages/crypto` already depends on this package (for the `subject_keys`
+table), so a regular dependency closes a cycle that Turborepo refuses
+(`@tidefern/crypto#typecheck -> @tidefern/db#typecheck` and back; `build`
+has the same `^` edge). Declared as peer dependencies the packages are
+still linked into `packages/db/node_modules` by pnpm, so the script and
+the tests resolve them, while the task graph stays acyclic: neither package
+has a build step, so no ordering between their checks is needed. Nothing
+in `@tidefern/db`'s exports reaches the seed; `src/index.ts` is unchanged
+and the app bundle never pulls it in.
 
 ## What the package exports
 
