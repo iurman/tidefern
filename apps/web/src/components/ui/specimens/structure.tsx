@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { AppShell } from "../app-shell";
 import { BottomSheet } from "../bottom-sheet";
-import { ConsentRecord } from "../consent-record";
+import { ConsentRecord, type ConsentRecordProps } from "../consent-record";
 import { DeviceRow } from "../device-row";
 import { Dialog } from "../dialog";
 import { GrantRow, grantCopy, type GrantRowProps } from "../grant-row";
@@ -67,6 +67,11 @@ const alexGrants: PersonGrant[] = [
 function LiveGrantRow(props: GrantRowProps) {
   const [checked, setChecked] = useState(props.checked);
   return <GrantRow {...props} checked={checked} onChange={setChecked} />;
+}
+
+function LiveConsentRecord(props: ConsentRecordProps) {
+  const [checked, setChecked] = useState(props.checked ?? false);
+  return <ConsentRecord {...props} checked={checked} onChange={setChecked} />;
 }
 
 export const specimens: SpecimenGroup = {
@@ -262,7 +267,7 @@ export const specimens: SpecimenGroup = {
         "Tab reaches the one checkbox; Space ticks it. It starts unchecked and nothing else on the step counts as agreement. Empty is none: the record always lists what is collected.",
       states: { empty: "none" },
       render: (state) => (
-        <ConsentRecord
+        <LiveConsentRecord
           {...consentFacts}
           error={state === "error" ? "Tick the box to continue." : undefined}
           {...flags(state)}

@@ -8,12 +8,18 @@
 
 .text {
   display: grid;
+  /* An explicit track: the implicit one takes the label's longest word as its minimum and pushes under the switch. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-1);
+  min-width: 0;
 }
 
 .label {
+  min-width: 0;
   font-size: var(--type-body);
   font-weight: var(--weight-sans-strong);
+  /* A single long word breaks inside the text column instead of sliding under the switch. */
+  overflow-wrap: anywhere;
 }
 
 .description {

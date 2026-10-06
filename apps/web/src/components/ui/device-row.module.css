@@ -77,18 +77,19 @@
     transform var(--duration-feedback) var(--ease-interface);
 }
 
+/* The forced twins pick one action, the last ("Sign out this device", which every row has), so the chapter shows one hovered, focused or pressed button. */
 .action:hover,
-[data-specimen-state="hover"] > .row .action {
+[data-specimen-state="hover"] > .row .action:last-child {
   background: var(--panel);
 }
 
-[data-specimen-state="focus-visible"] > .row .action {
+[data-specimen-state="focus-visible"] > .row .action:last-child {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
 }
 
 .action:active,
-[data-specimen-state="active"] > .row .action {
+[data-specimen-state="active"] > .row .action:last-child {
   transform: scale(0.94);
 }
 

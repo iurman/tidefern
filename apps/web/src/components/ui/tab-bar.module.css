@@ -1,6 +1,8 @@
 .bar {
   position: sticky;
   bottom: 0;
+  /* The bar is its own inline-size container so the labels can scale with its width (cqi below), wherever it renders. */
+  container-type: inline-size;
   z-index: var(--elevation-z-sticky);
   border-top: 1px solid var(--soft-border);
   background: var(--surface);
@@ -12,7 +14,8 @@
   display: flex;
   justify-content: space-around;
   margin: 0;
-  padding: 0 var(--space-1);
+  /* No side padding: every pixel goes to the cells, whose content is centered away from the edges anyway. */
+  padding: 0;
   list-style: none;
 }
 
@@ -33,7 +36,8 @@
   width: 100%;
   min-height: 56px;
   padding: var(--space-1) 0;
-  border: 1px solid transparent;
+  /* No border: the two transparent pixels would come out of the label's budget in a narrow cell. */
+  border: 0;
   border-radius: var(--radius-control);
   background: transparent;
   color: var(--muted);
@@ -58,9 +62,10 @@
   background: var(--panel);
 }
 
+/* The twin restates the global :focus-visible rule (2px at 4px) so the chapter shows the ring the product draws. */
 [data-specimen-state="focus-visible"] > .bar .link[aria-current="page"] {
   outline: 2px solid var(--focus);
-  outline-offset: -2px;
+  outline-offset: 4px;
 }
 
 .link:active,
@@ -69,12 +74,30 @@
 }
 
 .label {
-  /* 12px: seven cells at 390px leave 49px each, which the 13px caption token does not fit. */
-  font-size: 0.75rem;
-  letter-spacing: -0.01em;
+  /*
+   * 12px in a bar 400px or wider (the 13px caption token does not fit seven
+   * cells), scaling with the bar's width down to 10px, the platform tab bar
+   * size, at 333px: the longest label, "Calendar", then stays whole in the
+   * seven cells of a 312px bar and in the five cells of the frame's 220px
+   * cell, with 2px to spare.
+   */
+  font-size: clamp(0.625rem, 3cqi, 0.75rem);
+  letter-spacing: -0.02em;
   font-weight: var(--weight-sans-strong);
   line-height: 1.2;
   white-space: nowrap;
+  /*
+   * The label spans its cell (a fit-to-text box with negative letter-spacing
+   * draws a stray ellipsis in Chromium) with 1px each side, so neighboring
+   * labels never touch, and a cell narrower than its word clips it with an
+   * ellipsis instead of running into the next.
+   */
+  box-sizing: border-box;
+  width: 100%;
+  padding: 0 1px;
+  overflow: hidden;
+  text-align: center;
+  text-overflow: ellipsis;
 }
 
 .quickLog {
