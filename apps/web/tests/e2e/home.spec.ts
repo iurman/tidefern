@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./smoke-rule";
 import { expectNoAxeViolations } from "./axe";
 
 test("home renders the brand and links to the design system @smoke", async ({ page }) => {

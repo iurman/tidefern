@@ -145,7 +145,7 @@ jobs:
       - name: Let the app role log in with the throwaway password
         env:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
-        run: pnpm --filter @tidefern/db exec tsx scripts/grant-login.ts
+        run: pnpm db:grant-login
 
       # The seed runs through withSystem(), which the app role is refused for, so DATABASE_URL is the
       # owner URL on this step.
