@@ -132,3 +132,5 @@ export const NoteInput = z.object({
   body: z.string().min(1).max(4000).describe("Encrypted at rest with the subject's data key"),
 });
 export type NoteInput = z.infer<typeof NoteInput>;
+
+export * from "./notes";

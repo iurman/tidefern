@@ -15,6 +15,7 @@ export const auditActions = {
   grantCreate: "grant.create",
   grantUpdate: "grant.update",
   grantRevoke: "grant.revoke",
+  noteShare: "note.share",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];

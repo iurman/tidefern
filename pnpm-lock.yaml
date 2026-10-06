@@ -126,6 +126,9 @@ importers:
       '@tidefern/core':
         specifier: workspace:*
         version: link:../core
+      '@tidefern/crypto':
+        specifier: workspace:*
+        version: link:../crypto
       '@tidefern/db':
         specifier: workspace:*
         version: link:../db
@@ -350,6 +353,9 @@ importers:
       typescript:
         specifier: 6.0.3
         version: 6.0.3
+      vitest:
+        specifier: 5.0.3
+        version: 5.0.3(@types/node@24.19.1)(jsdom@30.1.1(@noble/hashes@2.4.0))(vite@8.3.2(@types/node@24.19.1)(esbuild@0.28.2)(jiti@2.7.0)(tsx@4.23.15)(yaml@2.9.1))
 
 packages:
 
