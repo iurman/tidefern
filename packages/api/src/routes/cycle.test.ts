@@ -650,6 +650,52 @@ describe("a contributor's writes", () => {
     expect((await auditRows(CARA, GINA)).map((row) => row.action)).toEqual(["partner.write"]);
   });
 
+  it("answers 404 and keeps nothing when the contribute grant is revoked during the write", async () => {
+    // Eve's grant on Hana's history is active when the route checks it, and
+    // a trigger revokes it once her entry and her audit row are written,
+    // before the database re-checks it in refresh_cycle_prediction().
+    const grantId = "018f5e7a-2000-7000-8000-00000000e308";
+    const date = "2026-09-20";
+    await harness.db.execute(
+      sql.raw(`create function b14_revoke_during_write() returns trigger language plpgsql security definer set search_path = pg_catalog, public as $$
+        begin
+          update grants set revoked_at = now() where id = '${grantId}';
+          return new;
+        end
+      $$`),
+    );
+    await harness.db.execute(
+      sql.raw(`create trigger b14_revoke_during_write after insert on audit_events
+        for each row when (new.actor_id = '${EVE}' and new.subject_id = '${HANA}' and new.action = 'partner.write')
+        execute function b14_revoke_during_write()`),
+    );
+    try {
+      const audits = await auditRows(EVE, HANA);
+      const prediction = await livePredictionRow(HANA);
+      await expectProblem(
+        await put(T.eve, date, { flow: "heavy" }, { subject: HANA }),
+        404,
+        "not_found",
+      );
+      const written = await harness.db
+        .select()
+        .from(schema.cycleEntries)
+        .where(and(eq(schema.cycleEntries.subjectId, HANA), eq(schema.cycleEntries.date, date)));
+      expect(written).toEqual([]);
+      expect(await auditRows(EVE, HANA)).toEqual(audits);
+      expect(await livePredictionRow(HANA)).toEqual(prediction);
+      // The revocation rolled back with the write; the grant is still live.
+      const [grant] = await harness.db
+        .select({ revokedAt: schema.grants.revokedAt })
+        .from(schema.grants)
+        .where(eq(schema.grants.id, grantId));
+      expect(grant?.revokedAt).toBeNull();
+    } finally {
+      await harness.db.execute(sql`drop trigger b14_revoke_during_write on audit_events`);
+      await harness.db.execute(sql`drop function b14_revoke_during_write()`);
+    }
+  });
+
   it("never touches the stored prediction on a symptoms contributor's write or a grantee's read", async () => {
     const before = await livePredictionRow(ANNA);
     expect(before).not.toBeNull();
@@ -728,6 +774,36 @@ describe("GET /v1/cycle/status", () => {
     const ivy = await auditRows(IVY, ANNA);
     await expectProblem(await get(T.ivy, `status?subject=${ANNA}`), 404, "not_found");
     expect(await auditRows(IVY, ANNA)).toEqual(ivy);
+  });
+
+  it("gives a status grantee no day count while a pregnancy continues, and the subject hers", async () => {
+    // Hana is pregnant, filed under pregnancy.overview, which Dana does not
+    // hold: a cycle day counted through the pregnancy would tell her.
+    await harness.db.insert(schema.grants).values({
+      id: "018f5e7a-2000-7000-8000-00000000e310",
+      ownerId: HANA,
+      granteeId: DANA,
+      category: "cycle.status",
+      level: "summary",
+      policyVersion: "2026-10",
+      descriptionVersion: "2026-10",
+    });
+    expect((await put(T.hana, addDays(todayIn("UTC"), -5), { flow: "heavy" })).status).toBe(200);
+    const own = CycleStatus.parse(await (await get(T.hana, "status")).json());
+    expect(own.cycleDay).not.toBeNull();
+    const before = await auditRows(DANA, HANA);
+    const response = await get(T.dana, `status?subject=${HANA}`);
+    expect(response.status).toBe(200);
+    expect(CycleStatus.parse(await response.json())).toEqual({
+      subjectId: HANA,
+      date: own.date,
+      cycleDay: null,
+      periodDay: null,
+      inFertileWindow: false,
+    });
+    expect((await auditRows(DANA, HANA)).slice(before.length)).toEqual([
+      expect.objectContaining({ action: "partner.read", category: "cycle.status" }),
+    ]);
   });
 
   it("answers null days when nothing is logged", async () => {

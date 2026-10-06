@@ -390,12 +390,48 @@ describe("refresh_cycle_prediction", () => {
       .where(eq(schema.cyclePredictions.subjectId, ANNA));
     expect(tombstone).toMatchObject({ version: 2 });
     expect(tombstone?.deletedAt).toBeInstanceOf(Date);
+    // While it continues, a status grantee gets no day count that would
+    // tell her about it (pregnancy.overview is a separate card); Anna's own
+    // status still counts through it.
     expect(await statusAs(BEN, ANNA)).toEqual([
+      { today, cycle_day: null, period_day: null, in_fertile_window: false },
+    ]);
+    expect(await statusAs(ANNA, ANNA)).toEqual([
       { today, cycle_day: 2, period_day: 2, in_fertile_window: false },
     ]);
     await harness.db.delete(schema.pregnancies).where(eq(schema.pregnancies.id, ANNA_PREGNANCY));
     expect(await refreshAs(CARA, ANNA)).toBe(true);
     expect(await livePrediction(ANNA)).toMatchObject({ basis: "estimate", version: 1 });
+    expect(await statusAs(BEN, ANNA)).toEqual(await statusAs(ANNA, ANNA));
+  });
+
+  test("counts a status grantee's day only from the periods after a pregnancy ends", async () => {
+    // Ended on the first day of the bleeding: that bleeding is not a period
+    // after the end, so no start counts and the grantee sees no day.
+    await harness.db.insert(schema.pregnancies).values({
+      id: id(91),
+      subjectId: ANNA,
+      dueDate: day(-1),
+      datingMethod: "lmp",
+      endedAt: day(-1),
+      endedReason: "birth",
+    });
+    expect(await statusAs(BEN, ANNA)).toEqual([
+      { today, cycle_day: null, period_day: null, in_fertile_window: false },
+    ]);
+    expect(await statusAs(ANNA, ANNA)).toEqual([
+      { today, cycle_day: 2, period_day: 2, in_fertile_window: false },
+    ]);
+    // Ended before the latest start: that start counts, and the earlier one
+    // never does.
+    await harness.db
+      .update(schema.pregnancies)
+      .set({ endedAt: day(-20) })
+      .where(eq(schema.pregnancies.id, id(91)));
+    expect(await statusAs(BEN, ANNA)).toEqual([
+      { today, cycle_day: 2, period_day: 2, in_fertile_window: false },
+    ]);
+    await harness.db.delete(schema.pregnancies).where(eq(schema.pregnancies.id, id(91)));
   });
 });
 
@@ -440,8 +476,11 @@ describe("with the functions owned by a role that cannot bypass RLS", () => {
     ]);
   });
 
-  test("still gives the status grantee the status and nobody else anything", async () => {
+  test("still gives the status grantee the status, bounded by the pregnancy, and nobody else anything", async () => {
     expect(await statusAs(BEN, ANNA)).toEqual([
+      { today, cycle_day: null, period_day: null, in_fertile_window: false },
+    ]);
+    expect(await statusAs(ANNA, ANNA)).toEqual([
       { today, cycle_day: 2, period_day: 2, in_fertile_window: false },
     ]);
     expect(await statusAs(GINA, GINA)).toEqual([

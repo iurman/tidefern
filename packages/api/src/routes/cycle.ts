@@ -57,8 +57,9 @@ import type { ProblemCode } from "../problem";
  * Two derivations run in the database instead (task B14, migration
  * `0010_cycle_status_functions`), because the actor's own transaction does
  * not reach the rows they rest on: the status, through `cycle_status_for()`,
- * which re-checks the `cycle.status` grant and returns derived values only,
- * and a contributor's prediction refresh, through
+ * which re-checks the `cycle.status` grant and returns derived values only
+ * (bounded by any pregnancy for a grantee, so a day count never discloses
+ * one), and a contributor's prediction refresh, through
  * `refresh_cycle_prediction()`, which re-checks her `cycle.history`
  * contribute grant and sees the pregnancy she cannot.
  */
@@ -435,6 +436,18 @@ async function statusFor(tx: Transaction, subjectId: string): Promise<CycleStatu
 }
 
 /**
+ * The database refused a contributor's refresh that `can()` allowed on the
+ * loaded session: her grant was revoked in between. Thrown inside the
+ * transaction so her write rolls back, and answered as the denial it is.
+ */
+class ContributeGrantGoneError extends Error {
+  constructor() {
+    super("the prediction refresh refused a writer can() allowed");
+    this.name = "ContributeGrantGoneError";
+  }
+}
+
+/**
  * A contributor's history write refreshes the stored prediction through
  * `refresh_cycle_prediction()` (task B14), which re-checks her contribute
  * grant and recomputes from the subject's entries and pregnancies as the
@@ -446,7 +459,7 @@ async function refreshAsContributor(tx: Transaction, subjectId: string): Promise
     sql`select refresh_cycle_prediction(${subjectId}::uuid) as ok`,
   )) as { rows: { ok: boolean | null }[] };
   if (result.rows[0]?.ok !== true) {
-    throw new Error("the prediction refresh refused a writer can() allowed");
+    throw new ContributeGrantGoneError();
   }
 }
 
@@ -988,7 +1001,12 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         return { kind: "written", item: entryItem(row, symptoms, access) };
       },
       runtime.db,
-    );
+    ).catch((error: unknown): { kind: "refused" } => {
+      // A grant revoked after the session was loaded: the write rolled back.
+      if (error instanceof ContributeGrantGoneError) return { kind: "refused" };
+      throw error;
+    });
+    if (outcome.kind === "refused") return fail(c, 404, "not_found");
     if (outcome.kind === "stale") {
       return fail(c, 409, "conflict", { detail: VERSION_MISMATCH });
     }

@@ -159,7 +159,13 @@ CREATE FUNCTION cycle_prediction_facts(subject uuid)
 --> statement-breakpoint
 
 -- The status for today, for the subject or a holder of an active
--- cycle.status grant at any level; no row for anyone else.
+-- cycle.status grant at any level; no row for anyone else. Anyone but the
+-- subject gets the pregnancy boundary of cycle_prediction_facts: no cycle
+-- or period day while a pregnancy continues, and after one ends only the
+-- periods after its end count, so a day count of 100 or 400 never tells a
+-- status grantee about a pregnancy, a birth or a loss filed under
+-- pregnancy.overview. The subject's own status still counts through it, as
+-- E3 shipped, until the owner decides otherwise.
 CREATE FUNCTION cycle_status_for(subject uuid)
   RETURNS TABLE (
     today date,
@@ -177,9 +183,19 @@ CREATE FUNCTION cycle_status_for(subject uuid)
       bleeding boolean;
       window_start date;
       window_end date;
+      pregnant boolean := false;
+      since date;
     BEGIN
       IF NOT coalesce(can_read(cycle_status_for.subject, 'cycle.status'), false) THEN
         RETURN;
+      END IF;
+
+      IF current_actor() IS DISTINCT FROM cycle_status_for.subject THEN
+        SELECT coalesce(bool_or(p.ended_at IS NULL), false), max(p.ended_at)
+          INTO pregnant, since
+          FROM pregnancies p
+          WHERE p.subject_id = cycle_status_for.subject
+            AND p.deleted_at IS NULL;
       END IF;
 
       SELECT pr.time_zone INTO zone
@@ -194,7 +210,9 @@ CREATE FUNCTION cycle_status_for(subject uuid)
 
       SELECT max(s.day) INTO latest
         FROM cycle_period_starts(cycle_status_for.subject) AS s(day)
-        WHERE s.day <= today;
+        WHERE s.day <= today
+          AND NOT pregnant
+          AND (since IS NULL OR s.day > since);
       SELECT EXISTS (
         SELECT 1 FROM cycle_entries e
         WHERE e.subject_id = cycle_status_for.subject
