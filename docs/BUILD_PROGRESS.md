@@ -1102,3 +1102,49 @@ an environment failure, not an application defect.
 Owner: owner action 0. Lead: keep reviewing the E2 to E8, G6 and G7 pull
 requests as they become ready, so they merge in a row once CodeQL is
 unblocked.
+
+### All twelve pull requests ready; the merge queue (2026-10-06, lead session 061fed2d)
+
+Every task in the seventh and eighth waves finished its build, fresh
+review and fix pass (33 agents, no errors). The lead read every review
+answer and looked at the captures of each page task (G6 at the fixed
+head, built and captured by the lead; G7 at its fix captures); E5's
+resume ran while the safety classifier timed out, so the lead checked its
+diff by hand (route, test and schema files plus the shared crypto
+dependency and the pinned test runner; nothing else). Nothing has merged,
+because every pull request is blocked on owner action 0.
+
+The queue, in merge order, with the lead's rulings (each web branch gets
+a manual smoke dispatch before its merge; each later E area rebases onto
+main keeping main's copies of the shared edits and every registry line,
+then `pnpm install --frozen-lockfile`, `pnpm openapi:generate`, `pnpm
+check`, push with lease):
+
+Merge in this order with `gh pr merge <n> --squash`, rerunning checks after each rebase; web branches get a manual smoke dispatch first.
+
+- #57 docs: CodeQL blocker log
+- #46 J5 uptime and head-of-main comparison (workflow only). After merge: gh workflow run uptime.yml
+- #47 J8 incident runbook and claims register (docs only)
+- #49 E6 notes routes. Lead rulings: out-of-list edits accepted (audit noteShare, generic problem, crypto dep, schemas test script); no category list filter (9.1); tombstones for notes decided with E8 sync
+- #51 E7 sharing routes (touches apps/web route.ts: smoke dispatch first). Lead rulings: 503 status with code internal and detail mail_unavailable accepted; invitation audit actions added to E1's list accepted; architecture 8.3 gains the three invitation audit names at the next docs pass
+- #48 E4 pregnancy routes. Lead rulings: the registry commit 2172b0d (app.ts one line, generic problem status, registry handing the actor db and key provider) accepted and merged first of the E areas that need it; /end path name kept; payload pregnancyId reminder key noted for H10
+- #50 E5 children routes. Lead rulings: milestone check-off path PUT /v1/children/{id}/milestones/{itemId} confirmed; kind as a closed-enum query filter accepted (an event kind is a vocabulary code, not a health word in the 9.1 sense, same as dates); feed side needs a B-task migration (new plan row B13: nullable side enum on child_events with a feed-only check)
+- #52 E8 account routes. Lead rulings: shared edits (audit action names, crypto dep, schemas vitest wiring) land with the first E area merged and later areas drop their copies on rebase; closure enforcement in the session middleware is a new lead task with I2; the partial unique index on open closures joins B13 as a second guard
+Conflict note: E4, E5, E6, E7, E8 each carry copies of the shared edits; merge E6 first (smallest), then rebase each next branch with `git rebase origin/main`, keeping main's version of audit.ts, problem.ts, package.json and the lockfile and every line in routes/index.ts and schemas/src/index.ts, then `pnpm install --frozen-lockfile`, `pnpm openapi:generate`, `pnpm check`, push with lease, wait for checks.
+- #54 E3 cycle routes. Lead rulings: period derived from flow on PUT and predictions recomputed on read and write instead of an inputs version, both accepted; open gap: a cycle.status-only grantee gets 404 from GET /v1/cycle/status until a lead migration (0009, new plan row B14) adds SECURITY DEFINER functions that re-check the grant with B8's helpers and return only the derived status and a prediction refresh; the it.todo in the E3 test is restored with it
+- #55 G7 sound chapter, /settings/sound with quiet hours, the settle cue (web: smoke dispatch first). Lead inspected /design/sound and /settings/sound in both themes; mergeable, seven minors none blocking; the tab bar over "Play a sample" in the 390 full-page capture is a full-page screenshot artifact of C4's fixed bar
+- #53 E2 profile, consents and data summary routes. Lead rulings: schemas package.json and lockfile test wiring accepted (resolved once with E8's copy); the closure helper shared with E8 and the account.close audit action land when E8 merges; the fix commit's co-author trailer is dropped by the squash message
+- #56 G6 color, motion and foundations chapters (web: smoke dispatch first). Lead inspected the fixed head 9b5282a in both themes; follow-up for the lead: put the chapter sequence in 13.8 order (Brand next to Color, Type previous to Color, Components next to Motion) and mention Settings in the color chapter once a follow-system control ships
+
+New work the queue creates: B13 (a nullable feed `side` enum on
+`child_events` and a partial unique index on open closures in
+`data_requests`), B14 (security-definer functions that re-check a
+`cycle.status` grant and return only the derived status and a prediction
+refresh, restoring E3's todo test), enforcement of an open closure in the
+session middleware (with I2), architecture 8.3 gaining the invitation
+audit names, and the chapter order fix above.
+
+### Next action
+
+Owner: owner action 0. Then the lead merges the queue in order and
+continues with E9, G8, I2, B13, B14 and the H routes.
