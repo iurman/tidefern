@@ -989,3 +989,45 @@ are in progress in the sixth wave.
 Review and merge B11, C4, E1 and H9 as they become ready (H9 and C4 touch
 apps/web and get a smoke dispatch), close them in the plan, then E2 to E8
 as one wave over E1 (distinct route files), I2 after E8, and the H routes.
+
+### C4, H9 and E1 merged; the host wired; E2 to E8 claimed (2026-10-06, lead session 061fed2d)
+
+Merged by squash: C4 (PR #41, `2afa266`), H9 (PR #42, `06fd78e`), E1 (PR
+#43, `521c846`). The lead inspected C4's devices and two-factor screens
+and H9's home, policy and error pages in both themes before each merge;
+H9's home is composition A as the design contract decided it. B11's
+branch carries the lead's edits (both sign-out redirects accepted in C3's
+spec, the home smoke tests under the smoke rule, a named grant-login
+script) and merges on its own green CI run, which is the proof that the
+seeded Postgres topology works end to end.
+
+This pull request wires E1 into the host (the trusted origins from the
+auth host facts and the log secret), replaces the error log's path with
+the route template, adds the resource route registry
+(`packages/api/src/routes/index.ts`, one line per area so seven areas can
+land in sequence), and adds two probes to the deployment smoke (a
+mutation without an Origin is refused, one with the deployment's own
+Origin reaches the session check). Architecture 5.3 now records E1's
+replay shape and 17.1 the `globalEnv` split B11 made.
+
+Decisions ratified from the review answers: E1's edits outside its file
+list (problem codes, api index and lint config, the db test pins and
+README row, migration 0008); the replay answers from the stored row;
+C4's settings shell renders under the public header until H2 and H7 give
+the app routes their own layout (recorded for those tasks); H9's closing
+design-system line stays until `home.spec.ts` moves its assertion to the
+footer link (a lead follow-up). Follow-ups noted for the H routes: C3's
+`normaliseCode` helper and the brand chapter's "colour" spelling should
+match the en-US house style when those files are next touched.
+
+Seventh wave launched after this merge: E2 to E8 as one workflow over
+the registry, each on its own branch and port (3161 to 3167), briefs in
+the scratchpad `wave7/briefs.md`; the lead merges in order and each fix
+pass rebases and regenerates the OpenAPI document.
+
+### Next action
+
+Merge B11 on its green run. Review and merge E2 to E8 in order, then E9
+(the generated client and the breaking-change gate), I2 after E8 and D2,
+then H1 to H8 over the components and the routes, J1 to J5, and the owner
+tasks A3, A4, B10 when the owner is available.

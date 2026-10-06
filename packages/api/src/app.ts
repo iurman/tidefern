@@ -5,12 +5,13 @@ import { withSession } from "./auth";
 import type { SessionAuth } from "./auth";
 import type { ApiEnv, Defer, DrainJobs } from "./context";
 import { drainEnqueued } from "./jobs/index";
-import { crossSite, idempotency, logger, rateLimit } from "./middleware/index";
+import { crossSite, idempotency, logger, rateLimit, routeTemplate } from "./middleware/index";
 import type { CrossSiteOptions, LoggerOptions } from "./middleware/index";
 import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
 import { internalJobs } from "./routes/internal/jobs";
 import type { JobsOptions } from "./routes/internal/jobs";
+import { registerRoutes } from "./routes/index";
 import { meBody, meRoute } from "./routes/me";
 
 export const API_VERSION = "0.1.0";
@@ -168,10 +169,12 @@ export function createApp(options: ApiOptions = {}) {
   );
 
   app.openapi(meRoute, (c) => c.json(meBody(c), 200));
+  registerRoutes(app);
 
   app.notFound((c) => problem(c, 404, "not_found"));
   app.onError((error, c) => {
-    console.error("api_error", { path: c.req.path, name: error.name });
+    // The route template, never the path: a path can carry a date or an id (architecture 9.1).
+    console.error("api_error", { route: routeTemplate(c), name: error.name });
     return problem(c, 500, "internal");
   });
 

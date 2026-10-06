@@ -7,7 +7,7 @@ import { requireActor } from "../auth";
 import { sessionHeaders } from "../test/auth-fake";
 import { OWN_ORIGIN, TOKENS, createActorFixture } from "../test/actors";
 import type { ApiTestDatabase } from "../test/database";
-import { CROSS_SITE_REQUEST, crossSiteVerdict, originAllowed } from "./cross-site";
+import { CROSS_SITE_REQUEST, crossSiteVerdict, originAllowed, ownOriginOf } from "./cross-site";
 import { IDEMPOTENCY_KEY_HEADER } from "./idempotency";
 
 const PRODUCTION = "https://tidefern.example";
@@ -186,5 +186,26 @@ describe("the crossSite middleware on /v1", () => {
   it("leaves reads alone", async () => {
     expect((await send("GET", { origin: "https://evil.example" })).status).toBe(200);
     expect((await send("GET", {})).status).toBe(200);
+  });
+});
+
+describe("ownOriginOf", () => {
+  it("prefers the forwarded host and scheme, then the Host header, then the URL", () => {
+    const headers = (entries: Record<string, string>) => new Headers(entries);
+    expect(
+      ownOriginOf(
+        "http://localhost:3000/api/v1/me",
+        headers({ "x-forwarded-host": "tidefern.app", "x-forwarded-proto": "https" }),
+      ),
+    ).toBe("https://tidefern.app");
+    expect(
+      ownOriginOf("http://localhost:3000/api/v1/me", headers({ host: "127.0.0.1:3000" })),
+    ).toBe("http://127.0.0.1:3000");
+    expect(ownOriginOf("http://localhost:3000/api/v1/me", headers({}))).toBe(
+      "http://localhost:3000",
+    );
+    expect(ownOriginOf("http://localhost:3000/api/v1/me", headers({ host: "not a host" }))).toBe(
+      "http://localhost:3000",
+    );
   });
 });
