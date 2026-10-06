@@ -33,7 +33,7 @@ const variants = [
   {
     file: "tidefern-mark-small.svg",
     name: "Small sizes",
-    use: "Below 48 px rendered: stem and wave, heavier strokes.",
+    use: "Below 48 px rendered. Today the same drawing as the full mark; the stem and wave simplification with heavier strokes is owed by the mark's trace step.",
     theme: "light",
   },
   {
@@ -175,9 +175,10 @@ export default function BrandPage() {
       <section className="design-section" aria-labelledby="minimum-sizes">
         <h2 id="minimum-sizes">Minimum sizes</h2>
         <p className="muted-note">
-          The mark goes down to 16 px. Below 48 px rendered size the small variant stands in, as
-          architecture 13.2 says; the 16 and 32 px favicon layers are rasterised from it. The lockup
-          is never narrower than {lockup.minimumWidth} px.
+          The mark goes down to 16 px. Below 48 px rendered size architecture 13.2 asks for a stem
+          and wave variant with heavier strokes, which the trace step has not produced yet, so the
+          16 and 32 px favicon layers are the full mark for now. The lockup is never narrower than{" "}
+          {lockup.minimumWidth} px.
         </p>
         <div className={styles.sizes}>
           <figure className={styles.surface} data-theme="light">

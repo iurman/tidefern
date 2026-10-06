@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { expectNoAxeViolations } from "./axe";
 
 const assets = [
   ["/favicon.ico", "image/x-icon"],
@@ -53,3 +54,9 @@ test("the brand chapter renders every image and offers the downloads", async ({ 
   expect(await downloads.count()).toBeGreaterThanOrEqual(13);
   await expect(page.getByText("Pending the owner's approval.", { exact: true })).toBeVisible();
 });
+
+for (const theme of ["light", "dark"] as const) {
+  test(`the brand chapter has no axe violations in ${theme} mode`, async ({ page }) => {
+    await expectNoAxeViolations(page, "/design/brand", theme);
+  });
+}

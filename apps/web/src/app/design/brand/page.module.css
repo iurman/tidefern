@@ -105,6 +105,7 @@
 .recoloured {
   filter: hue-rotate(300deg) saturate(1.6);
 }
+/* Misuse demonstration only: 13.6 forbids shadows everywhere else. */
 .shadowed {
   filter: drop-shadow(0 8px 10px var(--border));
 }
