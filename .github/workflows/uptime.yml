@@ -10,6 +10,10 @@ on:
     # Twice an hour, off the top of the hour, where GitHub delays scheduled runs the most.
     - cron: "11,41 * * * *"
   workflow_dispatch:
+  # Temporary, removed in the next commit: a dispatch needs the file on main, so this
+  # one push produces the proof run for the J5 pull request.
+  push:
+    branches: [claude/J5-uptime]
 
 permissions: {}
 
