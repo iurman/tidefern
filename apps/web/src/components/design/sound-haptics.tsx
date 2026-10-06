@@ -2,7 +2,7 @@
 import { useState, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
 import { haptic, hapticsAvailable, hapticSpec, type HapticKind } from "@/lib/sound";
-import styles from "./sound-chapter.module.css";
+import styles from "@/app/design/sound/sound.module.css";
 
 const kinds: readonly { kind: HapticKind; label: string }[] = [
   { kind: "tap", label: "Tap" },

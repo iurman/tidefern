@@ -23,11 +23,11 @@ export const soundCopy = {
   },
   quiet: {
     heading: "Quiet hours",
-    switchLabel: "Quiet hours",
+    switchLabel: "Use quiet hours",
     switchDescription: "Every cue stays silent between the start and the end, in your day.",
     start: "Start",
     end: "End",
-    help: "The window may cross midnight, for example 22:00 to 07:00.",
+    help: "The window may cross midnight: start in the evening and end in the morning to silence the night.",
     now: "Quiet hours are on right now.",
     later: "Outside quiet hours right now.",
     sameTime: "Start and end are the same time, so nothing is silenced.",

@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { cueLength, MASTER_BUS_GAIN, onPlay, readMasterPeak, toDecibels } from "@/lib/sound";
-import styles from "./sound-chapter.module.css";
+import styles from "@/app/design/sound/sound.module.css";
 
 /** The meter's floor: anything quieter reads as silence. */
 const FLOOR_DB = -60;
@@ -71,7 +71,7 @@ export function SoundMeter() {
         </div>
         <div>
           <dt>Live peak</dt>
-          <dd>
+          <dd className={styles.meterRow}>
             <meter
               className={styles.meterBar}
               min={FLOOR_DB}

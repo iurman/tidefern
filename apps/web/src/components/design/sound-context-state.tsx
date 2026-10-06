@@ -1,8 +1,8 @@
 "use client";
 import { useEffect, useState } from "react";
-import { describeQuietHours } from "@/lib/quiet-hours";
+import { describeQuietHours, formatClockTime, msUntilQuietBoundary } from "@/lib/quiet-hours";
 import { audioState, isQuietNow, onAudioState, quietHours, soundLevel } from "@/lib/sound";
-import styles from "./sound-chapter.module.css";
+import styles from "@/app/design/sound/sound.module.css";
 
 type State = AudioContextState | "none" | "reading";
 
@@ -35,11 +35,20 @@ export function SoundContextState() {
   const [quiet, setQuiet] = useState<{ sentence: string; now: boolean } | null>(null);
 
   useEffect(() => {
+    let boundary: ReturnType<typeof setTimeout> | undefined;
     const refresh = () => {
       setState(audioState());
       setActivated(readActivation());
       setLevel(soundLevel());
-      setQuiet({ sentence: describeQuietHours(quietHours()), now: isQuietNow() });
+      const range = quietHours();
+      setQuiet({
+        sentence: describeQuietHours(range, (time) => formatClockTime(time)),
+        now: isQuietNow(),
+      });
+      // One timer to the next start or end, so "Silent right now" never goes stale on an open page.
+      clearTimeout(boundary);
+      const wait = msUntilQuietBoundary(range, new Date());
+      if (wait !== null) boundary = setTimeout(refresh, wait + 50);
     };
     refresh();
     const unsubscribe = onAudioState(refresh);
@@ -50,6 +59,7 @@ export function SoundContextState() {
     });
     document.addEventListener("click", refresh, true);
     return () => {
+      clearTimeout(boundary);
       unsubscribe();
       observer.disconnect();
       document.removeEventListener("click", refresh, true);

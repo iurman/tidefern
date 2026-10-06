@@ -1,8 +1,14 @@
 "use client";
-import { useId, useSyncExternalStore } from "react";
+import { useEffect, useId, useState, useSyncExternalStore } from "react";
 import { FormField } from "@/components/ui/form-field";
 import { Switch } from "@/components/ui/switch";
-import { describeQuietHours, isClockTime, type QuietHours } from "@/lib/quiet-hours";
+import {
+  describeQuietHours,
+  formatClockTime,
+  isClockTime,
+  msUntilQuietBoundary,
+  type QuietHours,
+} from "@/lib/quiet-hours";
 import { isQuietNow, onQuietHours, quietHours, setQuietHours } from "@/lib/sound";
 import { soundCopy as copy } from "./copy";
 import styles from "./sound.module.css";
@@ -13,7 +19,8 @@ import styles from "./sound.module.css";
  * so the sentence under it is never empty; each valid time change is stored
  * as it is made. The range lives on this device until task E2 carries it
  * on the profile, and the clock that decides "now" is the device's until the
- * profile's time zone arrives.
+ * profile's time zone arrives. One timer re-renders the sentence at the next
+ * start or end, so a page left open never shows a stale "right now".
  */
 export function QuietHoursControl() {
   const id = useId();
@@ -25,6 +32,17 @@ export function QuietHoursControl() {
   );
   const loaded = stored !== undefined;
   const range = stored ?? null;
+  const start = range?.start;
+  const end = range?.end;
+  const [boundariesPassed, setBoundariesPassed] = useState(0);
+
+  useEffect(() => {
+    const wait = msUntilQuietBoundary(start && end ? { start, end } : null, new Date());
+    if (wait === null) return;
+    // A little past the minute, so the clock reads the new side of the boundary.
+    const timer = setTimeout(() => setBoundariesPassed((count) => count + 1), wait + 50);
+    return () => clearTimeout(timer);
+  }, [start, end, boundariesPassed]);
 
   function store(next: QuietHours | null) {
     setQuietHours(next);
@@ -98,7 +116,9 @@ export function QuietHoursControl() {
       </div>
       <p className={styles.help}>{copy.quiet.help}</p>
       <p className={styles.status} role="status" aria-live="polite">
-        {loaded ? `${describeQuietHours(range)}.` : copy.quiet.loading}
+        {loaded
+          ? `${describeQuietHours(range, (time) => formatClockTime(time))}.`
+          : copy.quiet.loading}
         {status ? ` ${status}` : ""}
       </p>
       <p className={styles.zone}>{copy.quiet.zone}</p>

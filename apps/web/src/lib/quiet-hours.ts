@@ -82,8 +82,42 @@ export function serializeQuietHours(window: QuietHours): string {
   return JSON.stringify({ start: window.start, end: window.end });
 }
 
-/** A short sentence for the settings page and the chapter: "Quiet from 22:00 to 07:00". */
-export function describeQuietHours(window: QuietHours | null): string {
+/**
+ * A clock time in the locale's own form, the one a native time field shows
+ * ("10:00 PM" in en-US, "07:00" and "22:00" in en-GB), so the sentence and the fields
+ * agree. Without a locale it uses the browser's.
+ */
+export function formatClockTime(time: string, locale?: string): string {
+  const minutes = toMinutes(time);
+  const date = new Date(2000, 0, 1, Math.floor(minutes / 60), minutes % 60);
+  return new Intl.DateTimeFormat(locale, { hour: "2-digit", minute: "2-digit" }).format(date);
+}
+
+/**
+ * A short sentence for the settings page and the chapter: "Quiet from 22:00
+ * to 07:00". The client passes `formatClockTime` so the times read as the
+ * time fields show them; the default prints the stored 24 hour form.
+ */
+export function describeQuietHours(
+  window: QuietHours | null,
+  format: (time: string) => string = (time) => time,
+): string {
   if (!window || window.start === window.end) return "No quiet hours";
-  return `Quiet from ${window.start} to ${window.end}`;
+  return `Quiet from ${format(window.start)} to ${format(window.end)}`;
+}
+
+/**
+ * Milliseconds from `now` until the window next starts or ends, so a page
+ * left open can re-render its "quiet right now" sentence at that minute with
+ * one timer instead of polling. Null when there is no window.
+ */
+export function msUntilQuietBoundary(window: QuietHours | null, now: Date): number | null {
+  if (!window || window.start === window.end) return null;
+  const minute = minutesOfDay(now);
+  const intoMinute = now.getSeconds() * 1000 + now.getMilliseconds();
+  // A boundary at the current minute has already passed, so it is a full day away.
+  const ahead = [toMinutes(window.start), toMinutes(window.end)].map(
+    (boundary) => ((boundary - minute - 1 + MINUTES_PER_DAY) % MINUTES_PER_DAY) + 1,
+  );
+  return Math.min(...ahead) * 60_000 - intoMinute;
 }

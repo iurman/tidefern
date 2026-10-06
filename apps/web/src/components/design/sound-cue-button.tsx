@@ -3,7 +3,7 @@ import { useState } from "react";
 import { describePlayResult } from "@/app/settings/sound/copy";
 import { Button } from "@/components/ui/button";
 import { playAfterUnlock, type Cue, type PlayResult } from "@/lib/sound";
-import styles from "./sound-chapter.module.css";
+import styles from "@/app/design/sound/sound.module.css";
 
 /**
  * One cue, playable from a real button, with the result printed beside it

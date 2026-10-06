@@ -18,6 +18,39 @@ const LINK = "a[href]";
  */
 export const SETTLE_ARM_MS = 600;
 
+/** A path without its trailing slash, so `/design/` and `/design` compare equal. */
+function samePath(path: string): string {
+  return path.length > 1 ? path.replace(/\/+$/, "") : path;
+}
+
+/**
+ * The in-app path a click or Enter on this link navigates the current tab
+ * to, or null when it does not: a modifier that opens a new tab or window or
+ * saves the target, a `target` other than `_self`, a `download`, another
+ * origin, or a link to the page already shown (a `#hash` jump).
+ */
+export function settleDestination(
+  link: HTMLAnchorElement,
+  input: Pick<KeyboardEvent, "metaKey" | "ctrlKey" | "shiftKey" | "altKey"> & { button?: number },
+  currentPath: string | null,
+): string | null {
+  if ((input.button ?? 0) !== 0) return null;
+  if (input.metaKey || input.ctrlKey || input.shiftKey || input.altKey) return null;
+  const target = link.getAttribute("target");
+  if (target && target !== "_self") return null;
+  if (link.hasAttribute("download")) return null;
+  let url: URL;
+  try {
+    url = new URL(link.href, window.location.href);
+  } catch {
+    return null;
+  }
+  if (url.origin !== window.location.origin) return null;
+  const path = samePath(url.pathname);
+  if (currentPath !== null && path === samePath(currentPath)) return null;
+  return path;
+}
+
 /**
  * Attaches sound and haptic feedback to every interactive element through
  * event delegation, so no component has to opt in. Hover ticks fire for mouse
@@ -28,11 +61,15 @@ export const SETTLE_ARM_MS = 600;
  * the provider still unlocks on it but leaves the press cue to it, so one
  * press does not sound twice.
  *
- * The settle cue (architecture 14.1): a click or Enter on a link arms a
- * 600 ms window; when the route changes while the window is live the cue
- * plays once, as the new view commits. Back, forward, reload and a fresh
- * page load never arm it, and popstate clears a live arm. A button never
- * arms it, so a redirect a form makes after its request stays silent.
+ * The settle cue (architecture 14.1): a plain click or Enter on a link to
+ * another page of this app arms a 600 ms window for that link's path; when
+ * the route changes to that path while the window is live the cue plays
+ * once, as the new view commits. Back, forward, reload and a fresh page load
+ * never arm it, and popstate clears a live arm. A button never arms it, so a
+ * redirect a form makes after its request stays silent, and a route that
+ * lands anywhere but the link's path (a server redirect to sign in) stays
+ * silent too. A modifier click, a new-tab or download link and a same-page
+ * `#hash` link never arm it.
  *
  * Browsers grant audio only inside an activation-granting input: mouse
  * pointerdown, touch pointerup or touchend, keydown other than Escape, and
@@ -40,7 +77,7 @@ export const SETTLE_ARM_MS = 600;
  */
 export function SoundProvider() {
   const pathname = usePathname();
-  const armedAt = useRef<number | null>(null);
+  const armed = useRef<{ at: number; path: string } | null>(null);
   const lastPathname = useRef<string | null>(null);
 
   useEffect(() => {
@@ -48,6 +85,10 @@ export function SoundProvider() {
     const unlock = (event: Event) => {
       if (event instanceof KeyboardEvent && event.key === "Escape") return;
       unlockAudio();
+    };
+    const arm = (link: HTMLAnchorElement, event: MouseEvent | KeyboardEvent) => {
+      const path = settleDestination(link, event, lastPathname.current);
+      armed.current = path === null ? null : { at: performance.now(), path };
     };
     const ownsItsCue = (target: Element) =>
       target instanceof HTMLElement && "cue" in target.dataset;
@@ -76,13 +117,15 @@ export function SoundProvider() {
       if (!target || event.repeat) return;
       unlockAudio();
       if (!ownsItsCue(target)) play("press");
-      if (event.key === "Enter" && target.matches(LINK)) armedAt.current = performance.now();
+      if (event.key === "Enter" && target instanceof HTMLAnchorElement && target.matches(LINK))
+        arm(target, event);
     };
     const onClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest(LINK)) armedAt.current = performance.now();
+      const link = (event.target as Element | null)?.closest(LINK);
+      if (link instanceof HTMLAnchorElement) arm(link, event);
     };
     const onPopState = () => {
-      armedAt.current = null;
+      armed.current = null;
     };
     const onStorage = (event: StorageEvent) => {
       if (event.key === QUIET_HOURS_KEY || event.key === null) refreshQuietHours();
@@ -117,9 +160,11 @@ export function SoundProvider() {
     }
     if (lastPathname.current === pathname) return;
     lastPathname.current = pathname;
-    const armed = armedAt.current;
-    armedAt.current = null;
-    if (armed === null || performance.now() - armed > SETTLE_ARM_MS) return;
+    const arm = armed.current;
+    armed.current = null;
+    if (arm === null || performance.now() - arm.at > SETTLE_ARM_MS) return;
+    // A route other than the link's own is a redirect, which never settles.
+    if (samePath(pathname) !== arm.path) return;
     // One task later: the new view has painted, and anything it mounted to listen is listening.
     const timer = setTimeout(() => play("settle"), 0);
     return () => clearTimeout(timer);

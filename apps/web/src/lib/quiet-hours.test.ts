@@ -1,9 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   describeQuietHours,
+  formatClockTime,
   isClockTime,
   isWithinQuietHours,
   minutesOfDay,
+  msUntilQuietBoundary,
   parseQuietHours,
   serializeQuietHours,
   toMinutes,
@@ -100,5 +102,38 @@ describe("the sentence", () => {
     expect(describeQuietHours({ start: "22:00", end: "07:00" })).toBe("Quiet from 22:00 to 07:00");
     expect(describeQuietHours({ start: "09:00", end: "09:00" })).toBe("No quiet hours");
     expect(describeQuietHours(null)).toBe("No quiet hours");
+  });
+
+  it("prints the times in the locale's form when given a formatter", () => {
+    expect(formatClockTime("22:00", "en-US")).toMatch(/^10:00\sPM$/);
+    expect(formatClockTime("07:05", "en-US")).toMatch(/^07:05\sAM$/);
+    expect(formatClockTime("22:00", "en-GB")).toBe("22:00");
+    expect(
+      describeQuietHours({ start: "22:00", end: "07:00" }, (time) =>
+        formatClockTime(time, "en-GB"),
+      ),
+    ).toBe("Quiet from 22:00 to 07:00");
+  });
+});
+
+describe("the next boundary", () => {
+  const window = { start: "22:00", end: "07:00" };
+
+  it("is the start when outside the window and the end when inside", () => {
+    expect(msUntilQuietBoundary(window, new Date(2026, 9, 5, 21, 0))).toBe(60 * 60_000);
+    expect(msUntilQuietBoundary(window, new Date(2026, 9, 5, 23, 30))).toBe(450 * 60_000);
+    expect(msUntilQuietBoundary(window, new Date(2026, 9, 6, 6, 59, 30))).toBe(30_000);
+  });
+
+  it("counts a boundary at the current minute as passed", () => {
+    expect(msUntilQuietBoundary(window, new Date(2026, 9, 5, 22, 0, 0))).toBe(9 * 60 * 60_000);
+    expect(msUntilQuietBoundary(window, new Date(2026, 9, 6, 7, 0, 10))).toBe(
+      15 * 60 * 60_000 - 10_000,
+    );
+  });
+
+  it("is null without a window", () => {
+    expect(msUntilQuietBoundary(null, new Date())).toBeNull();
+    expect(msUntilQuietBoundary({ start: "09:00", end: "09:00" }, new Date())).toBeNull();
   });
 });

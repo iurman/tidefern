@@ -21,7 +21,7 @@ import {
   type ToneSpec,
 } from "@/lib/sound";
 import { pageMetadata } from "@/lib/site";
-import styles from "@/components/design/sound-chapter.module.css";
+import styles from "./sound.module.css";
 
 export const metadata = pageMetadata(
   "/design/sound",
@@ -294,7 +294,7 @@ export default function SoundPage() {
 
       <section className="design-section" aria-labelledby="rules">
         <h2 id="rules">What sound never does</h2>
-        <ul>
+        <ul className={styles.rules}>
           <li>Carry meaning alone: every success or error cue sits beside visible text.</li>
           <li>
             Play on its own: never on back, forward, reload, redirect, page load, a toast arriving
@@ -307,7 +307,7 @@ export default function SoundPage() {
           </li>
           <li>
             Load anything: no file, no network request, no analytics. The choice of level and the
-            quiet hours are the only things stored, and only on this device.
+            quiet hours are the only things sound stores, and only on this device.
           </li>
         </ul>
       </section>

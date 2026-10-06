@@ -244,7 +244,7 @@ test.describe("the sound settings", () => {
     await expect(page.getByRole("heading", { level: 1, name: "Sound" })).toBeVisible();
     await expect(page).toHaveTitle("Sound | Tidefern");
 
-    const quiet = page.getByRole("switch", { name: "Quiet hours" });
+    const quiet = page.getByRole("switch", { name: "Use quiet hours", exact: true });
     await expect(quiet).toBeEnabled();
     await expect(quiet).toHaveAttribute("aria-checked", "false");
     await page.getByRole("button", { name: "Play a sample" }).click();
@@ -265,7 +265,19 @@ test.describe("the sound settings", () => {
     });
     await page.getByLabel("Start").fill(start);
     await page.getByLabel("End").fill(end);
-    await expect(page.getByText(`Quiet from ${start} to ${end}.`, { exact: false })).toBeVisible();
+    // The sentence prints the times as the time fields show them, in the browser's locale.
+    const [shownStart, shownEnd] = await page.evaluate(
+      (times) =>
+        times.map((time) =>
+          new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" }).format(
+            new Date(2000, 0, 1, Number(time.slice(0, 2)), Number(time.slice(3, 5))),
+          ),
+        ),
+      [start, end],
+    );
+    await expect(
+      page.getByText(`Quiet from ${shownStart} to ${shownEnd}.`, { exact: false }),
+    ).toBeVisible();
     await expect(page.getByText("Quiet hours are on right now.")).toBeVisible();
 
     const beforeSample = (await probe(page)).tones.length;
@@ -279,10 +291,9 @@ test.describe("the sound settings", () => {
     await page.reload();
     await expect(page.locator("html")).toHaveAttribute("data-sound", "off");
     await expect(page.getByRole("radio", { name: "Off" })).toBeChecked();
-    await expect(page.getByRole("switch", { name: "Quiet hours" })).toHaveAttribute(
-      "aria-checked",
-      "true",
-    );
+    await expect(
+      page.getByRole("switch", { name: "Use quiet hours", exact: true }),
+    ).toHaveAttribute("aria-checked", "true");
     await expect(page.getByLabel("Start")).toHaveValue(start);
     await expect(page.getByLabel("End")).toHaveValue(end);
   });
