@@ -43,7 +43,10 @@ import type { SeedReport } from "./index";
 /**
  * What this file proves on PGlite through the committed journal: the seed
  * fills an empty database with exactly the documented cast, a second run
- * adds nothing and changes nothing, the sealed text opens with the KEK that
+ * adds nothing and changes nothing, a second database seeded from the same
+ * instant matches the first column for column except where the envelope and
+ * the hasher need randomness, every row carries its own instant rather than
+ * the clock, the sealed text opens with the KEK that
  * sealed it and with no other, the users carry passwords Better Auth's own
  * verifier accepts, the app role is refused before a row is written, the
  * dates follow each profile's zone from the one `now`, no identifier
@@ -106,6 +109,18 @@ const UNTOUCHED = [
   "disclosures",
 ];
 
+/**
+ * The only columns two databases seeded from the same instant may differ
+ * in: the scrypt salt, the wrapped DEKs and the GCM envelopes under them.
+ */
+const RANDOM_COLUMNS: Record<string, string[]> = {
+  account: ["password"],
+  subject_keys: ["wrapped_dek"],
+  notes: ["body"],
+  pregnancy_events: ["label"],
+  child_events: ["note"],
+};
+
 /** The words that must never appear in a name, email, id or action the seed writes. */
 const HEALTH_WORDS = [
   "cycle",
@@ -144,9 +159,9 @@ async function countsAs(actor: string, tables: string[]): Promise<Record<string,
   );
 }
 
-async function publicTables(): Promise<string[]> {
+async function publicTables(db: Harness["db"] = harness.db): Promise<string[]> {
   return rows(
-    await harness.db.execute(
+    await db.execute(
       sql`select relname from pg_catalog.pg_class where relnamespace = 'public'::regnamespace and relkind = 'r' order by relname`,
     ),
   ).map((row) => row.relname as string);
@@ -163,20 +178,33 @@ async function totalCounts(): Promise<Record<string, number>> {
   return counts;
 }
 
-/** Every row of every public table, serialised and sorted, so two runs can be compared whole. */
-async function snapshot(): Promise<Record<string, string[]>> {
+/**
+ * Every row of every public table, serialised and sorted, so two runs (or
+ * two databases, with the random columns dropped) can be compared whole.
+ */
+async function snapshot(
+  db: Harness["db"] = harness.db,
+  drop: Record<string, string[]> = {},
+): Promise<Record<string, string[]>> {
   const dump: Record<string, string[]> = {};
-  for (const table of await publicTables()) {
-    const result = rows(await harness.db.execute(sql`select * from ${sql.identifier(table)}`));
+  for (const table of await publicTables(db)) {
+    const result = rows(await db.execute(sql`select * from ${sql.identifier(table)}`));
     dump[table] = result
-      .map((row) =>
-        JSON.stringify(row, (_, value: unknown) =>
+      .map((row) => {
+        const kept: Record<string, unknown> = { ...row };
+        for (const column of drop[table] ?? []) delete kept[column];
+        return JSON.stringify(kept, (_, value: unknown) =>
           value instanceof Uint8Array ? Buffer.from(value).toString("base64") : value,
-        ),
-      )
+        );
+      })
       .sort();
   }
   return dump;
+}
+
+/** A timestamptz column as the driver returns it, as epoch milliseconds. */
+function instant(value: unknown): number {
+  return new Date(value as string | Date).getTime();
 }
 
 /** The actor's view of one subject's sealed field, decrypted with the KEK the cache was filled from. */
@@ -219,6 +247,9 @@ describe("the first run", () => {
     for (const table of UNTOUCHED) {
       expect(counts[table], table).toBe(0);
     }
+    // Deliberately the whole public table list: a migration that adds a
+    // table fails here until the seed decides whether the cast fills it or
+    // leaves it empty, so no table slips in unseeded by accident.
     expect(Object.keys(counts).sort()).toEqual([...Object.keys(CAST), ...UNTOUCHED].sort());
     expect(firstRun.inserted).toEqual(CAST);
   });
@@ -346,6 +377,115 @@ describe("a second run", () => {
     });
     expect(Object.values(later.inserted).every((n) => n === 0)).toBe(true);
     expect(await snapshot()).toEqual(before);
+  });
+});
+
+describe("a second database", () => {
+  test("seeded from the same instant matches the first column for column", async () => {
+    const twin = await createTestDatabase();
+    try {
+      const report = await seed(twin.db, { now: NOW, kek });
+      expect(report.inserted).toEqual(CAST);
+      const here = await snapshot(harness.db, RANDOM_COLUMNS);
+      const there = await snapshot(twin.db, RANDOM_COLUMNS);
+      expect(there).toEqual(here);
+      // The dropped columns really differ, so the comparison above is doing work.
+      const whole = await snapshot(twin.db);
+      expect(whole.account).not.toEqual((await snapshot())["account"]);
+    } finally {
+      await twin.close();
+    }
+  });
+});
+
+describe("the instants", () => {
+  test("every created_at and updated_at is the row's own moment, never the clock", async () => {
+    const stamped = rows(
+      await harness.db.execute(
+        sql`select table_name, column_name from information_schema.columns where table_schema = 'public' and column_name in ('created_at', 'updated_at') order by table_name, column_name`,
+      ),
+    ) as { table_name: string; column_name: string }[];
+    expect(stamped.length).toBeGreaterThan(30);
+    const earliest = NOW.getTime() - 420 * 86_400_000;
+    for (const { table_name, column_name } of stamped) {
+      if (!(table_name in CAST)) continue;
+      const [row] = rows(
+        await harness.db.execute(
+          sql`select min(${sql.identifier(column_name)}) as lo, max(${sql.identifier(column_name)}) as hi from ${sql.identifier(table_name)}`,
+        ),
+      );
+      expect(instant(row?.lo), `${table_name}.${column_name}`).toBeGreaterThanOrEqual(earliest);
+      expect(instant(row?.hi), `${table_name}.${column_name}`).toBeLessThanOrEqual(NOW.getTime());
+    }
+  });
+
+  test("pins a few rows to the instants the cast documents", async () => {
+    const day = 86_400_000;
+    const [entry] = rows(
+      await harness.db.execute(
+        sql`select created_at, updated_at from cycle_entries where date = ${shiftDays(dateIn(NOW, NOOR.timeZone), -58)}`,
+      ),
+    );
+    expect(instant(entry?.created_at)).toBe(NOW.getTime() - 58 * day);
+    expect(instant(entry?.updated_at)).toBe(NOW.getTime() - 58 * day);
+
+    const [revoked] = rows(
+      await harness.db.execute(
+        sql`select updated_at, revoked_at from grants where revoked_at is not null`,
+      ),
+    );
+    expect(instant(revoked?.updated_at)).toBe(instant(revoked?.revoked_at));
+    expect(instant(revoked?.updated_at)).toBe(NOW.getTime() - 20 * day);
+
+    const [drift] = rows(
+      await harness.db.execute(
+        sql`select count(*)::int as n from audit_events where created_at <> occurred_at`,
+      ),
+    );
+    expect(drift).toEqual({ n: 0 });
+
+    const keys = rows(
+      await harness.db.execute(
+        sql`select subject_id, created_at from subject_keys where subject_id in (${NOOR.id}::uuid, ${ILO}::uuid) order by subject_id`,
+      ),
+    ).map((row) => [row.subject_id, instant(row.created_at)]);
+    expect(keys).toEqual(
+      [
+        [NOOR.id, NOW.getTime() - NOOR.signedUpDaysAgo * day],
+        [ILO, NOW.getTime() - 42 * day],
+      ].sort(),
+    );
+
+    const [vocabulary] = rows(
+      await harness.db.execute(
+        sql`select count(distinct created_at)::int as distinct_instants, min(created_at) as at from vocabulary`,
+      ),
+    );
+    expect(vocabulary?.distinct_instants).toBe(1);
+    expect(instant(vocabulary?.at)).toBe(NOW.getTime());
+  });
+
+  test("keys each partner read on the reader's own calendar day", async () => {
+    const reads = rows(
+      await harness.db.execute(
+        sql`select actor_id, dedupe_key, occurred_at from audit_events where action = 'share.read' order by occurred_at desc`,
+      ),
+    );
+    expect(reads).toHaveLength(3);
+    for (const read of reads) {
+      const reader = PERSONAS.find((persona) => persona.id === read.actor_id);
+      expect(reader).toBeDefined();
+      const readDay = dateIn(
+        new Date(read.occurred_at as string | Date),
+        reader?.timeZone ?? "UTC",
+      );
+      expect(read.dedupe_key).toMatch(new RegExp(`:${readDay}$`));
+    }
+    expect(reads.map((read) => read.dedupe_key)).toEqual([
+      `read:${THEO.id}:${NOOR.id}:cycle.symptoms:2026-10-05`,
+      `read:${THEO.id}:${NOOR.id}:cycle.symptoms:2026-10-04`,
+      `read:${PIA.id}:${SOL}:child:2026-10-03`,
+    ]);
   });
 });
 

@@ -173,8 +173,10 @@ revoked_at IS NULL`, so two active grants on one tuple cannot exist,
   `mood` are enums, symptoms are `entry_symptoms` rows unique per entry
   and code. `cycle_predictions` stores the shape core's `predictCycle`
   returns, one live row per subject. `vocabulary` is seeded by
-  `seedVocabulary(tx)` in `src/seed/vocabulary.ts` from the Zod enums with
-  `ON CONFLICT DO NOTHING`; the second run inserts nothing.
+  `seedVocabulary(tx, { createdAt })` in `src/seed/vocabulary.ts` from the
+  Zod enums with `ON CONFLICT DO NOTHING`; the second run inserts nothing,
+  and the full seed passes its own instant so the rows do not take the
+  clock.
 - Pregnancy: one open pregnancy per subject (`ended_at IS NULL`);
   `ended_at` and `ended_reason` are set together; `due_date_changes` is
   the append-only history core's `changeDueDate` writes; `pregnancy_events`
@@ -351,8 +353,14 @@ idempotent D2 helper, and the script prints how many rows each table
 gained, all zeros on a database seeded before. A second run with a later
 `now` still adds nothing: the dates stay where the first run put them, so a
 local database that should follow the calendar is reset and seeded again.
-What cannot be fixed is not: the DEKs, the IVs under them and the password
-salts are random each run, as the envelope and scrypt require.
+Every `created_at` and `updated_at` is set by the seed to the row's own
+moment (a sign-up, a join, a logged day, a revocation, a read), never left
+to the database clock, so two databases seeded from the same `now` match
+column for column; the test proves it against a second PGlite. What cannot
+be fixed is not: the DEKs, the IVs under them and the password salts are
+random each run, as the envelope and scrypt require, so `account.password`,
+`subject_keys.wrapped_dek`, `notes.body`, `pregnancy_events.label` and
+`child_events.note` are the only columns that differ.
 
 ### The cast
 
@@ -394,7 +402,8 @@ Rows per table, which `src/seed/seed.test.ts` pins:
 The audit trail holds one `session.sign_in` per person, every grant made
 and the one revoked, the pending invitation's creation and the withdrawn
 one's withdrawal, Theo's two reads of Noor's symptoms (one row per actor,
-subject, category and day, keyed by `dedupe_key`), Pia's read of Sol, and
+subject, category and day, keyed by `dedupe_key`, the day being the
+reader's own calendar day), Pia's read of Sol, and
 Mira's two writes for Lena. `photos`, `jobs`, `idempotency_keys`,
 `data_requests`, `product_events` and `disclosures` stay empty, as do the
 Better Auth session tables. No name, email, id or action name carries a

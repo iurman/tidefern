@@ -9,7 +9,7 @@ import {
 } from "@tidefern/crypto";
 import type { KeyProvider } from "@tidefern/crypto";
 import { hashPassword } from "better-auth/crypto";
-import { inArray, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 
 import { withSystem } from "../actor";
 import type { ActorDatabase, Transaction } from "../actor";
@@ -225,6 +225,8 @@ export interface SeedPregnancyEvent {
   authorId: string;
   kind: (typeof schema.pregnancyEventKindValues)[number];
   dayOffset: number;
+  /** How many days before "now" the row was written; a booked appointment predates its day. */
+  recordedDaysAgo: number;
   label: string | null;
 }
 
@@ -236,6 +238,7 @@ export const SEED_PREGNANCY_EVENTS: readonly SeedPregnancyEvent[] = [
     authorId: LENA.id,
     kind: "appointment",
     dayOffset: -56,
+    recordedDaysAgo: 56,
     label: "Dating scan",
   },
   {
@@ -245,6 +248,7 @@ export const SEED_PREGNANCY_EVENTS: readonly SeedPregnancyEvent[] = [
     authorId: LENA.id,
     kind: "appointment",
     dayOffset: -14,
+    recordedDaysAgo: 14,
     label: "Anatomy scan",
   },
   {
@@ -254,6 +258,7 @@ export const SEED_PREGNANCY_EVENTS: readonly SeedPregnancyEvent[] = [
     authorId: LENA.id,
     kind: "milestone",
     dayOffset: -5,
+    recordedDaysAgo: 5,
     label: "First kicks",
   },
   {
@@ -263,6 +268,7 @@ export const SEED_PREGNANCY_EVENTS: readonly SeedPregnancyEvent[] = [
     authorId: MIRA.id,
     kind: "appointment",
     dayOffset: 28,
+    recordedDaysAgo: 3,
     label: "Glucose screening",
   },
   {
@@ -272,6 +278,7 @@ export const SEED_PREGNANCY_EVENTS: readonly SeedPregnancyEvent[] = [
     authorId: MIRA.id,
     kind: "milestone",
     dayOffset: -42,
+    recordedDaysAgo: 42,
     label: null,
   },
 ];
@@ -318,6 +325,16 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
     const t = (days: number) => shiftDays(berlin, days);
     const v = (days: number) => shiftDays(vancouver, days);
     const signedUp = (persona: Persona) => daysBefore(now, persona.signedUpDaysAgo);
+    // Every row carries its own instant in `created_at` and `updated_at`
+    // instead of taking the database clock through `defaultNow()`, so two
+    // databases seeded from the same `now` match column for column.
+    const stamp = (createdAt: Date, updatedAt: Date = createdAt) => ({ createdAt, updatedAt });
+    // When each household was founded, Ilo registered (her birth) and Sol
+    // registered (Mira's first day in the app).
+    const foundedA = daysBefore(now, 400);
+    const foundedB = daysBefore(now, 420);
+    const iloRegistered = daysBefore(now, 42);
+    const solRegistered = foundedB;
 
     // Identity: verified users with a credential account Better Auth's
     // sign-in accepts. The hash is Better Auth's own (scrypt with a random
@@ -396,6 +413,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               units: persona.units,
               notificationDetail: persona.notificationDetail,
               ageAttestedAt: signedUp(persona),
+              ...stamp(signedUp(persona)),
             })),
           )
           .onConflictDoNothing()
@@ -404,10 +422,20 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
     );
 
     // Keys: one wrapped DEK per user, as the sign-up hook would have minted.
+    // The helper stamps `created_at` from the clock; a key the seed minted
+    // is dated to the sign-up it stands for, so the row is deterministic too.
+    const dateKey = (subjectId: string, at: Date) =>
+      tx
+        .update(schema.subjectKeys)
+        .set({ createdAt: at })
+        .where(eq(schema.subjectKeys.subjectId, subjectId));
     let keysCreated = 0;
     for (const persona of PERSONAS) {
       const key = await provisionSubjectKey(tx, persona.id, kek, "user");
-      if (key.created) keysCreated += 1;
+      if (key.created) {
+        keysCreated += 1;
+        await dateKey(persona.id, signedUp(persona));
+      }
     }
 
     // Households, memberships and the invitations in every state.
@@ -416,7 +444,10 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       (
         await tx
           .insert(schema.households)
-          .values([{ id: HOUSEHOLD_A }, { id: HOUSEHOLD_B }])
+          .values([
+            { id: HOUSEHOLD_A, ...stamp(foundedA) },
+            { id: HOUSEHOLD_B, ...stamp(foundedB) },
+          ])
           .onConflictDoNothing()
           .returning({ id: schema.households.id })
       ).length,
@@ -433,6 +464,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               userId: NOOR.id,
               role: "owner",
               joinedAt: daysBefore(now, 400),
+              ...stamp(daysBefore(now, 400)),
             },
             {
               id: seedId(BLOCK.householdMembers, 2),
@@ -440,6 +472,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               userId: THEO.id,
               role: "partner",
               joinedAt: daysBefore(now, 120),
+              ...stamp(daysBefore(now, 120)),
             },
             {
               id: seedId(BLOCK.householdMembers, 3),
@@ -447,6 +480,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               userId: MIRA.id,
               role: "owner",
               joinedAt: daysBefore(now, 420),
+              ...stamp(daysBefore(now, 420)),
             },
             {
               id: seedId(BLOCK.householdMembers, 4),
@@ -454,6 +488,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               userId: LENA.id,
               role: "partner",
               joinedAt: daysBefore(now, 399),
+              ...stamp(daysBefore(now, 399)),
             },
           ])
           .onConflictDoNothing()
@@ -476,6 +511,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               createdAt: daysBefore(now, 121),
               expiresAt: daysBefore(now, 118),
               acceptedAt: daysBefore(now, 120),
+              updatedAt: daysBefore(now, 120),
             },
             {
               id: INVITATION_PENDING,
@@ -486,6 +522,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               tokenHash: sha256(invitationToken(INVITATION_PENDING)),
               createdAt: daysBefore(now, 1),
               expiresAt: daysBefore(now, -2),
+              updatedAt: daysBefore(now, 1),
             },
             {
               id: INVITATION_EXPIRED,
@@ -496,6 +533,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               tokenHash: sha256(invitationToken(INVITATION_EXPIRED)),
               createdAt: daysBefore(now, 10),
               expiresAt: daysBefore(now, 7),
+              updatedAt: daysBefore(now, 10),
             },
             {
               id: INVITATION_WITHDRAWN,
@@ -507,6 +545,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               createdAt: daysBefore(now, 30),
               expiresAt: daysBefore(now, 27),
               withdrawnAt: daysBefore(now, 29),
+              updatedAt: daysBefore(now, 29),
             },
             {
               id: INVITATION_LENA_ACCEPTED,
@@ -518,6 +557,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               createdAt: daysBefore(now, 400),
               expiresAt: daysBefore(now, 397),
               acceptedAt: daysBefore(now, 399),
+              updatedAt: daysBefore(now, 399),
             },
           ])
           .onConflictDoNothing()
@@ -539,6 +579,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               displayName: "Ilo",
               dateOfBirth: v(-42),
               sex: "female",
+              ...stamp(iloRegistered),
             },
             {
               id: SOL,
@@ -546,6 +587,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               displayName: "Sol",
               dateOfBirth: v(-913),
               sex: "male",
+              ...stamp(solRegistered),
             },
           ])
           .onConflictDoNothing()
@@ -558,18 +600,44 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
         await tx
           .insert(schema.childGuardians)
           .values([
-            { id: seedId(BLOCK.childGuardians, 1), childId: ILO, userId: MIRA.id },
-            { id: seedId(BLOCK.childGuardians, 2), childId: ILO, userId: LENA.id },
-            { id: seedId(BLOCK.childGuardians, 3), childId: SOL, userId: MIRA.id },
-            { id: seedId(BLOCK.childGuardians, 4), childId: SOL, userId: LENA.id },
+            {
+              id: seedId(BLOCK.childGuardians, 1),
+              childId: ILO,
+              userId: MIRA.id,
+              ...stamp(iloRegistered),
+            },
+            {
+              id: seedId(BLOCK.childGuardians, 2),
+              childId: ILO,
+              userId: LENA.id,
+              ...stamp(iloRegistered),
+            },
+            {
+              id: seedId(BLOCK.childGuardians, 3),
+              childId: SOL,
+              userId: MIRA.id,
+              ...stamp(solRegistered),
+            },
+            {
+              id: seedId(BLOCK.childGuardians, 4),
+              childId: SOL,
+              userId: LENA.id,
+              ...stamp(signedUp(LENA)),
+            },
           ])
           .onConflictDoNothing()
           .returning({ id: schema.childGuardians.id })
       ).length,
     );
-    for (const childId of [ILO, SOL]) {
+    for (const [childId, registeredAt] of [
+      [ILO, iloRegistered],
+      [SOL, solRegistered],
+    ] as const) {
       const key = await provisionChildKey(tx, childId, kek);
-      if (key.created) keysCreated += 1;
+      if (key.created) {
+        keysCreated += 1;
+        await dateKey(childId, registeredAt);
+      }
     }
     record("subject_keys", keysCreated);
 
@@ -590,6 +658,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               policyVersion: SEED_POLICY_VERSION,
               descriptionVersion: SEED_POLICY_VERSION,
               createdAt: daysBefore(now, 100),
+              updatedAt: daysBefore(now, 100),
             },
             {
               id: GRANT_NOOR_THEO_READ,
@@ -600,6 +669,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               policyVersion: SEED_POLICY_VERSION,
               descriptionVersion: SEED_POLICY_VERSION,
               createdAt: daysBefore(now, 100),
+              updatedAt: daysBefore(now, 100),
             },
             {
               id: GRANT_NOOR_THEO_REVOKED,
@@ -610,6 +680,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               policyVersion: SEED_POLICY_VERSION,
               descriptionVersion: SEED_POLICY_VERSION,
               createdAt: daysBefore(now, 100),
+              updatedAt: daysBefore(now, 20),
               revokedAt: daysBefore(now, 20),
             },
             {
@@ -621,6 +692,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               policyVersion: SEED_POLICY_VERSION,
               descriptionVersion: SEED_POLICY_VERSION,
               createdAt: daysBefore(now, 60),
+              updatedAt: daysBefore(now, 60),
             },
             {
               id: GRANT_MIRA_PIA_READ,
@@ -632,6 +704,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               policyVersion: SEED_POLICY_VERSION,
               descriptionVersion: SEED_POLICY_VERSION,
               createdAt: daysBefore(now, 200),
+              updatedAt: daysBefore(now, 200),
             },
           ])
           .onConflictDoNothing()
@@ -658,6 +731,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       policyVersion: SEED_POLICY_VERSION,
       textHash: sha256(purpose),
       grantedAt,
+      ...stamp(grantedAt),
     });
     record(
       "consents",
@@ -769,7 +843,15 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
     let symptomCount = 0;
     NOOR_DAYS.forEach(([offset, flow, mood, symptoms], index) => {
       const entryId = seedId(BLOCK.cycleEntries, index + 1);
-      entryRows.push({ id: entryId, subjectId: NOOR.id, date: t(offset), flow, mood });
+      const loggedAt = daysBefore(now, -offset);
+      entryRows.push({
+        id: entryId,
+        subjectId: NOOR.id,
+        date: t(offset),
+        flow,
+        mood,
+        ...stamp(loggedAt),
+      });
       for (const code of symptoms) {
         symptomCount += 1;
         symptomRows.push({
@@ -777,6 +859,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           entryId,
           subjectId: NOOR.id,
           code,
+          ...stamp(loggedAt),
         });
       }
     });
@@ -818,6 +901,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
             uncertaintyDays: 3,
             ovulationBandDays: 2,
             computedAt: now,
+            ...stamp(now),
           })
           .onConflictDoNothing()
           .returning({ id: schema.cyclePredictions.id })
@@ -839,6 +923,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               dueDate: v(126),
               datingMethod: "ultrasound",
               startedAt: daysBefore(now, 98),
+              ...stamp(daysBefore(now, 98), daysBefore(now, 56)),
             },
             {
               id: MIRA_PREGNANCY,
@@ -848,6 +933,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               startedAt: daysBefore(now, 300),
               endedAt: v(-42),
               endedReason: "birth",
+              ...stamp(daysBefore(now, 300), iloRegistered),
             },
           ])
           .onConflictDoNothing()
@@ -867,6 +953,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
             nextDueDate: v(126),
             method: "ultrasound",
             changedAt: daysBefore(now, 56),
+            createdAt: daysBefore(now, 56),
           })
           .onConflictDoNothing()
           .returning({ id: schema.dueDateChanges.id })
@@ -908,6 +995,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                         event.label,
                       ),
                 kekVersion: event.label === null ? null : kek.version,
+                ...stamp(daysBefore(now, event.recordedDaysAgo)),
               })),
             )
             .onConflictDoNothing()
@@ -926,6 +1014,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           date: v(-1),
           startedAt: hoursBefore(now, 26),
           quantityMl: 90,
+          ...stamp(hoursBefore(now, 26)),
         },
         {
           id: ILO_FEED_NOTE.id,
@@ -940,6 +1029,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
             ILO_FEED_NOTE.text,
           ),
           kekVersion: kek.version,
+          ...stamp(hoursBefore(now, 22)),
         },
         {
           id: seedId(BLOCK.childEvents, 3),
@@ -949,6 +1039,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           date: v(0),
           startedAt: hoursBefore(now, 9),
           endedAt: hoursBefore(now, 3),
+          ...stamp(hoursBefore(now, 9), hoursBefore(now, 3)),
         },
         {
           id: seedId(BLOCK.childEvents, 4),
@@ -957,15 +1048,20 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           kind: "diaper",
           date: v(0),
           startedAt: hoursBefore(now, 2),
+          ...stamp(hoursBefore(now, 2)),
         },
-        ...CHECKED_MILESTONES.map((item, index) => ({
-          id: item.id,
-          childId: item.childId,
-          authorId: index % 2 === 0 ? MIRA.id : LENA.id,
-          kind: "milestone" as const,
-          date: v([-3, -5, -5, -200, -190][index] ?? 0),
-          milestoneId: item.milestoneId,
-        })),
+        ...CHECKED_MILESTONES.map((item, index) => {
+          const offset = [-3, -5, -5, -200, -190][index] ?? 0;
+          return {
+            id: item.id,
+            childId: item.childId,
+            authorId: index % 2 === 0 ? MIRA.id : LENA.id,
+            kind: "milestone" as const,
+            date: v(offset),
+            milestoneId: item.milestoneId,
+            ...stamp(daysBefore(now, -offset)),
+          };
+        }),
         {
           id: seedId(BLOCK.childEvents, 10),
           childId: SOL,
@@ -974,6 +1070,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           date: v(-1),
           startedAt: hoursBefore(now, 24),
           endedAt: hoursBefore(now, 14),
+          ...stamp(hoursBefore(now, 24), hoursBefore(now, 14)),
         },
       ];
       record(
@@ -1001,6 +1098,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                 weightGrams: 3400,
                 lengthMillimetres: 505,
                 headMillimetres: 345,
+                ...stamp(daysBefore(now, 42)),
               },
               {
                 id: seedId(BLOCK.childMeasurements, 2),
@@ -1008,6 +1106,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                 authorId: LENA.id,
                 date: v(-28),
                 weightGrams: 3650,
+                ...stamp(daysBefore(now, 28)),
               },
               {
                 id: seedId(BLOCK.childMeasurements, 3),
@@ -1017,6 +1116,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                 weightGrams: 4600,
                 lengthMillimetres: 555,
                 headMillimetres: 375,
+                ...stamp(daysBefore(now, 1)),
               },
               {
                 id: seedId(BLOCK.childMeasurements, 4),
@@ -1026,6 +1126,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                 weightGrams: 12500,
                 lengthMillimetres: 870,
                 headMillimetres: 485,
+                ...stamp(daysBefore(now, 183)),
               },
               {
                 id: seedId(BLOCK.childMeasurements, 5),
@@ -1034,6 +1135,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                 date: v(-5),
                 weightGrams: 13600,
                 lengthMillimetres: 920,
+                ...stamp(daysBefore(now, 5)),
               },
             ])
             .onConflictDoNothing()
@@ -1059,6 +1161,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                   note.text,
                 ),
                 kekVersion: kek.version,
+                ...stamp(daysBefore(now, -note.dayOffset)),
               })),
             )
             .onConflictDoNothing()
@@ -1078,7 +1181,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       subjectId: string,
       category: (typeof schema.dataCategoryValues)[number] | null,
       occurredAt: Date,
-      extra: { childId?: string; dedupeKey?: string } = {},
+      extra: { childId?: string | undefined; dedupeKey?: string | undefined } = {},
     ): typeof schema.auditEvents.$inferInsert => ({
       id: seedId(BLOCK.auditEvents, n),
       actorId,
@@ -1088,7 +1191,26 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       childId: extra.childId ?? null,
       occurredAt,
       dedupeKey: extra.dedupeKey ?? null,
+      createdAt: occurredAt,
     });
+    // A partner read is deduplicated per day in the reader's own zone.
+    const read = (
+      n: number,
+      reader: Persona,
+      subjectId: string,
+      category: (typeof schema.dataCategoryValues)[number],
+      occurredAt: Date,
+      childId?: string,
+    ) =>
+      audit(n, reader.id, "share.read", subjectId, category, occurredAt, {
+        childId,
+        dedupeKey: readDedupeKey(
+          reader.id,
+          subjectId,
+          category,
+          dateIn(occurredAt, reader.timeZone),
+        ),
+      });
     record(
       "audit_events",
       (
@@ -1108,16 +1230,9 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
             audit(11, MIRA.id, "grant.create", SOL, "child", daysBefore(now, 200), {
               childId: SOL,
             }),
-            audit(12, THEO.id, "share.read", NOOR.id, "cycle.symptoms", hoursBefore(now, 4), {
-              dedupeKey: readDedupeKey(THEO.id, NOOR.id, "cycle.symptoms", t(0)),
-            }),
-            audit(13, THEO.id, "share.read", NOOR.id, "cycle.symptoms", daysBefore(now, 1), {
-              dedupeKey: readDedupeKey(THEO.id, NOOR.id, "cycle.symptoms", t(-1)),
-            }),
-            audit(14, PIA.id, "share.read", SOL, "child", hoursBefore(now, 29), {
-              childId: SOL,
-              dedupeKey: readDedupeKey(PIA.id, SOL, "child", v(-1)),
-            }),
+            read(12, THEO, NOOR.id, "cycle.symptoms", hoursBefore(now, 4)),
+            read(13, THEO, NOOR.id, "cycle.symptoms", daysBefore(now, 1)),
+            read(14, PIA, SOL, "child", hoursBefore(now, 29), SOL),
             audit(15, MIRA.id, "share.write", LENA.id, "pregnancy.overview", daysBefore(now, 3)),
             audit(16, MIRA.id, "share.write", LENA.id, "pregnancy.overview", daysBefore(now, 14)),
             audit(17, NOOR.id, "invitation.create", NOOR.id, null, daysBefore(now, 1)),
@@ -1128,7 +1243,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       ).length,
     );
 
-    record("vocabulary", await seedVocabulary(tx));
+    record("vocabulary", await seedVocabulary(tx, { createdAt: now }));
 
     return { inserted };
   }, db);
