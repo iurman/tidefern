@@ -972,3 +972,20 @@ rather than scrolling them.
 Merge I1 (chain running), launch E1, then review and merge B11 and C4;
 close I1, B11, C4 and E1 in the plan; then E2 to E8 as a wave over E1,
 H9 (lead), I2 after E8 and D2, and the H routes once E2 to E8 land.
+
+### I1 merged, E1 and H9 started (2026-10-06, lead session 061fed2d)
+
+I1 merged by squash as `52841aa` after the lead's rebase (PR #34; gate on
+the rebased head: `pnpm check` exit 0, e2e 71 passed; preview smoke by
+manual dispatch, run 37418427864, success). E1 started as its own
+workflow over it. H9 (public pages) is claimed by the lead and its
+implementation delegated to a builder with a fresh-context reviewer who
+captures every route; the lead reads the captures and the policy copy
+against CONTENT.md before the merge, as with the G5 groups. B11 and C4
+are in progress in the sixth wave.
+
+### Next action
+
+Review and merge B11, C4, E1 and H9 as they become ready (H9 and C4 touch
+apps/web and get a smoke dispatch), close them in the plan, then E2 to E8
+as one wave over E1 (distinct route files), I2 after E8, and the H routes.
