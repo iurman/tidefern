@@ -1,0 +1,334 @@
+/*
+ * The calendar month (DESIGN.md 6.2 and 3.4). Colors are semantic tokens;
+ * the day pills come from day-cell.module.css through the modifier classes.
+ * The forced twins of hover, active and focus-visible land on today's
+ * button, which is what the person reaches first with Tab.
+ */
+
+.monthGrid {
+  display: grid;
+  gap: var(--space-3);
+  max-width: 100%;
+}
+
+.monthGrid[data-disabled="true"] {
+  color: var(--muted);
+}
+
+.picker {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.months {
+  position: relative;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.month {
+  width: 100%;
+}
+
+.month .month {
+  position: absolute;
+  inset: 0;
+}
+
+.nav {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  justify-content: space-between;
+  pointer-events: none;
+}
+
+.navButton {
+  display: grid;
+  place-items: center;
+  width: var(--size-control);
+  height: var(--size-control);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  pointer-events: auto;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.navButton:hover {
+  background: var(--panel);
+}
+
+.navButton:active {
+  transform: scale(0.94);
+}
+
+.navButton:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.navButton:disabled:hover {
+  background: transparent;
+}
+
+.navButton:disabled:active {
+  transform: none;
+}
+
+.chevron {
+  display: block;
+}
+
+.caption {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-control);
+  padding-inline: var(--size-control);
+}
+
+.captionLabel {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+}
+
+.grid {
+  width: 100%;
+  table-layout: fixed;
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.weekdays {
+  color: var(--muted);
+}
+
+.weekday {
+  padding-block: var(--space-2);
+  font-size: var(--type-caption);
+  font-weight: var(--weight-sans-strong);
+  text-align: center;
+}
+
+.weeks {
+  display: table-row-group;
+}
+
+/*
+ * The tide line: one 1 px sea-glass hairline wave under today's row
+ * (architecture 13.6). A table row cannot hold an absolutely positioned box
+ * (Chromium gives the pseudo-element a column of its own and positions it
+ * against the months container), so the first cell's button draws the wave
+ * seven cells wide instead.
+ */
+.week:has(> [data-today]) > .day:first-child > .dayButton::after {
+  content: "";
+  position: absolute;
+  inset-inline-start: var(--space-1);
+  bottom: 0;
+  width: calc(700% - var(--space-1) * 2);
+  height: 4px;
+  background: var(--tide);
+  pointer-events: none;
+  -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='4' viewBox='0 0 16 4'%3E%3Cpath d='M0 2c2-1.6 6-1.6 8 0s6 1.6 8 0' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E");
+  -webkit-mask-repeat: repeat-x;
+  -webkit-mask-size: 16px 4px;
+  mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='4' viewBox='0 0 16 4'%3E%3Cpath d='M0 2c2-1.6 6-1.6 8 0s6 1.6 8 0' fill='none' stroke='black' stroke-width='1'/%3E%3C/svg%3E");
+  mask-repeat: repeat-x;
+  mask-size: 16px 4px;
+}
+
+/* Width follows the column so the grid never scrolls; the 44 px height is the target that holds. */
+.day {
+  min-width: 0;
+  padding: 0;
+}
+
+.dayButton {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 100%;
+  min-height: var(--size-control);
+  padding: var(--space-1) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    color var(--duration-feedback) var(--ease-interface),
+    border-color var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.dayButton:hover,
+[data-specimen-state="hover"] > .monthGrid [data-today] > .dayButton {
+  background: var(--panel);
+}
+
+.dayButton:active,
+[data-specimen-state="active"] > .monthGrid [data-today] > .dayButton {
+  transform: scale(0.94);
+}
+
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
+[data-specimen-state="focus-visible"] > .monthGrid [data-today] > .dayButton {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.dayButton:disabled {
+  color: var(--muted);
+  cursor: default;
+}
+
+.dayButton:disabled:hover {
+  background: transparent;
+}
+
+.dayButton:disabled:active {
+  transform: none;
+}
+
+.focused > .dayButton {
+  border-color: var(--soft-border);
+}
+
+.hidden {
+  visibility: hidden;
+}
+
+.selected > .dayButton {
+  background: var(--action);
+  color: var(--action-text);
+}
+
+.selected > .dayButton:hover {
+  background: var(--action);
+}
+
+.rangeMiddle > .dayButton {
+  border-radius: 0;
+  background: var(--panel);
+  color: inherit;
+}
+
+.rangeStart > .dayButton {
+  border-start-end-radius: 0;
+  border-end-end-radius: 0;
+}
+
+.rangeEnd > .dayButton {
+  border-start-start-radius: 0;
+  border-end-start-radius: 0;
+}
+
+.rangeStart.rangeEnd > .dayButton {
+  border-radius: var(--radius-control);
+}
+
+.preview > .dayButton {
+  border-color: var(--border);
+  border-style: dashed;
+}
+
+.footer {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.empty {
+  display: grid;
+  gap: var(--space-2);
+  color: var(--text);
+}
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--type-caption);
+  color: var(--muted);
+}
+
+.legendItem {
+  display: inline-flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.key {
+  position: relative;
+  display: inline-block;
+  width: 28px;
+  height: 12px;
+  overflow: hidden;
+  border: 2px var(--cell-style, solid) var(--cell-stroke, transparent);
+  border-radius: var(--radius-round);
+}
+
+.key::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--cell-fill, transparent);
+  opacity: 0.16;
+}
+
+.enter {
+  animation: arrive var(--duration-feedback) var(--ease-interface) both;
+}
+
+.exit {
+  animation: leave var(--duration-feedback) var(--ease-interface) both;
+}
+
+@keyframes arrive {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes leave {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .navButton,
+  .dayButton {
+    transition-duration: 0ms;
+  }
+
+  .enter,
+  .exit {
+    animation-duration: 0ms;
+  }
+}

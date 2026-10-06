@@ -1,0 +1,106 @@
+/* The list view rows (DESIGN.md 6.3). The forced hover, active and focus-visible twins land on the first row. */
+
+.root {
+  display: grid;
+  gap: var(--space-3);
+  width: 100%;
+}
+
+.list {
+  display: grid;
+  gap: var(--space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: var(--space-3);
+  align-items: center;
+  min-height: var(--size-control);
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.row:hover,
+[data-specimen-state="hover"] > .root > .list > li:first-child > .row {
+  background: var(--panel);
+}
+
+.row:active,
+[data-specimen-state="active"] > .root > .list > li:first-child > .row {
+  transform: scale(0.98);
+}
+
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
+[data-specimen-state="focus-visible"] > .root > .list > li:first-child > .row {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: 4px;
+}
+
+.date {
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  white-space: nowrap;
+}
+
+.summary {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.chevron {
+  color: var(--muted);
+}
+
+.status {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--danger);
+}
+
+.empty {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  padding: var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.emptyHeading {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.emptyWhy {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row {
+    transition-duration: 0ms;
+  }
+}
