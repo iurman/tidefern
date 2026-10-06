@@ -16,6 +16,11 @@ export const auditActions = {
   grantUpdate: "grant.update",
   grantRevoke: "grant.revoke",
   noteShare: "note.share",
+  // Sharing (task E7): an invitation sent, withdrawn or accepted. The
+  // subject is the actor herself; the activity view lists them with grants.
+  invitationCreate: "invitation.create",
+  invitationWithdraw: "invitation.withdraw",
+  invitationAccept: "invitation.accept",
 } as const;
 
 export type AuditAction = (typeof auditActions)[keyof typeof auditActions];

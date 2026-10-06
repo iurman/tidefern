@@ -1,6 +1,7 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { ApiEnv } from "../context";
 import { registerNotes } from "./notes";
+import { registerSharing } from "./sharing/index";
 
 /**
  * The resource route registry. Each area (profile, cycle, pregnancy,
@@ -11,4 +12,5 @@ import { registerNotes } from "./notes";
  */
 export function registerRoutes(app: OpenAPIHono<ApiEnv>): void {
   registerNotes(app);
+  registerSharing(app);
 }

@@ -25,7 +25,7 @@ const TITLES: Record<ProblemCode, string> = {
   internal: "Something went wrong",
 };
 
-export type ProblemStatus = 400 | 401 | 403 | 404 | 409 | 422 | 426 | 429 | 500;
+export type ProblemStatus = 400 | 401 | 403 | 404 | 409 | 422 | 426 | 429 | 500 | 503;
 
 // Generic over the status so a typed OpenAPI handler can return the exact code its route declares.
 export function problem<Status extends ProblemStatus>(
