@@ -812,8 +812,9 @@ export function buildCatalog(): DesignCatalog {
   };
 }
 
-function cell(text: string): string {
-  return text.replace(/\|/g, "\\|");
+/** Escapes a Markdown table cell: backslashes first, then pipes, so no input can end or split a cell. */
+export function cell(text: string): string {
+  return text.replace(/\\/g, "\\\\").replace(/\|/g, "\\|");
 }
 
 /**

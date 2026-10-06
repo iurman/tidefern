@@ -125,3 +125,12 @@ describe("design exports", () => {
     expect(await response.text()).toBe(file);
   });
 });
+
+describe("cell", () => {
+  it("escapes backslashes before pipes so no text can end or split a table cell", async () => {
+    const { cell } = await import("./design-catalog");
+    expect(cell("a | b")).toBe("a \\| b");
+    expect(cell("ends with \\")).toBe("ends with \\\\");
+    expect(cell("\\|")).toBe("\\\\\\|");
+  });
+});
