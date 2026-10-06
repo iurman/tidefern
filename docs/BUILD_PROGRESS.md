@@ -1179,3 +1179,34 @@ Architecture 8.3 gains the invitation audit names.
 
 Review and merge the ninth wave, then H1 to H8 over the generated
 client, then J1 to J4 and J6 to J7 with the owner.
+
+### The ninth wave merged (2026-10-06, lead session 061fed2d)
+
+Merged by squash: H10 (`e914870`), E9 (`f69a012`, preview smoke
+37517958024), I2 (`a70ab82`), G8 (`f76eb0c`, preview smoke 37520092319)
+and B13 with B14 (`303df97`). I2 conflicted with H10 on the job handler
+registry; the lead rebased it keeping both handlers and reran the gate
+(151 e2e). G8's CodeQL check found a real issue: the Markdown table cell
+escape handled pipes but not backslashes; the lead fixed it to escape
+backslashes first, with a test (158 e2e). B13 and B14 rebased cleanly onto
+I2 (the open-closure index states match I2's `OPEN_CLOSURE_STATES`), and
+E9's new drift gate then required regenerating the client types for the
+feed side field, which is the gate working as intended.
+
+Decisions: E9's three small edits outside its file list are accepted;
+moving the UUIDv7 minter into `packages/core` stays a follow-up (the
+client copy is pinned to the server's by a test); I2 runs several closure
+steps per daily run because one step a day would take about twenty days
+on Hobby; the lead edits `home.spec.ts` when a chapter order change needs
+it.
+
+The lead started the route-group restructure that the page routes need:
+a `(public)` group with the public header and footer and an `(app)` group
+with the app shell and the session gate, so no authenticated page shows
+the public header (the overlap C4 and G7 showed). H1 to H8 start once it
+merges.
+
+### Next action
+
+Merge the route-group restructure, then launch H1 to H8 as one wave, then
+J1 to J4 and the owner tasks.
