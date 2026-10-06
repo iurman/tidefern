@@ -139,3 +139,5 @@ export * from "./pregnancy";
 export * from "./children";
 export * from "./account";
 export * from "./cycle";
+/** Task E2: the profile, consent and data summary shapes. */
+export * from "./profile";
