@@ -84,11 +84,31 @@ export function crossSiteVerdict(
  * origin or a trusted one with the 403 problem, the one use of `forbidden`
  * the contract allows (architecture 5.1). Reads pass untouched.
  */
+/**
+ * The origin the browser addressed, read the way the browser sees it: the
+ * forwarded host and scheme on a platform, else the Host header, else the
+ * request URL. A Next.js host rewrites the URL's host to its listen name, so
+ * the URL alone would call a request to 127.0.0.1 a request to localhost and
+ * refuse the browser's own Origin.
+ */
+export function ownOriginOf(url: string, headers: Headers): string {
+  const parsed = new URL(url);
+  const host = headers.get("x-forwarded-host") ?? headers.get("host");
+  if (!host) return parsed.origin;
+  const forwardedProto = headers.get("x-forwarded-proto");
+  const protocol = forwardedProto ? `${forwardedProto.split(",")[0]!.trim()}:` : parsed.protocol;
+  try {
+    return new URL(`${protocol}//${host.split(",")[0]!.trim()}`).origin;
+  } catch {
+    return parsed.origin;
+  }
+}
+
 export function crossSite(options: CrossSiteOptions = {}): MiddlewareHandler<ApiEnv> {
   const trusted = options.trustedOrigins ?? [];
   return async (c, next) => {
     if (!isMutation(c.req.method)) return next();
-    const ownOrigin = new URL(c.req.url).origin;
+    const ownOrigin = ownOriginOf(c.req.url, c.req.raw.headers);
     if (crossSiteVerdict(c.req.raw.headers, ownOrigin, trusted) === "refused") {
       return problem(c, 403, "forbidden", { detail: CROSS_SITE_REQUEST });
     }

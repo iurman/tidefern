@@ -355,6 +355,16 @@ unique index on `(actor_id, key)`:
   would hold decrypted free text outside the encrypted columns;
 - a daily job deletes rows older than 24 hours.
 
+Built in task E1: the `idempotency_keys` row also stores the response
+status and a hash of the response body, and a replay answers the stored
+status with the resource id and `Location` from the row rather than
+re-reading the resource; a route that wants a fresh body re-reads by
+`resource_id` itself. A 5xx or a thrown handler releases the key so a
+transient failure can be retried; 2xx and 4xx answers are stored and
+replayed. A row left `in_flight` by a killed function is reclaimed after
+five minutes.
+
+
 ## 6. Identity and sessions
 
 ### 6.1 Better Auth configuration
