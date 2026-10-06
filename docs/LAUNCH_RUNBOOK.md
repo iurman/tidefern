@@ -159,9 +159,27 @@ production deployment. After a rollback Vercel stops assigning the
 production domains to new deployments, so later merges build green but do
 not go live until you choose "Undo Rollback" or run `vercel promote`; cron
 jobs revert to the rolled-back deployment's schedule and environment
-variable changes are not applied. The `deploy-verify` production check
-compares the deployed commit with `main` and fails loudly while a rollback
-is in effect. Database: migrations roll forward only and are written
+variable changes are not applied. To undo: in the Vercel project's
+Deployments view choose "Undo Rollback", or run `vercel promote` on the
+deployment that should be live.
+
+The `deploy-verify` step "This production deployment is the head of main"
+compares the commit a Production deployment was built from with the head
+of `main` and names both. It catches an old commit deployed or promoted
+again. It does not see an Instant Rollback: the rollback keeps the domains
+on the old deployment, while each new merge still produces a Production
+deployment built from the head of `main`, and that deployment passes the
+step. Until the health endpoint reports the commit it was built from, check
+a rollback by eye in the Vercel Deployments view, which marks the
+deployment the domains point to as Current. A manual run of the workflow
+with `-f ref=...` only compares the ref you pass with `main`; it says
+nothing about what the domains serve.
+
+A merge that lands while an earlier production deployment is still being
+verified fails that earlier run, because its commit is no longer the head
+of `main`. Re-running it compares the same commit again and fails every
+time; the newer deployment's own run supersedes it, so read that run
+instead. Database: migrations roll forward only and are written
 expand-then-contract, so the previous code keeps working against the new
 schema; a problem gets a corrective migration; destructive steps run only
 through the owner-triggered migration workflow. Never rewrite history on
@@ -213,8 +231,24 @@ curl -s https://<deployment>/api/v1/health
 
 ## Uptime (task J5)
 
-A scheduled GitHub Actions workflow checks `/` and `/api/v1/health` twice
-an hour once production exists, modeled on the owner's Aviune repository.
+`.github/workflows/uptime.yml` checks `/` and `/api/v1/health` on the
+repository variable `PRODUCTION_URL` twice an hour (minutes 11 and 41),
+modeled on the owner's Aviune repository. Each route gets one request and
+one retry after 30 seconds; a failure names the URL and the status in the
+run's annotations and reaches the owner as a GitHub workflow failure email.
+The job checks out nothing and holds no permissions; it sends the
+protection bypass header only when `VERCEL_AUTOMATION_BYPASS_SECRET` is
+set. Run it by hand after a deployment or an incident:
+
+```sh
+gh workflow run uptime.yml --repo iurman/tidefern
+gh run list --repo iurman/tidefern --workflow uptime.yml --limit 5
+```
+
+Runs never overlap: a run that arrives while another is in progress
+waits. GitHub keeps at most one pending run per concurrency group, so if a
+second run queues behind the first waiting one, GitHub cancels the older
+pending run and keeps the newest.
 
 ## Vendors and processors
 
