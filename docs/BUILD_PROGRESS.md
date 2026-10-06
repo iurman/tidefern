@@ -7,6 +7,22 @@ findings and the next concrete action. Resume from the last entry and
 
 ## Owner actions pending (kept current by the lead; details in the newest entry)
 
+0. Blocking every merge since 2026-10-06 about 07:00 UTC: the repository
+   is now private, and GitHub refuses CodeQL uploads on a private
+   repository without GitHub Advanced Security ("Code scanning is not
+   enabled for this repository"). The analysis itself runs clean; only the
+   upload fails, so the required `CodeQL` check is red on every pull
+   request and the ruleset refuses the merge. The lead will not change the
+   ruleset, weaken the workflow or buy a plan. Pick one:
+   - make the repository public again:
+     `gh repo edit iurman/tidefern --visibility public --accept-visibility-change-consequences`
+   - or keep it private and drop `CodeQL` from the required checks in the
+     main ruleset (Settings, Rules), then tell the lead to set the workflow
+     to analyze without uploading so the check still runs.
+   Once either is done, the ready pull requests merge with
+   `gh pr merge <n> --squash` in this order: #46 (J5), #47 (J8), then the
+   E areas and G6, G7 as listed in the newest entry.
+
 1. Vercel connector: the MCP connection is authorized for the personal scope
    only and answers 403 for the `iurman's projects` team. Re-authorize it at
    team scope so A2, A4 and the deployment checks can use it. Until then the
@@ -1061,3 +1077,28 @@ Review and merge E2 to E8 in order and the eighth wave as it lands, then
 G8 (exports and the coverage review), E9 (the generated client and the
 breaking-change gate), I2, the H routes over the components and the
 routes, J1 to J4, J6 and J7 with the owner.
+
+### Merges blocked by the CodeQL upload (2026-10-06, lead session 061fed2d)
+
+The seventh and eighth waves stopped when the usage credits ran out with
+ten builders mid-task (uncommitted work left in their worktrees) and J5
+built but unreviewed; one workflow resumed all eleven in their existing
+worktrees with the same review and fix passes. J5 (PR #46) and J8 (PR
+#47) are ready: J5's review found that the production commit step cannot
+see an Instant Rollback (it compares the deployment's commit with main);
+the step and the runbook now say so, and real rollback detection, which
+needs the commit the domain serves, stays open on J5's row. J8's review
+fixed a child-grant join and moved the vendor discovery time to the
+owner's attorney.
+
+Both are blocked on owner action 0: every CodeQL run since about 07:00
+UTC fails at the upload step with "Code scanning is not enabled for this
+repository", because the repository became private; the API reports
+`private: true` and no security features. `verify` passes on both. This is
+an environment failure, not an application defect.
+
+### Next action
+
+Owner: owner action 0. Lead: keep reviewing the E2 to E8, G6 and G7 pull
+requests as they become ready, so they merge in a row once CodeQL is
+unblocked.
