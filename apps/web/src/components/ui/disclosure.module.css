@@ -1,0 +1,74 @@
+.disclosure {
+  width: 100%;
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: var(--size-control);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-control);
+  font-weight: var(--weight-sans-strong);
+  list-style: none;
+  cursor: pointer;
+  transition: background var(--duration-feedback) var(--ease-interface);
+}
+
+.summary::-webkit-details-marker {
+  display: none;
+}
+
+.summary:hover,
+[data-specimen-state="hover"] > .disclosure > .summary {
+  background: var(--panel);
+}
+
+[data-specimen-state="focus-visible"] > .disclosure > .summary {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.summary:active,
+[data-specimen-state="active"] > .disclosure > .summary {
+  background: var(--panel);
+  transform: scale(0.99);
+}
+
+.summaryText {
+  flex: 1 1 auto;
+}
+
+.chevron {
+  flex: none;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  color: var(--muted);
+  transition: transform var(--duration-disclosure) var(--ease-disclosure);
+}
+
+.disclosure[open] > .summary .chevron {
+  transform: rotate(180deg);
+}
+
+.body {
+  padding: var(--space-2) var(--space-4) var(--space-4);
+  font-size: var(--type-small);
+  line-height: 1.6;
+}
+
+.body > :last-child {
+  margin-bottom: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .summary,
+  .chevron {
+    transition-duration: 0ms;
+  }
+}

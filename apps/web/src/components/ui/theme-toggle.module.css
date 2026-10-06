@@ -1,0 +1,59 @@
+.toggle {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-control);
+  min-height: var(--size-control);
+  border: 1px solid transparent;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: inherit;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.toggle:hover,
+[data-specimen-state="hover"] > .toggle {
+  background: var(--panel);
+}
+
+[data-specimen-state="focus-visible"] > .toggle {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.toggle:active,
+[data-specimen-state="active"] > .toggle {
+  transform: scale(0.94);
+}
+
+/* Which face shows is a function of the theme above the control, not a per-theme color. */
+.whenLight {
+  display: inline-flex;
+}
+
+.whenDark,
+[data-theme="dark"] .whenLight {
+  display: none;
+}
+
+[data-theme="dark"] .whenDark {
+  display: inline-flex;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .whenLight {
+    display: none;
+  }
+  :root:not([data-theme="light"]) .whenDark {
+    display: inline-flex;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle {
+    transition-duration: 0ms;
+  }
+}

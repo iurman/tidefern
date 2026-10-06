@@ -1,0 +1,50 @@
+.toggle {
+  display: inline-flex;
+  justify-self: start;
+  align-items: center;
+  justify-content: center;
+  min-width: var(--size-control);
+  min-height: var(--size-control);
+  border: 1px solid transparent;
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: inherit;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.toggle:hover,
+[data-specimen-state="hover"] > .toggle {
+  background: var(--panel);
+}
+
+[data-specimen-state="focus-visible"] > .toggle {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.toggle:active,
+[data-specimen-state="active"] > .toggle {
+  transform: scale(0.94);
+}
+
+/* Which face shows follows the sound attribute on the root; the default is on. */
+.whenOn {
+  display: inline-flex;
+}
+
+.whenOff,
+[data-sound="off"] .whenOn {
+  display: none;
+}
+
+[data-sound="off"] .whenOff {
+  display: inline-flex;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toggle {
+    transition-duration: 0ms;
+  }
+}

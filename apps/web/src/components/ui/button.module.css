@@ -1,0 +1,123 @@
+.button {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  justify-self: start;
+  gap: var(--space-2);
+  min-height: var(--size-control);
+  padding: 0 var(--space-4);
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.2;
+  text-decoration: none;
+  cursor: pointer;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    color var(--duration-feedback) var(--ease-interface),
+    border-color var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface),
+    filter var(--duration-feedback) var(--ease-interface);
+}
+
+.primary {
+  min-height: var(--size-action);
+  padding-inline: 22px;
+  border-color: var(--action);
+  background: var(--action);
+  color: var(--action-text);
+}
+
+.secondary {
+  border-color: var(--border);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.quiet {
+  color: var(--accent);
+}
+
+.destructive {
+  border-color: var(--danger);
+  background: transparent;
+  color: var(--danger);
+}
+
+.button:hover,
+[data-specimen-state="hover"] > .button {
+  filter: brightness(1.06);
+}
+
+.secondary:hover,
+.quiet:hover,
+[data-specimen-state="hover"] > .secondary,
+[data-specimen-state="hover"] > .quiet {
+  background: var(--panel);
+  filter: none;
+}
+
+.destructive:hover,
+[data-specimen-state="hover"] > .destructive {
+  background: var(--danger);
+  color: var(--page);
+  filter: none;
+}
+
+/* The global :focus-visible rule draws the ring; the forced twin only repeats it for the frame. */
+[data-specimen-state="focus-visible"] > .button {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.button:active,
+[data-specimen-state="active"] > .button {
+  transform: scale(0.96);
+}
+
+.button:disabled {
+  cursor: default;
+  opacity: 0.55;
+  filter: none;
+  transform: none;
+}
+
+/* Loading keeps the control's color and width; only the cursor says to wait. */
+.button[aria-disabled="true"] {
+  cursor: progress;
+  filter: none;
+  transform: none;
+}
+
+.icon {
+  flex: none;
+  width: var(--size-icon);
+  height: var(--size-icon);
+}
+
+/* The label and the loading text share one grid cell, so the wider of the two sets the width. */
+.stack {
+  display: inline-grid;
+  grid-template-areas: "text";
+  justify-items: center;
+}
+
+.label,
+.loadingText {
+  grid-area: text;
+  white-space: nowrap;
+}
+
+.button[aria-busy="true"] .label {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .button {
+    transition-duration: 0ms;
+  }
+}

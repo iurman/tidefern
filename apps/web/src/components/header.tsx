@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { Logo } from "./logo";
-import { SoundToggle } from "./sound-toggle";
-import { ThemeToggle } from "./theme-toggle";
+import { SoundToggle } from "@/components/ui/sound-toggle";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 export function Header() {
   return (
