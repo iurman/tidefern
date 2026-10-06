@@ -56,10 +56,12 @@ Gaps:
    its own. It appears only inside the grant row and the day sheet, so its
    disabled, loading and error states are not shown on their own, and the
    settings quiet-hours control uses it directly.
-2. The icon set (`apps/web/src/components/icons.tsx`) is not shown anywhere
-   under `/design`. Architecture 13.7 names one set on a 24 px grid with a
-   1.6 px stroke, and nothing documents the drawn symptom and mood icons
-   or the rule that each icon is paired with text.
+2. The icon set (`apps/web/src/components/icons.tsx`) is not documented as
+   a set under `/design`: no page lists the icons, the 24 px grid and 1.6 px
+   stroke that Architecture 13.7 names, the drawn symptom and mood icons or
+   the rule that each icon is paired with text. Icons appear only inside
+   other specimens (the tab bar, rail, button, toast, day sheet and month
+   grid).
 3. The public header and footer (`apps/web/src/components/header.tsx`,
    `footer.tsx`) are listed in 13.7 but have no specimen. The header today
    holds the logo, one link and the two toggles; the mobile menu 13.7
@@ -108,7 +110,8 @@ Specimens use the product's real destinations with synthetic data. These
 answer 404 on main because later Phase 1 tasks build them: `/calendar`,
 `/journey`, `/journey/dating`, `/journey/start`, `/family`,
 `/family/child/milestones`, `/sharing`, `/settings`, `/log` and
-`/log/<date>`. The link check allows a 404 only under those roots. Every other
+`/log/<date>`. The link check allows a 404 only for those exact paths (and a
+`YYYY-MM-DD` date under `/log`). Every other
 internal link must answer 200, or 307 to `/sign-in` for a signed-in route
 (`/today`, `/settings/sound`). When a route lands, its links start answering
 200 with no change to the test.

@@ -110,10 +110,26 @@ test("every catalog href resolves to exactly one element, and every section is c
  * routes in later tasks, so today they may answer 404; every other internal
  * link must answer 200. docs/design/COVERAGE.md lists them.
  */
-const plannedProductRoutes = ["/calendar", "/journey", "/family", "/sharing", "/settings", "/log"];
+const plannedProductRoutes = new Set([
+  "/calendar",
+  "/journey",
+  "/journey/dating",
+  "/journey/start",
+  "/family",
+  "/family/child/milestones",
+  "/sharing",
+  "/settings",
+  "/log",
+]);
+const plannedDayLogRoute = /^\/log\/\d{4}-\d{2}-\d{2}$/;
 
+/**
+ * Only the exact unbuilt paths are allowed, so a route that exists today
+ * (`/settings/sound`, `/settings/devices`, `/settings/two-factor`) still fails
+ * the check if it disappears.
+ */
 function isPlannedProductRoute(path: string): boolean {
-  return plannedProductRoutes.some((root) => path === root || path.startsWith(`${root}/`));
+  return plannedProductRoutes.has(path) || plannedDayLogRoute.test(path);
 }
 
 test("every internal link on every /design page answers 200 and every fragment resolves once", async ({
