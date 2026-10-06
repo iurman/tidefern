@@ -1,4 +1,5 @@
 import type { MiddlewareHandler } from "hono";
+import { openClosureOf, withActor } from "@tidefern/db";
 import type { ActorDatabase } from "@tidefern/db";
 
 import { loadActor } from "./actor";
@@ -57,7 +58,9 @@ function carriesCredential(headers: Headers): boolean {
  * on `/v1/*`, so `/auth/*` is served by Better Auth itself without a
  * second lookup. Without an injected auth instance every request is
  * anonymous, which is what the contract emitter and the health tests run
- * with.
+ * with. A person whose account is closing is refused here with the 401
+ * `account_closing` problem on every route but her data rights (see
+ * `mayReachWhileClosing`).
  */
 export function withSession(
   auth: SessionAuth | undefined,
@@ -75,12 +78,58 @@ export function withSession(
           createdAt: found.session.createdAt,
           expiresAt: found.session.expiresAt,
         };
+        if (
+          !mayReachWhileClosing(c.req.method, c.req.path) &&
+          (await isClosing(session.userId, db))
+        ) {
+          return problem(c, 401, "unauthenticated", { detail: ACCOUNT_CLOSING });
+        }
         c.set("session", session);
         c.set("actor", await loadActor(session.userId, db));
       }
     }
     await next();
   };
+}
+
+/** The `detail` of the 401 an actor with an open closure gets (architecture 11, task I2). */
+export const ACCOUNT_CLOSING = "account_closing";
+
+/**
+ * What a closing account may still reach: her data rights of architecture
+ * 11 and nothing else. The closure's own routes, so she can read the
+ * state, see a close answered (a replay, or the 409 that one is open) and
+ * undo inside the window; the export, as E8 asked, so she can take her
+ * records before they go; the data summary (confirm and access); and the
+ * consent controls, since withdrawing consent is the other way into the
+ * same closure. Every route that reads or writes health records, sharing,
+ * children, notes or the profile is refused. Sign-out lives under
+ * `/api/auth` and never passes this middleware. The `/api` prefix is
+ * `API_PREFIX` in app.ts, permanent by its own comment.
+ */
+const CLOSING_MAY_REACH: readonly (readonly [string, RegExp])[] = [
+  ["GET", /^\/api\/v1\/me\/close$/],
+  ["POST", /^\/api\/v1\/me\/close$/],
+  ["POST", /^\/api\/v1\/me\/close\/undo$/],
+  ["GET", /^\/api\/v1\/me\/export$/],
+  ["GET", /^\/api\/v1\/me\/data-summary$/],
+  ["GET", /^\/api\/v1\/me\/consents$/],
+  ["POST", /^\/api\/v1\/me\/consents$/],
+  ["POST", /^\/api\/v1\/me\/consents\/[^/]+\/withdraw$/],
+];
+
+export function mayReachWhileClosing(method: string, path: string): boolean {
+  return CLOSING_MAY_REACH.some(([allowed, pattern]) => allowed === method && pattern.test(path));
+}
+
+/**
+ * Whether the person has an open closure, read as herself under the
+ * `data_requests` policy. Architecture 11: the account is locked at once,
+ * so from the close until the deletion finishes (or an undo) every other
+ * route answers 401 `account_closing`.
+ */
+async function isClosing(userId: string, db: ActorDatabase | undefined): Promise<boolean> {
+  return (await withActor(userId, (tx) => openClosureOf(tx, userId), db)) !== undefined;
 }
 
 /** Answers the 401 problem when the request has no actor; every `/v1` route that needs one lists it. */

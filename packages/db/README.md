@@ -514,8 +514,10 @@ person opens `withActor` itself.
   transaction and returns the counts: `idempotency_keys` rows after 24
   hours, tombstoned rows after 30 days on every table with a `deleted_at`
   column (`tombstonedTables()` reads them off the schema), `audit_events`
-  after a year, `product_events` after 90 days, closure windows as 0 until
-  I2 defines them, and the number of jobs sitting in `dead`. Those tables
+  after a year, `product_events` after 90 days, closure tombstones after 30
+  days (`closureTombstones`), a fresh `account.delete` job for every open
+  closure past its window whose job is missing or dead (`closures`; see
+  Account closure below), and the number of jobs sitting in `dead`. Those tables
   are under forced row level security, so the sweep first checks
   `is_system()` and throws `SweepRoleError` on the app role rather than
   deleting nothing in silence: the job runner's connection is the owner
@@ -534,11 +536,79 @@ a connection the sweep would refuse is refused before any job is claimed.
 with its single connection two claimers run back to back there, and B10
 covers the pooled endpoint.
 
+## Account closure
+
+Architecture record 11, task I2. Closing an account is a state machine on
+its `data_requests` row (`kind = 'closure'`), advanced by the
+`account.delete` job in `packages/api/src/jobs/closure.ts`, one bounded
+step per transaction. The stored states are the enum's: E8's
+`POST /v1/me/close` files the row as `requested` (every grant and every
+other session revoked in the same transaction, the job due when the seven
+day `undo_until` passes, or at once for delete now); the job moves it to
+`in_progress` when the window is over; the end is `completed`, and an undo
+inside the window is `cancelled`. The steps between are not states of
+their own: each one finds out from the rows whether it still has work, so
+a step that already ran finds nothing the second time.
+
+| Stored state | Step the job takes | What it does |
+| --- | --- | --- |
+| `requested`, window open | `revoked`, then `waiting` | Revokes any grant still live (audited once), then waits; the person can still undo |
+| `requested`, window over | `started` | Checks the run can finish (the secret, the mailer, the owner address, and an object store when `closureHasPhotos`), then deletes every session of hers, including the one kept for the undo; `in_progress` |
+| `in_progress` | `key` | Destroys her wrapped DEK through `destroySubjectKey` (D2), before any row goes |
+| `in_progress` | `child-transferred` or `child-deleted` | One child she guards: the guardianship goes when another guardian remains; otherwise the child's key is destroyed, then its photos (and stored objects), audit rows, consents, grants and the child row with what cascades from it |
+| `in_progress` | `objects` | Her photos, their variants and their stored objects, at most 1000 keys per store request |
+| `in_progress` | `rows` | One table of `closureDeletions`, in foreign key order |
+| `in_progress` | `tombstone` | `user_id` set to null and `email_hmac` to the HMAC of her email, then the `user` row deleted and her id stripped from the closure's own jobs (`forgetClosureJobs`), in one transaction |
+| `in_progress`, no user left | `done` | The content-free processor notice to the owner, then `completed` |
+
+What this package holds for it, in `src/closure.ts`:
+
+- `OPEN_CLOSURE_STATES` (`requested`, `in_progress`) and
+  `openClosureOf(tx, userId)`, which the session middleware calls inside
+  `withActor` to refuse a closing actor with the 401 `account_closing`
+  problem (the `data_requests` select policy shows her only her own).
+- `emailHmac(secret, email)`: HMAC-SHA256 of the trimmed, lower-cased
+  address under `LOG_HMAC_SECRET`, base64url. The tombstone keeps this and
+  the dates (`requested_at`, `deadline_at`, `undo_until`, `completed_at`)
+  and nothing else; the address itself is never stored.
+- `closureDeletions` and `deleteNextUserRows(tx, userId)`: her rows in an
+  order the foreign keys allow, one table per call, stopping at the first
+  that removed anything. Tables whose subject column has no foreign key
+  (`consents`, `audit_events` as subject, `photos`) are named explicitly; a
+  household she was in goes only when no other member and no child is left
+  in it. Rows she wrote about someone else stay with their subject and lose
+  their author when the `user` row goes. Jobs that name her go too,
+  finished ones included, except the closure's own `account.delete` jobs.
+- `closureHasPhotos(tx, userId)`: whether she, or a child she is the only
+  guardian of, has a photo, so the job asks for an object store before it
+  destroys anything.
+- `forgetClosureJobs(tx, requestId)`: strips `userId` from that closure's
+  `account.delete` payloads, finished or not, so after the tombstone no job
+  row links the closure to her. Follow-up and sweep jobs carry the request
+  id alone.
+- `closuresWithoutJob(tx, now)` and `purgeClosureTombstones(tx, now)`, the
+  sweep's two closure duties: a closure past its window with no live
+  `account.delete` job (the job went `dead`, or was lost) gets a new one due
+  now, and a completed tombstone is removed after `CLOSURE_TOMBSTONE_MS`
+  (30 days).
+
+Everything runs through `withSystem` on the job runner's owner-role
+connection: the deletion crosses every person-scoped table and Better
+Auth's, and `jobs` and `session` sit outside row level security.
+`src/closure.test.ts` covers the hash, the open-closure read under the
+policy, the deletion order and its no-op second run, the household rule,
+the job cleanup, and both sweep duties; the API's
+`src/jobs/closure.test.ts` walks a whole closure step by step.
+
 ## What the package exports
 
 - `@tidefern/db`: `withActor`, `withSystem`, `isActorId`, the `schema`
-  namespace, `applyMigrations` and `migrationConfig`, plus the `Transaction`
-  and `ActorDatabase` types. Never the raw `db` or `pool`.
+  namespace, `applyMigrations` and `migrationConfig`, the closure helpers
+  above (`openClosureOf`, `emailHmac`, `closureDeletions`,
+  `deleteNextUserRows`, `closureHasPhotos`, `forgetClosureJobs`,
+  `closuresWithoutJob`, `purgeClosureTombstones`
+  and the two constants), plus the `Transaction` and `ActorDatabase` types.
+  Never the raw `db` or `pool`.
 - `@tidefern/db/jobs`: the outbox above (`enqueue`, `claimDue`,
   `claimByIds`, `complete`, `fail`, `sweep`, `assertSweepRole`, `jobId`, the
   constants and the `Job`, `JobType`, `JobPayload` and `SweepCounts` types).

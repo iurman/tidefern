@@ -3,4 +3,17 @@
 export { withActor, withSystem, isActorId } from "./actor";
 export type { ActorDatabase, Transaction } from "./actor";
 export { applyMigrations, migrationConfig } from "./migrate";
+export {
+  CLOSURE_TOMBSTONE_MS,
+  OPEN_CLOSURE_STATES,
+  closureDeletions,
+  closureHasPhotos,
+  closuresWithoutJob,
+  deleteNextUserRows,
+  emailHmac,
+  forgetClosureJobs,
+  openClosureOf,
+  purgeClosureTombstones,
+} from "./closure";
+export type { ClosureDeletion } from "./closure";
 export * as schema from "./schema/index";

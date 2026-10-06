@@ -2,6 +2,7 @@ export { createApp, API_VERSION, API_PREFIX } from "./app";
 export type { TidefernApi, ApiOptions, Defer, DrainJobs } from "./app";
 export type { ApiEnv, ApiVariables, SessionFacts } from "./context";
 export {
+  ACCOUNT_CLOSING,
   FRESH_AUTHENTICATION_REQUIRED,
   FRESH_AUTH_MAX_AGE_SECONDS,
   requireActor,
@@ -17,6 +18,8 @@ export type { SharingDependencies } from "./routes/sharing/index";
 export { problem } from "./problem";
 export { jobHandlers } from "./jobs/handlers";
 export type { JobContext, JobHandler, JobHandlers } from "./jobs/index";
+export { configureClosure } from "./jobs/closure";
+export type { ClosureSettings, ObjectStore } from "./jobs/closure";
 export type { JobsOptions } from "./routes/internal/jobs";
 export {
   audit,
