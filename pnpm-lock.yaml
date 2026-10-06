@@ -32,9 +32,15 @@ importers:
       '@tidefern/api':
         specifier: workspace:*
         version: link:../../packages/api
+      '@tidefern/auth':
+        specifier: workspace:*
+        version: link:../../packages/auth
       '@tidefern/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@tidefern/db':
+        specifier: workspace:*
+        version: link:../../packages/db
       '@tidefern/design-tokens':
         specifier: workspace:*
         version: link:../../packages/design-tokens
@@ -114,9 +120,15 @@ importers:
       '@tidefern/core':
         specifier: workspace:*
         version: link:../core
+      '@tidefern/db':
+        specifier: workspace:*
+        version: link:../db
       '@tidefern/schemas':
         specifier: workspace:*
         version: link:../schemas
+      drizzle-orm:
+        specifier: 0.45.3
+        version: 0.45.3(@electric-sql/pglite@0.5.8)(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.23.1)
       hono:
         specifier: 4.13.13
         version: 4.13.13
@@ -124,6 +136,12 @@ importers:
         specifier: 4.6.5
         version: 4.6.5
     devDependencies:
+      '@electric-sql/pglite':
+        specifier: 0.5.8
+        version: 0.5.8
+      '@tidefern/auth':
+        specifier: workspace:*
+        version: link:../auth
       '@tidefern/config':
         specifier: workspace:*
         version: link:../config

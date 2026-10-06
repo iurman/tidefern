@@ -12,7 +12,173 @@
     }
   ],
   "components": {
-    "schemas": {},
+    "schemas": {
+      "Me": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque resource identifier"
+          },
+          "profile": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MeProfile"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The profile summary, or null until onboarding creates the profile"
+          },
+          "guardianOf": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "format": "uuid",
+              "description": "Opaque resource identifier"
+            },
+            "description": "Children this actor is a guardian of"
+          },
+          "grants": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/HeldGrant"
+            },
+            "description": "Active grants where this actor is the grantee"
+          },
+          "session": {
+            "type": "object",
+            "properties": {
+              "expiresAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "authenticatedAt": {
+                "type": "string",
+                "format": "date-time",
+                "description": "When this session was created by signing in"
+              }
+            },
+            "required": [
+              "expiresAt",
+              "authenticatedAt"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "profile",
+          "guardianOf",
+          "grants",
+          "session"
+        ]
+      },
+      "MeProfile": {
+        "type": "object",
+        "properties": {
+          "displayName": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "timeZone": {
+            "type": "string",
+            "description": "IANA time zone every calendar fact is read in"
+          },
+          "stage": {
+            "type": "string",
+            "enum": [
+              "none",
+              "cycle",
+              "pregnancy",
+              "postpartum"
+            ]
+          },
+          "weekStart": {
+            "type": "integer",
+            "minimum": 1,
+            "maximum": 7,
+            "description": "1 is Monday, 7 is Sunday"
+          },
+          "units": {
+            "type": "string",
+            "enum": [
+              "metric",
+              "imperial"
+            ]
+          },
+          "notificationDetail": {
+            "type": "string",
+            "enum": [
+              "generic",
+              "gentle",
+              "detailed"
+            ]
+          }
+        },
+        "required": [
+          "displayName",
+          "timeZone",
+          "stage",
+          "weekStart",
+          "units",
+          "notificationDetail"
+        ]
+      },
+      "HeldGrant": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Opaque resource identifier"
+          },
+          "ownerId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "Whose records the grant reaches"
+          },
+          "category": {
+            "type": "string",
+            "enum": [
+              "cycle.status",
+              "cycle.history",
+              "cycle.symptoms",
+              "pregnancy.overview",
+              "pregnancy.photos",
+              "child"
+            ]
+          },
+          "level": {
+            "type": "string",
+            "enum": [
+              "summary",
+              "read",
+              "contribute"
+            ]
+          },
+          "childId": {
+            "type": "string",
+            "format": "uuid",
+            "description": "The one child a child grant reaches"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "id",
+          "ownerId",
+          "category",
+          "level",
+          "createdAt"
+        ]
+      }
+    },
     "parameters": {}
   },
   "paths": {
@@ -55,6 +221,97 @@
                     "service",
                     "version",
                     "time"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/me": {
+      "get": {
+        "tags": [
+          "identity"
+        ],
+        "summary": "The signed-in actor",
+        "description": "The actor id, the profile summary, guardianships, active grants held and the session expiry: every client bootstraps from this one call.",
+        "responses": {
+          "200": {
+            "description": "The actor",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Me"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "No session",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "type": {
+                      "type": "string",
+                      "pattern": "^urn:tidefern:problem:[a-z_]+$",
+                      "description": "A stable URN that identifies the problem type; it never depends on a domain"
+                    },
+                    "title": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "integer",
+                      "minimum": 400,
+                      "maximum": 599
+                    },
+                    "detail": {
+                      "type": "string"
+                    },
+                    "instance": {
+                      "type": "string"
+                    },
+                    "code": {
+                      "type": "string",
+                      "enum": [
+                        "validation_failed",
+                        "unauthenticated",
+                        "forbidden",
+                        "not_found",
+                        "conflict",
+                        "rate_limited",
+                        "upgrade_required",
+                        "internal"
+                      ],
+                      "description": "Stable machine-readable code. forbidden is used only for origin and cross-site failures; denied access is not_found."
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "path": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "path",
+                          "message"
+                        ]
+                      },
+                      "description": "Field level validation errors when applicable"
+                    }
+                  },
+                  "required": [
+                    "type",
+                    "title",
+                    "status",
+                    "code"
                   ]
                 }
               }
