@@ -36,6 +36,7 @@
 }
 
 .reading {
+  min-width: 0;
   max-width: var(--size-reading);
 }
 
@@ -44,6 +45,7 @@
 }
 
 .contentsNarrow {
+  min-width: 0;
   max-width: var(--size-reading);
 }
 
@@ -134,7 +136,8 @@
   color: var(--text);
   font-family: ui-monospace, "SFMono-Regular", Menlo, monospace;
   font-size: 0.85em;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .facts {

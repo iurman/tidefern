@@ -113,6 +113,28 @@ test("at phone width the mark stacks above the tagline and nothing scrolls sidew
   expect(overflow).toBeLessThanOrEqual(0);
 });
 
+test("every public page and the 404 reflow at 320 pixels without sideways scrolling", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 568 });
+  const measure = () =>
+    page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+  for (const path of [...publicRoutes, missingRoute]) {
+    await page.goto(path);
+    expect(await measure(), `${path} overflows at 320 px`).toBeLessThanOrEqual(0);
+    const summary = page.locator("summary", { hasText: "Contents" });
+    if ((await summary.count()) > 0) {
+      await summary.click();
+      expect(
+        await measure(),
+        `${path} overflows at 320 px with the contents open`,
+      ).toBeLessThanOrEqual(0);
+    }
+  }
+});
+
 for (const path of policyRoutes) {
   test(`${path} has a sticky contents list whose links resolve to headings on the page`, async ({
     page,

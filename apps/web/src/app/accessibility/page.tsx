@@ -64,8 +64,8 @@ export default function AccessibilityPage() {
             managers work, and there is no CAPTCHA.
           </li>
           <li>
-            Pages reflow at 320 pixels without sideways scrolling, and a check for that runs on
-            every build.
+            Every public page reflows at 320 pixels without sideways scrolling, and a check for that
+            runs before a change can merge.
           </li>
           <li>
             Motion that respects the reduced motion setting, and nothing on any page that animates

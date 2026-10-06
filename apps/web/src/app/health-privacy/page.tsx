@@ -114,7 +114,8 @@ export default function HealthPrivacyPage() {
         />
         <p>
           Resend sends the email described on the Privacy page and receives your email address only;
-          GitHub and Cloudflare receive no health data. There are no affiliates.
+          GitHub and Cloudflare receive no health data. Affiliates:{" "}
+          <OwnerInput>none, or the list</OwnerInput>.
         </p>
       </PolicySection>
 
@@ -129,11 +130,7 @@ export default function HealthPrivacyPage() {
             {
               term: "Confirm and access",
               detail:
-                "Settings lists the categories held about you, every processor above with its contact, and every person who holds a grant. An export gives you the data itself after you sign in again.",
-            },
-            {
-              term: "Correct",
-              detail: "Open any day or entry you logged and change it.",
+                "Once signed in, your account can show you the categories held about you, every processor above with its contact, and every person who holds a grant; the export gives you the data itself after you sign in again.",
             },
             {
               term: "Withdraw consent",

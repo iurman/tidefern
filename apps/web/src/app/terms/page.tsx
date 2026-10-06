@@ -52,9 +52,8 @@ export default function TermsPage() {
       <PolicySection id="account" heading="Your account">
         <p>
           Tidefern is for adults. At sign-up you attest that you are 18 or older; an account found
-          to belong to a minor is closed. One person uses one account, and you are responsible for
-          keeping your sign-in to yourself. A child never gets a login; a parent or guardian keeps
-          the child&apos;s record.
+          to belong to a minor is closed. A child never gets a login; a parent or guardian keeps the
+          child&apos;s record.
         </p>
       </PolicySection>
 
@@ -71,15 +70,16 @@ export default function TermsPage() {
         <p>
           You can close your account at any time;{" "}
           <TextLink href="/account/delete">Delete your account</TextLink> says what closing does and
-          when. Tidefern may close an account that breaks these terms, and tells you why.
+          when.
         </p>
       </PolicySection>
 
       <PolicySection id="legal" heading="The legal text">
         <p>
-          The governing law, limitation of liability, warranty and dispute sections are an owner
-          input and are not written yet: <OwnerInput>legal text, after attorney review</OwnerInput>.
-          Until they are, nothing on this page is an operative agreement.
+          The governing law, limitation of liability, warranty, dispute, account sharing, suspension
+          and termination sections are an owner input and are not written yet:{" "}
+          <OwnerInput>legal text, after attorney review</OwnerInput>. Until they are, nothing on
+          this page is an operative agreement.
         </p>
       </PolicySection>
 

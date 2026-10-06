@@ -93,8 +93,8 @@ export default function PrivacyPage() {
 
       <PolicySection id="device" heading="Stored on your device">
         <p>
-          Tidefern keeps three things in your browser, each for a reason, and nothing else. There
-          are no cookies beyond the session cookie, so there is no cookie banner.
+          Tidefern keeps four things in your browser, each for a reason, and nothing else. There are
+          no cookies beyond the two named here, so there is no cookie banner.
         </p>
         <FactList
           items={[
@@ -102,6 +102,11 @@ export default function PrivacyPage() {
               term: "Session cookie",
               detail:
                 "Strictly necessary: it keeps you signed in. It is removed when you sign out, or when it expires. Without it nothing on your account can be reached.",
+            },
+            {
+              term: "Two-step sign-in cookie",
+              detail:
+                "Strictly necessary, and only if you turned two-step sign-in on: it carries you from the password step to the code step and is removed when sign-in completes.",
             },
             {
               term: THEME_KEY,
