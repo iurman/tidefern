@@ -9,7 +9,7 @@ database access goes through. Imported by `packages/api` (and later
 | Variable                | Used by                                      | Value                                                   |
 | ----------------------- | -------------------------------------------- | ------------------------------------------------------- |
 | `DATABASE_URL`          | `src/client.ts` (the app)                    | The pooled Neon string (host contains `-pooler`)        |
-| `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`    | The owner role's direct string; migrations only         |
+| `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run` | The owner role's direct string; migrations and the job runner |
 | `MIGRATE_DESTRUCTIVE`   | the owner-triggered migration workflow (B12) | `1` lets the runner apply a contract migration (DROP, RENAME, ALTER COLUMN ... TYPE, TRUNCATE) |
 | `TIDEFERN_KEK_V1`       | `scripts/seed.ts`                            | The KEK the seed seals its free text under; base64 of 32 bytes, the environment's own value |
 | `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`                            | An ISO 8601 instant that freezes the seed's "today"; refused when `VERCEL_ENV` is `production` |
@@ -422,14 +422,70 @@ has a build step, so no ordering between their checks is needed. Nothing
 in `@tidefern/db`'s exports reaches the seed; `src/index.ts` is unchanged
 and the app bundle never pulls it in.
 
+## Jobs
+
+`src/jobs.ts` is the outbox of architecture record 10.1, reached as
+`@tidefern/db/jobs`. The `jobs` table (B7) sits outside row level security
+because a job names ids and never content; a handler that acts for one
+person opens `withActor` itself.
+
+- `enqueue(tx, type, payload, { runAfter?, id? })` inserts one `queued` row
+  inside the caller's transaction, so the job commits with the change that
+  caused it or not at all. `type` is one of `jobTypeValues` (neutral names:
+  `reminder.send`, `account.delete`, `export.step` and so on) and the
+  payload is checked to hold UUIDs only, as strings or lists under camelCase
+  keys; anything else is a `JobPayloadError`. The id is a UUIDv7 from
+  `jobId()` unless the caller mints one.
+- `claimDue(db, limit, now)` claims up to `limit` jobs that are `queued` or
+  `failed` with `run_after` in the past, plus any `running` row whose lock
+  is older than `CLAIM_LOCK_TIMEOUT_MS` (15 minutes, a drain that died). The
+  rows are selected `FOR UPDATE SKIP LOCKED`, so two drains at once never
+  take the same job, then set `running` with `locked_at` and one more
+  attempt. `claimByIds(db, ids, now)` is the same claim for the ids one
+  request enqueued; the inline drain in `packages/api` calls it.
+- `complete(db, id)` marks a running job `done`. `fail(db, id, error)` puts
+  it back as `failed` with `run_after` pushed out by `BACKOFF_MS` for its
+  attempt count (1 minute, 5, 30, then 2 hours), or to `dead` after the
+  fifth attempt. `last_error` holds the error's name and driver code and
+  never its message, because a database error can quote the row it refused.
+- `sweep(db, now)` runs the retention purges in one `withSystem`
+  transaction and returns the counts: `idempotency_keys` rows after 24
+  hours, tombstoned rows after 30 days on every table with a `deleted_at`
+  column (`tombstonedTables()` reads them off the schema), `audit_events`
+  after a year, `product_events` after 90 days, closure windows as 0 until
+  I2 defines them, and the number of jobs sitting in `dead`. Those tables
+  are under forced row level security, so the sweep first checks
+  `is_system()` and throws `SweepRoleError` on the app role rather than
+  deleting nothing in silence: the job runner's connection is the owner
+  role (`DATABASE_URL_UNPOOLED`, architecture 7.2).
+
+The drains live in `packages/api/src/jobs`: the inline drain after a
+request (`c.var.drainJobs(ids)` through the host's `defer`), the scheduled
+`GET /api/internal/jobs/run` behind `CRON_SECRET` (daily at 06:00 UTC in
+`apps/web/vercel.json`, the Vercel root directory), and `pnpm jobs:run`
+locally against `DATABASE_URL_UNPOOLED`, or `DATABASE_URL` when only that
+is set. The scheduled run and the manual run both drain, then sweep, and
+the scheduled one mails the owner a count-only notice when the dead queue is
+not empty. The manual run calls `assertSweepRole(db)` before it drains, so
+a connection the sweep would refuse is refused before any job is claimed.
+`src/jobs.test.ts` proves the claim, the backoff and the purges on PGlite;
+with its single connection two claimers run back to back there, and B10
+covers the pooled endpoint.
+
 ## What the package exports
 
 - `@tidefern/db`: `withActor`, `withSystem`, `isActorId`, the `schema`
   namespace, `applyMigrations` and `migrationConfig`, plus the `Transaction`
   and `ActorDatabase` types. Never the raw `db` or `pool`.
+- `@tidefern/db/jobs`: the outbox above (`enqueue`, `claimDue`,
+  `claimByIds`, `complete`, `fail`, `sweep`, `assertSweepRole`, `jobId`, the
+  constants and the `Job`, `JobType`, `JobPayload` and `SweepCounts` types).
+  The api package imports it at runtime without pulling the migration runner
+  into a bundle.
 - `@tidefern/db/client`: the raw `db` and `pool`. Only `withActor` and
-  `withSystem` inside this package and the Better Auth adapter (task C1)
-  may import it.
+  `withSystem` inside this package and the Better Auth adapter (task C1) may
+  import it. The `jobs:run` entry in `packages/api/src/jobs/run.ts` opens its
+  own one-connection pool on the owner role's URL instead.
 - `@tidefern/db/schema`: the tables, for drizzle-kit and the auth adapter.
 
 ### Keeping route code out of the raw client
