@@ -4,6 +4,8 @@ import { z } from "zod";
 // would be a cycle that ESM evaluates in the wrong order; the two primitives
 // are repeated with the same shape as the index's `Id` and `CalendarDate`.
 const Id = z.uuid().describe("Opaque resource identifier");
+/** Architecture 5.1: an id a client mints for a create is validated as UUIDv7. */
+const ClientId = z.uuidv7().describe("Optional client-minted UUIDv7 for offline-first clients");
 const CalendarDate = z
   .string()
   .regex(/^\d{4}-\d{2}-\d{2}$/, "Expected YYYY-MM-DD")
@@ -57,7 +59,7 @@ const DisplayName = z
 /** The create body: an offline client may mint the id (architecture record 5.1). */
 export const ChildInput = z
   .object({
-    id: Id.optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
+    id: ClientId.optional(),
     displayName: DisplayName,
     dateOfBirth: RealCalendarDate,
     sex: Sex.optional(),
@@ -114,7 +116,7 @@ export const MilestoneItemId = z
 export type MilestoneItemId = z.infer<typeof MilestoneItemId>;
 
 const EventFields = z.object({
-  id: Id.optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
+  id: ClientId.optional(),
   kind: ChildEventKind,
   date: RealCalendarDate,
   startedAt: Instant.optional().describe("A feed's or a sleep's start"),
@@ -215,12 +217,15 @@ export const ChildEventTombstone = z
     version: z.int().min(1),
     deletedAt: Instant,
   })
-  .meta({ id: "ChildEventTombstone", description: "A deleted event, content free" });
+  .meta({
+    id: "ChildEventTombstone",
+    description: "A deleted event; the response carries no content",
+  });
 export type ChildEventTombstone = z.infer<typeof ChildEventTombstone>;
 
 export const ChildMeasurementInput = z
   .object({
-    id: Id.optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
+    id: ClientId.optional(),
     date: RealCalendarDate,
     weightGrams: z.int().min(1).max(60_000).optional(),
     lengthMillimetres: z.int().min(1).max(2_000).optional(),

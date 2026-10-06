@@ -3,6 +3,7 @@ import { FixedKeyProvider } from "@tidefern/crypto";
 import { schema } from "@tidefern/db";
 
 import { createApp } from "../app";
+import { FRESH_AUTH_MAX_AGE_SECONDS } from "../auth";
 import { configureChildren } from "../routes/children";
 import { ANNA, BEN, TOKENS, createActorFixture } from "./actors";
 import type { FakeAuth } from "./auth-fake";
@@ -11,7 +12,7 @@ import type { ApiTestDatabase } from "./database";
 /** A fourth person with no household at all; synthetic like the other three. */
 export const DANA = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f40";
 export const HOUSEHOLD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9fa0";
-export const CHILDREN_TOKENS = { ...TOKENS, dana: "dana" } as const;
+export const CHILDREN_TOKENS = { ...TOKENS, dana: "dana", annaStale: "anna-stale" } as const;
 
 export interface ChildrenFixture {
   harness: ApiTestDatabase;
@@ -34,6 +35,8 @@ export async function createChildrenFixture(): Promise<ChildrenFixture> {
     .insert(schema.user)
     .values({ id: DANA, name: "Dana", email: "dana@example.com", emailVerified: true });
   auth.signIn(CHILDREN_TOKENS.dana, DANA, "dana@example.com", 60);
+  // Anna again, authenticated past the fresh-authentication window (architecture 6.1).
+  auth.signIn(CHILDREN_TOKENS.annaStale, ANNA, "anna@example.com", FRESH_AUTH_MAX_AGE_SECONDS + 60);
   await db
     .insert(schema.profiles)
     .values({ userId: ANNA, timeZone: "Europe/Berlin", ageAttestedAt: new Date() });

@@ -1,6 +1,6 @@
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
-import type { Context } from "hono";
+import type { Context, TypedResponse } from "hono";
 import { and, asc, eq, gt, inArray, isNull, lte, gte, or } from "drizzle-orm";
 import {
   CDC_MILESTONES_ATTRIBUTION,
@@ -51,10 +51,11 @@ import {
 import type { GrowthIndicator as PlacedIndicator, GrowthPlacement } from "@tidefern/schemas";
 
 import type { RequestActor } from "../actor";
-import { requireActor } from "../auth";
+import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
 import { audit, auditActions } from "../middleware/index";
-import { problem } from "../problem";
+import { problem as sharedProblem } from "../problem";
+import type { ProblemCode } from "../problem";
 
 /**
  * The children area (architecture record 8.2 and 8.4): a child is the
@@ -98,6 +99,26 @@ function keys(): KeyProvider {
   return runtime.keys;
 }
 
+type ProblemStatus = Parameters<typeof sharedProblem>[1];
+type ProblemBody =
+  ReturnType<typeof sharedProblem> extends TypedResponse<infer Body> ? Body : never;
+
+/**
+ * The shared `problem()` answers with the union of every status it accepts,
+ * and a typed `app.openapi` handler only accepts the statuses its route
+ * declares. This wrapper narrows the type to the literal status passed; the
+ * response itself is the shared one, unchanged.
+ */
+function problem<Status extends ProblemStatus>(
+  c: Context,
+  status: Status,
+  code: ProblemCode,
+  extra?: Parameters<typeof sharedProblem>[3],
+): Response & TypedResponse<ProblemBody, Status, "json"> {
+  return sharedProblem(c, status, code, extra) as Response &
+    TypedResponse<ProblemBody, Status, "json">;
+}
+
 /** The `detail` values of the 409 problems this area answers. */
 export const STALE_VERSION = "stale_version";
 export const LAST_GUARDIAN = "last_guardian";
@@ -114,6 +135,9 @@ const problemContent = (description: string) => ({
 
 const NOT_FOUND = problemContent("No such child, or no access to it");
 const UNAUTHENTICATED = problemContent("No session");
+const UNAUTHENTICATED_OR_STALE = problemContent(
+  "No session, or a session older than the fresh-authentication window (detail `fresh_authentication_required`)",
+);
 const INVALID = problemContent("Validation failed");
 const CONFLICT = problemContent("Conflict");
 
@@ -219,11 +243,11 @@ export const addGuardianRoute = createRoute({
   tags: TAG,
   summary: "Add a guardian",
   description: "A guardian adds an active member of the child's household as a co-guardian.",
-  middleware: [requireActor] as const,
+  middleware: [requireActor, requireFreshAuth()] as const,
   request: { params: ChildParams, body: jsonBody(GuardianInput, "The member") },
   responses: {
     201: jsonResponse(Guardian, "The guardianship"),
-    401: UNAUTHENTICATED,
+    401: UNAUTHENTICATED_OR_STALE,
     404: NOT_FOUND,
     409: CONFLICT,
     422: INVALID,
@@ -236,11 +260,11 @@ export const removeGuardianRoute = createRoute({
   tags: TAG,
   summary: "End a guardianship",
   description: "A guardian leaves, or ends a co-guardianship; the last guardian cannot leave.",
-  middleware: [requireActor] as const,
+  middleware: [requireActor, requireFreshAuth()] as const,
   request: { params: GuardianParams },
   responses: {
     204: { description: "Ended" },
-    401: UNAUTHENTICATED,
+    401: UNAUTHENTICATED_OR_STALE,
     404: NOT_FOUND,
     409: CONFLICT,
   },
@@ -302,7 +326,7 @@ export const deleteEventRoute = createRoute({
   path: "/v1/children/{id}/events/{eventId}",
   tags: TAG,
   summary: "Delete an event",
-  description: "Leaves a content-free tombstone for offline clients to sync.",
+  description: "Leaves a tombstone, content free in every response, for offline clients to sync.",
   middleware: [requireActor] as const,
   request: { params: EventParams },
   responses: { 204: { description: "Deleted" }, 401: UNAUTHENTICATED, 404: NOT_FOUND },
@@ -1140,7 +1164,9 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           .limit(1);
         if (current === undefined) return null;
         const now = new Date();
-        // A tombstone (architecture 7.3): the key, the version and when, nothing of the content.
+        // A tombstone (architecture 7.3): every response carries only the key, the version and
+        // when. The stored row still keeps `kind` and `date`, because B6's NOT NULL constraints
+        // require them; the request to relax them or purge on the 7.3 schedule is with the lead.
         const removed = await tx
           .update(schema.childEvents)
           .set({
@@ -1399,7 +1425,8 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
             if (moved !== undefined) check = moved;
           }
         } else if (existing.length > 0) {
-          // An uncheck leaves tombstones, like any delete, so an offline client learns of it.
+          // An uncheck leaves tombstones, like any delete, so an offline client learns of it. The
+          // stored row keeps `kind`, `date` and `milestone_id` (B6's constraints); no response does.
           for (const row of existing) {
             await tx
               .update(schema.childEvents)

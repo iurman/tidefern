@@ -10,6 +10,7 @@ import type {
   Problem,
 } from "@tidefern/schemas";
 
+import { FRESH_AUTHENTICATION_REQUIRED } from "../auth";
 import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "../middleware/index";
 import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
@@ -44,6 +45,8 @@ const KEYS = {
   caraEvent: "018f5e7a-3000-7000-8000-00000000e018",
   caraRevoked: "018f5e7a-3000-7000-8000-00000000e019",
   anonymous: "018f5e7a-3000-7000-8000-00000000e01a",
+  guardianStale: "018f5e7a-3000-7000-8000-00000000e01b",
+  v4Id: "018f5e7a-3000-7000-8000-00000000e01c",
 };
 
 const CHILD_GRANT = "018f5e7a-2000-7000-8000-00000000c001";
@@ -171,6 +174,41 @@ const GRANTEE_MEASUREMENT_KEYS = [
   "version",
 ];
 
+/** A child event as a read grantee sees it: the whole `child` row, no key metadata. */
+const GRANTEE_EVENT_KEYS = [
+  "id",
+  "childId",
+  "kind",
+  "date",
+  "startedAt",
+  "endedAt",
+  "milestoneId",
+  "quantityMl",
+  "note",
+  "authorId",
+  "createdAt",
+  "updatedAt",
+  "version",
+  "deletedAt",
+];
+/** A deleted event as anyone sees it: the key, the version and when, nothing of the content. */
+const TOMBSTONE_KEYS = ["id", "childId", "updatedAt", "version", "deletedAt"];
+const CHECKLIST_KEYS = [
+  "childId",
+  "months",
+  "label",
+  "framing",
+  "notScreeningLine",
+  "attribution",
+  "items",
+];
+const CHECKLIST_ITEM_KEYS = ["id", "domain", "text", "checked", "checkedOn", "eventId"];
+
+/** A sync cursor older than any row, so `updatedSince` returns every live row and every tombstone. */
+const EVERYTHING_SINCE = "2000-01-01T00:00:00.000Z";
+
+const sorted = (keys: readonly string[]) => [...keys].sort();
+
 describe("POST /v1/children", () => {
   it("creates the child in her household, as its guardian, with its own key, and replays the create", async () => {
     const response = await call("POST", "/children", {
@@ -244,6 +282,15 @@ describe("POST /v1/children", () => {
     });
     const conflict = await expectProblem(reused, 409, "conflict");
     expect(conflict.detail).toBe(ID_IN_USE);
+
+    // Architecture 5.1: a client-minted id is a UUIDv7; a v4 is a field error.
+    const v4 = await call("POST", "/children", {
+      key: KEYS.v4Id,
+      body: { id: "9b2f6c1e-4d3a-4f8b-9c2d-1e5f7a3b6c8d", displayName: "Mo", dateOfBirth: BORN },
+    });
+    expect((await expectProblem(v4, 422, "validation_failed")).errors?.map((e) => e.path)).toEqual([
+      "id",
+    ]);
   });
 
   it("needs a session", async () => {
@@ -330,6 +377,16 @@ describe("PUT /v1/children/{id}", () => {
 
 describe("guardians", () => {
   it("lets a guardian add a household member, not an outsider, and audits it", async () => {
+    // Architecture 6.1: a guardianship is a grant, so it needs a fresh authentication.
+    const stale = await call("POST", `/children/${childId}/guardians`, {
+      token: CHILDREN_TOKENS.annaStale,
+      key: KEYS.guardianStale,
+      body: { userId: BEN },
+    });
+    expect((await expectProblem(stale, 401, "unauthenticated")).detail).toBe(
+      FRESH_AUTHENTICATION_REQUIRED,
+    );
+
     const outsider = await call("POST", `/children/${childId}/guardians`, {
       key: KEYS.guardianCara,
       body: { userId: CARA },
@@ -369,6 +426,17 @@ describe("guardians", () => {
   });
 
   it("lets a guardian leave, audits it, and keeps the last guardian", async () => {
+    const stale = await call("DELETE", `/children/${childId}/guardians/${BEN}`, {
+      token: CHILDREN_TOKENS.annaStale,
+    });
+    expect((await expectProblem(stale, 401, "unauthenticated")).detail).toBe(
+      FRESH_AUTHENTICATION_REQUIRED,
+    );
+    expect(
+      (await json<Child>(await call("GET", `/children/${childId}`, { token: CHILDREN_TOKENS.ben })))
+        .guardians,
+    ).toEqual([ANNA, BEN]);
+
     const left = await call("DELETE", `/children/${childId}/guardians/${BEN}`, {
       token: CHILDREN_TOKENS.ben,
     });
@@ -548,13 +616,7 @@ describe("events", () => {
       await call("GET", `/children/${childId}/events?updatedSince=${before}`),
     );
     const tombstone = synced.items.find((item) => item["id"] === feedId);
-    expect(Object.keys(tombstone ?? {}).sort()).toEqual([
-      "childId",
-      "deletedAt",
-      "id",
-      "updatedAt",
-      "version",
-    ]);
+    expect(Object.keys(tombstone ?? {}).sort()).toEqual(sorted(TOMBSTONE_KEYS));
     expect(tombstone?.["version"]).toBe(3);
 
     const [row] = await db
@@ -620,6 +682,32 @@ describe("a child grantee", () => {
       await call("GET", `/children/${childId}/events`, { token: CHILDREN_TOKENS.cara }),
     );
     expect(events.items.map((item) => item["id"])).toEqual([sleepId, expect.any(String)]);
+    for (const item of events.items) {
+      expect(Object.keys(item).sort()).toEqual(sorted(GRANTEE_EVENT_KEYS));
+    }
+
+    // The sync view adds the deleted feed as a tombstone, and nothing else about it.
+    const synced = await json<{ items: Record<string, unknown>[] }>(
+      await call("GET", `/children/${childId}/events?updatedSince=${EVERYTHING_SINCE}`, {
+        token: CHILDREN_TOKENS.cara,
+      }),
+    );
+    const tombstones = synced.items.filter((item) => item["deletedAt"] !== null);
+    expect(tombstones.map((item) => item["id"])).toEqual([feedId]);
+    for (const item of synced.items) {
+      expect(Object.keys(item).sort()).toEqual(
+        sorted(item["deletedAt"] === null ? GRANTEE_EVENT_KEYS : TOMBSTONE_KEYS),
+      );
+    }
+
+    const checklist = await json<Record<string, unknown> & { items: Record<string, unknown>[] }>(
+      await call("GET", `/children/${childId}/milestones?age=2`, { token: CHILDREN_TOKENS.cara }),
+    );
+    expect(Object.keys(checklist).sort()).toEqual(sorted(CHECKLIST_KEYS));
+    expect(checklist.items.length).toBeGreaterThan(5);
+    for (const item of checklist.items) {
+      expect(Object.keys(item).sort()).toEqual(sorted(CHECKLIST_ITEM_KEYS));
+    }
 
     await expectProblem(
       await call("POST", `/children/${childId}/events`, {
@@ -651,6 +739,7 @@ describe("a child grantee", () => {
     const event = await json<ChildEvent>(written);
     expect(event.authorId).toBe(CARA);
     expect(event.note).toBe("partner wrote this");
+    expect(Object.keys(event).sort()).toEqual(sorted(GRANTEE_EVENT_KEYS));
 
     const writes = (await auditRows(childId)).filter((row) => row.action === "partner.write");
     expect(writes).toEqual([
@@ -841,6 +930,7 @@ describe("milestones", () => {
     });
     expect(await json<unknown>(moved)).toMatchObject({ checkedOn: BORN, eventId: item.eventId });
 
+    const beforeUncheck = new Date().toISOString();
     const unchecked = await call("PUT", `/children/${childId}/milestones`, {
       body: { itemId: "2m-social-1", checked: false },
     });
@@ -850,16 +940,19 @@ describe("milestones", () => {
       eventId: null,
     });
     const [row] = await db
-      .select({
-        deletedAt: schema.childEvents.deletedAt,
-        milestoneId: schema.childEvents.milestoneId,
-      })
+      .select({ deletedAt: schema.childEvents.deletedAt })
       .from(schema.childEvents)
       .where(
         and(eq(schema.childEvents.id, item.eventId), eq(schema.childEvents.kind, "milestone")),
       );
     expect(row?.deletedAt).toBeInstanceOf(Date);
-    expect(row?.milestoneId).toBe("2m-social-1");
+    // The stored row still keeps its kind, day and item (B6's constraints require them; the
+    // request to relax them is with the lead), so the content-free promise is the response's.
+    const synced = await json<{ items: Record<string, unknown>[] }>(
+      await call("GET", `/children/${childId}/events?updatedSince=${beforeUncheck}`),
+    );
+    const tombstone = synced.items.find((candidate) => candidate["id"] === item.eventId);
+    expect(Object.keys(tombstone ?? {}).sort()).toEqual(sorted(TOMBSTONE_KEYS));
   });
 });
 
