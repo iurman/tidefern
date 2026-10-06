@@ -1,0 +1,3 @@
+ALTER TABLE "idempotency_keys" ADD COLUMN "response_status" integer;--> statement-breakpoint
+ALTER TABLE "idempotency_keys" ADD COLUMN "response_hash" text;--> statement-breakpoint
+ALTER TABLE "idempotency_keys" ADD CONSTRAINT "idempotency_keys_done_has_response" CHECK (("idempotency_keys"."state" = 'done') = ("idempotency_keys"."response_status" is not null and "idempotency_keys"."response_hash" is not null));

@@ -16,3 +16,22 @@ export { problem } from "./problem";
 export { jobHandlers } from "./jobs/handlers";
 export type { JobContext, JobHandler, JobHandlers } from "./jobs/index";
 export type { JobsOptions } from "./routes/internal/jobs";
+export {
+  audit,
+  auditActions,
+  crossSite,
+  idempotency,
+  logger,
+  rateLimit,
+  IDEMPOTENCY_KEY_HEADER,
+  IDEMPOTENCY_REPLAYED_HEADER,
+  MUTATION_RATE_LIMIT,
+  REQUEST_ID_HEADER,
+} from "./middleware/index";
+export type {
+  AuditAction,
+  AuditEvent,
+  CrossSiteOptions,
+  LoggerOptions,
+  LogLine,
+} from "./middleware/index";
