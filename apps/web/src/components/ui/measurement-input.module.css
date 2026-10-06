@@ -1,0 +1,110 @@
+.field {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: var(--size-reading);
+}
+
+.label {
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.required {
+  font-weight: var(--weight-sans);
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.help,
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.help {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  font-weight: var(--weight-sans-strong);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.number {
+  position: relative;
+  display: inline-grid;
+}
+
+.input {
+  box-sizing: border-box;
+  width: 9ch;
+  min-height: var(--size-control);
+  padding: 0 var(--space-3);
+  padding-right: calc(var(--space-3) + 3ch);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.4;
+  transition:
+    border-color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+.suffix {
+  position: absolute;
+  right: var(--space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: var(--type-small);
+  color: var(--muted);
+  pointer-events: none;
+}
+
+.input:hover,
+[data-specimen-state="hover"] > .field .number:first-child .input {
+  border-color: var(--accent);
+}
+
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
+[data-specimen-state="focus-visible"] > .field .number:first-child .input {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.input:disabled {
+  color: var(--muted);
+  background: var(--panel);
+  border-color: var(--soft-border);
+  cursor: not-allowed;
+}
+
+.field[data-disabled="true"] .label,
+.field[data-disabled="true"] .help {
+  color: var(--muted);
+}
+
+.unit {
+  gap: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input {
+    transition-duration: 0ms;
+  }
+}

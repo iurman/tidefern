@@ -1,0 +1,117 @@
+.group {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  border: 0;
+  min-width: 0;
+  max-width: var(--size-reading);
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.required {
+  font-weight: var(--weight-sans);
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.help,
+.example,
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.help,
+.example {
+  color: var(--muted);
+}
+
+.example {
+  font-variant-numeric: tabular-nums;
+}
+
+.error {
+  color: var(--danger);
+  font-weight: var(--weight-sans-strong);
+}
+
+.parts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.part {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.partLabel {
+  font-size: var(--type-caption);
+  font-weight: var(--weight-sans-strong);
+  color: var(--muted);
+}
+
+.input {
+  box-sizing: border-box;
+  width: 4.5ch;
+  min-height: var(--size-control);
+  padding: 0 var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.4;
+  transition:
+    border-color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+.part[data-part="year"] .input {
+  width: 7ch;
+}
+
+.input:hover,
+[data-specimen-state="hover"] > .group .part:first-child .input {
+  border-color: var(--accent);
+}
+
+/* Display twin of the global :focus-visible rule; a wrapper cannot force the pseudo-class. */
+[data-specimen-state="focus-visible"] > .group .part:first-child .input {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+.group:disabled .input {
+  color: var(--muted);
+  background: var(--panel);
+  border-color: var(--soft-border);
+  cursor: not-allowed;
+}
+
+.group:disabled .legend,
+.group:disabled .help,
+.group:disabled .example {
+  color: var(--muted);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .input {
+    transition-duration: 0ms;
+  }
+}

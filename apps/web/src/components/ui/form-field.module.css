@@ -1,0 +1,55 @@
+.field {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: var(--size-reading);
+}
+
+.label {
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.required {
+  font-weight: var(--weight-sans);
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.help,
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.help {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  font-weight: var(--weight-sans-strong);
+}
+
+.control {
+  display: grid;
+}
+
+.field[data-disabled="true"] .label,
+.field[data-disabled="true"] .help {
+  color: var(--muted);
+}
+
+/* The composite's hover and focus mean the control inside it, so the forced
+   twins reach the native control through the field root. The hover color
+   mirrors text-input and textarea; the focus twin mirrors the global rule
+   for display only, since a wrapper cannot force the pseudo-class. */
+[data-specimen-state="hover"] > .field :is(input, textarea, select) {
+  border-color: var(--accent);
+}
+
+[data-specimen-state="focus-visible"] > .field :is(input, textarea, select) {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
