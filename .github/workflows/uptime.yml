@@ -1,0 +1,74 @@
+name: Uptime
+
+# A scheduled check of the production domain (architecture 19): the home page
+# and the API health route every 30 minutes. A failed run reaches the owner
+# through GitHub's workflow failure email. Nothing is checked out or installed;
+# the job is two curls against the repository variable PRODUCTION_URL, with
+# the protection bypass header when the secret is set.
+on:
+  schedule:
+    # Twice an hour, off the top of the hour, where GitHub delays scheduled runs the most.
+    - cron: "11,41 * * * *"
+  workflow_dispatch:
+
+permissions: {}
+
+concurrency:
+  # One check at a time: a scheduled run that arrives while another is running waits for it.
+  group: uptime-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Production answers
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+      VERCEL_AUTOMATION_BYPASS_SECRET: ${{ secrets.VERCEL_AUTOMATION_BYPASS_SECRET }}
+    steps:
+      - name: The home page and the API answer on the production domain
+        run: |
+          set -euo pipefail
+          if [ -z "${PRODUCTION_URL:-}" ]; then
+            echo "::error::The repository variable PRODUCTION_URL is not set, so there is no production domain to check (docs/LAUNCH_RUNBOOK.md, Vercel step 4)."
+            exit 1
+          fi
+          base="${PRODUCTION_URL%/}"
+          auth=()
+          if [ -n "${VERCEL_AUTOMATION_BYPASS_SECRET:-}" ]; then
+            auth=(-H "x-vercel-protection-bypass: ${VERCEL_AUTOMATION_BYPASS_SECRET}")
+          fi
+
+          # One request, then one retry after 30 seconds, then a failure that names
+          # the URL and the last status. A transient blip passes; an outage fails.
+          check() {
+            local url="$1" expected="$2" body status attempt
+            body="${RUNNER_TEMP}/uptime-body"
+            for attempt in 1 2; do
+              # curl prints 000 and exits non-zero when no HTTP answer arrives; keep the script alive.
+              status=$(curl --silent --show-error --output "$body" --write-out "%{http_code}" --location \
+                --connect-timeout 10 --max-time 30 -H "Cache-Control: no-cache" \
+                "${auth[@]}" "$url" || true)
+              status="${status:-000}"
+              if [ "$status" = "200" ] && grep --fixed-strings --quiet "$expected" "$body"; then
+                echo "$url answered 200 with the expected body (attempt $attempt)"
+                return 0
+              fi
+              if [ "$attempt" = "1" ]; then
+                echo "$url answered $status on attempt 1; retrying in 30 seconds"
+                sleep 30
+              fi
+            done
+            if [ "$status" = "200" ]; then
+              echo "::error::$url answered 200 twice but the body did not contain '$expected'"
+            else
+              echo "::error::$url answered $status twice (expected 200); the production site or its API is down"
+            fi
+            return 1
+          }
+
+          failed=0
+          check "${base}/" "Tidefern" || failed=1
+          check "${base}/api/v1/health" '"status":"ok"' || failed=1
+          exit "$failed"
