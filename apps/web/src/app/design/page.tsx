@@ -9,6 +9,9 @@ export const metadata = pageMetadata(
   false,
 );
 
+/** The chapters that exist as routes; the rest are listed by name until they land. */
+const published = new Set(["brand", "color", "type", "components", "motion", "sound", "foundations"]);
+
 const chapters = [
   { slug: "brand", title: "Brand", text: "The mark, the wordmark, clear space and theme rules." },
   { slug: "color", title: "Color", text: "Light and dark roles with measured contrast." },
@@ -46,7 +49,7 @@ export default function DesignHome() {
           {chapters.map((chapter) => (
             <li key={chapter.slug}>
               <h3>
-                {chapter.slug === "type" || chapter.slug === "brand" || chapter.slug === "sound" ? (
+                {published.has(chapter.slug) ? (
                   <Link href={`/design/${chapter.slug}`} prefetch={false}>
                     {chapter.title}
                   </Link>
