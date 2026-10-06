@@ -1,0 +1,123 @@
+.record {
+  display: grid;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.title {
+  margin: 0;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  letter-spacing: var(--tracking-heading);
+}
+
+.facts {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  font-size: var(--type-small);
+}
+
+.facts dt {
+  font-weight: var(--weight-sans-strong);
+}
+
+.facts dd {
+  margin: 0;
+}
+
+.list {
+  margin: var(--space-1) 0 0;
+  padding-left: var(--space-4);
+}
+
+.list li + li {
+  margin-top: var(--space-1);
+}
+
+.processor {
+  font-weight: var(--weight-sans-strong);
+}
+
+.withdrawal {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.given {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.control {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-1) var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--soft-border);
+}
+
+.checkbox {
+  width: 24px;
+  height: 24px;
+  margin: 10px 0;
+  accent-color: var(--action);
+  border: 1px solid var(--border);
+}
+
+.label {
+  min-height: var(--size-control);
+  padding-block: var(--space-2);
+  font-size: var(--type-body);
+  line-height: 1.5;
+}
+
+.checkbox:disabled,
+.checkbox:disabled + .label {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.record:hover .label,
+[data-specimen-state="hover"] > .record .label {
+  color: var(--accent);
+}
+
+[data-specimen-state="focus-visible"] > .record .checkbox {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+.checkbox:active,
+[data-specimen-state="active"] > .record .checkbox {
+  transform: scale(0.94);
+}
+
+.error,
+.status {
+  grid-column: 2;
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+}
+
+.error {
+  color: var(--danger);
+}
+
+.status {
+  color: var(--muted);
+}
+
+.error:empty,
+.status:empty {
+  display: none;
+}

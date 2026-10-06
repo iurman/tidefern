@@ -1,0 +1,57 @@
+/* The root is only the size container; a container query never matches the container itself. */
+.shell {
+  container: shell / inline-size;
+  background: var(--page);
+  color: var(--text);
+}
+
+.frame {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  min-height: 100dvh;
+}
+
+.content {
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  overflow: hidden;
+}
+
+.content .frame {
+  min-height: 0;
+}
+
+/* The rail is the first landmark and the tab bar the last; the shell shows one of them by its own width. */
+.frame > nav:first-child {
+  display: none;
+}
+
+.page {
+  min-width: 0;
+  padding: var(--space-6);
+}
+
+/* 1024px mirrors --breakpoint-rail; a container query cannot read a custom property. */
+@container shell (min-width: 1024px) {
+  .frame {
+    grid-template-rows: minmax(0, 1fr);
+    grid-template-columns: 240px minmax(0, 1fr);
+  }
+
+  .frame > nav:first-child {
+    display: flex;
+    position: sticky;
+    top: 0;
+    align-self: start;
+    max-height: 100dvh;
+    overflow-y: auto;
+  }
+
+  .frame > nav:last-child {
+    display: none;
+  }
+
+  .page {
+    padding: var(--space-8) var(--space-16);
+  }
+}

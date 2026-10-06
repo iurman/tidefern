@@ -1,0 +1,112 @@
+.bar {
+  position: sticky;
+  bottom: 0;
+  z-index: var(--elevation-z-sticky);
+  border-top: 1px solid var(--soft-border);
+  background: var(--surface);
+  /* The inset is 0 until the viewport declares viewport-fit=cover; the padding then grows with the home indicator. */
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+.list {
+  display: flex;
+  justify-content: space-around;
+  margin: 0;
+  padding: 0 var(--space-1);
+  list-style: none;
+}
+
+.item {
+  display: flex;
+  flex: 1 1 0;
+  justify-content: center;
+  min-width: 0;
+}
+
+.link,
+.quickLog {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--space-1) 0;
+  border: 1px solid transparent;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--muted);
+  text-decoration: none;
+  transition:
+    color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+/* The 24px icon sits in the same 32px box as the quick-log mark so every label lands on one line. */
+.link > svg {
+  margin-block: 4px;
+}
+
+.link[aria-current="page"] {
+  color: var(--accent);
+}
+
+.link:hover,
+[data-specimen-state="hover"] > .bar .link[aria-current="page"] {
+  color: var(--text);
+  background: var(--panel);
+}
+
+[data-specimen-state="focus-visible"] > .bar .link[aria-current="page"] {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.link:active,
+[data-specimen-state="active"] > .bar .link[aria-current="page"] {
+  transform: scale(0.94);
+}
+
+.label {
+  /* 12px: seven cells at 390px leave 49px each, which the 13px caption token does not fit. */
+  font-size: 0.75rem;
+  letter-spacing: -0.01em;
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.quickLog {
+  color: var(--text);
+}
+
+.quickLogMark {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid var(--action);
+  border-radius: var(--radius-round);
+  background: var(--action);
+  color: var(--action-text);
+  transition:
+    transform var(--duration-feedback) var(--ease-interface),
+    filter var(--duration-feedback) var(--ease-interface);
+}
+
+.quickLog:hover .quickLogMark {
+  filter: brightness(1.06);
+}
+
+.quickLog:active .quickLogMark {
+  transform: scale(0.94);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .link,
+  .quickLog,
+  .quickLogMark {
+    transition-duration: 0ms;
+  }
+}

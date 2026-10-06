@@ -1,0 +1,138 @@
+.card {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  transition: border-color var(--duration-feedback) var(--ease-interface);
+}
+
+.card:hover,
+[data-specimen-state="hover"] > .card {
+  border-color: var(--border);
+}
+
+[data-specimen-state="focus-visible"] > .card .remove {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+}
+
+[data-specimen-state="active"] > .card .remove {
+  transform: scale(0.94);
+}
+
+.head {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.name {
+  margin: 0;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  letter-spacing: var(--tracking-heading);
+}
+
+.meta {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  color: var(--danger);
+}
+
+.error:empty {
+  display: none;
+}
+
+.grants {
+  display: grid;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.grants > li + li {
+  border-top: 1px solid var(--soft-border);
+}
+
+.notify {
+  border-top: 1px solid var(--soft-border);
+}
+
+.foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--soft-border);
+}
+
+.note {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.remove {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--size-control);
+  padding: 0 var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--danger);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.remove:hover {
+  background: var(--panel);
+}
+
+.remove:active {
+  transform: scale(0.94);
+}
+
+.remove:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.remove[aria-busy="true"] {
+  cursor: progress;
+}
+
+.labels {
+  display: grid;
+}
+
+.labels > span {
+  grid-area: 1 / 1;
+}
+
+.hiddenLabel {
+  visibility: hidden;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card,
+  .remove {
+    transition-duration: 0ms;
+  }
+}
