@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { designTokens } from "@tidefern/design-tokens";
+import { designExports } from "@/lib/design-catalog";
 import { pageMetadata } from "@/lib/site";
 
 export const metadata = pageMetadata(
@@ -44,10 +45,12 @@ export default function DesignHome() {
           This reference is generated from the same source the product uses. The seven chapters
           below are the planned structure; this page already exposes the live tokens and exports.
         </p>
-        <p className="design-exports">
-          <a href="/design/tokens.json">Tokens (JSON)</a>
-          <a href="/design/tokens.css">Theme variables (CSS)</a>
-          <a href="/api/v1/openapi.json">API contract (OpenAPI 3.1)</a>
+        <p className="design-exports" id="exports">
+          {designExports.map((entry) => (
+            <a key={entry.href} href={entry.href}>
+              {entry.name}
+            </a>
+          ))}
         </p>
       </header>
 

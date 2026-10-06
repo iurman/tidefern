@@ -313,8 +313,11 @@ export default function SoundPage() {
       </section>
 
       <nav className="chapter-nav chapter-nav-foot" aria-label="Chapters, previous and next">
-        <Link href="/design/components" prefetch={false}>
-          Previous: Components
+        <Link href="/design/motion" prefetch={false}>
+          Previous: Motion
+        </Link>
+        <Link href="/design/foundations" prefetch={false}>
+          Next: Foundations
         </Link>
       </nav>
     </div>

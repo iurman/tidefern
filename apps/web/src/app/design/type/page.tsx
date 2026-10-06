@@ -228,8 +228,11 @@ export default function TypePage() {
       </section>
 
       <nav className="chapter-nav chapter-nav-foot" aria-label="Chapters, previous and next">
-        <Link href="/design" prefetch={false}>
-          Previous: Design system
+        <Link href="/design/color" prefetch={false}>
+          Previous: Color
+        </Link>
+        <Link href="/design/components" prefetch={false}>
+          Next: Components
         </Link>
       </nav>
     </div>

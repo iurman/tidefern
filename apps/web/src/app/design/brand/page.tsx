@@ -429,8 +429,8 @@ export default function BrandPage() {
         <Link href="/design" prefetch={false}>
           Previous: Design system
         </Link>
-        <Link href="/design/type" prefetch={false}>
-          Next: Type and space
+        <Link href="/design/color" prefetch={false}>
+          Next: Color
         </Link>
       </nav>
     </div>

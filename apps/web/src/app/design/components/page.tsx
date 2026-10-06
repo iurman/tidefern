@@ -31,8 +31,8 @@ export default function ComponentsIndex() {
         <Link href="/design/type" prefetch={false}>
           Previous: Type and space
         </Link>
-        <Link href="/design/brand" prefetch={false}>
-          Next: Brand
+        <Link href="/design/motion" prefetch={false}>
+          Next: Motion
         </Link>
       </nav>
     </div>

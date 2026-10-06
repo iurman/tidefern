@@ -293,7 +293,7 @@ export default function MotionPage() {
 
       <ChapterFoot
         previous={{ href: "/design/components", label: "Components" }}
-        next={{ href: "/design/foundations", label: "Foundations" }}
+        next={{ href: "/design/sound", label: "Sound and touch" }}
       />
     </div>
   );
