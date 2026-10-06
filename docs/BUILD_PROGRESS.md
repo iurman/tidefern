@@ -922,3 +922,53 @@ Merge G5 calendar (chain running) and structure after its fix pass, then
 I1, B9 and C3 as they become ready; start E1 after I1; then the lead's
 day sheet and `/design/components` index, the sound provider's option
 selector and the shared forced focus rule, and H9.
+
+### G5 closed, fifth wave landing, sixth wave launched (2026-10-06, lead session 061fed2d)
+
+Merged by squash: G5 calendar (PR #32, `41f75e8`, after the web unit
+suite gained the 30 s limit), G5 structure (PR #30, `b0ffeed`), B9 (PR
+#35, `af4f43c`), C3 (PR #36, `ad43d22`) and the lead's G5 integration (PR
+#37, `cd4f2bb`): the day sheet composed from the sheet, the period switch,
+the flow scale, the chips, the mood selector and the private note with its
+explicit sharing action; the patterns page; the components index built
+from the six groups' specimens; the specimen frame's min-width guards,
+shared forced focus rule, wrapped source paths and usage, clipped
+oversize stages and a wide cell option (an overflow probe reports
+scrollWidth equal to clientWidth on every group page at 390 and 1440 px,
+and a spec keeps it so); the sound provider delegates over role option
+and menuitem. G5 is done: every 13.7 component exists in eight states
+and both themes and appears under `/design/components`. The plan marks
+G5, B9 and C3 done with evidence and claims B11, C4 and E1.
+
+I1 (PR #34) was refused once for conflicts after B9 landed; the lead
+rebased it (both README sections kept), reran the gate (`pnpm check` exit
+0, e2e 71 passed) and its chain merges it on green checks and smoke. E1
+starts as its own workflow right after. B11 (CI topology) and C4 (devices
+and two-factor screens) started as the sixth wave on the fifth wave's
+briefs pattern.
+
+Decisions from the review answers: B9 keeps a `better-auth` peer
+dependency on `packages/db` for the password hashing path (ratified);
+C3's verify page reads a result only from the `done` marker and the
+`/verify` direct-visit copy is an owner input recorded in CONTENT.md's
+missing list; C3's scoped `better-auth/react` allowance lives in the
+auth package's own ESLint config, and the `apps/web` ESLint edit is
+confirmed; I1's cron lives in `apps/web/vercel.json` because Vercel reads
+the file from the root directory, and `pnpm jobs:run` uses the direct
+URL because the sweep refuses the app role; the lead accepts the small
+edits outside I1's file list (db export, api index and context).
+
+Two more environment findings turned into fixes: a server component may
+not pass handlers into a client component, so specimens that take
+handlers live in client modules whose pages write their own title and
+lede (the structure group found it first; the patterns page follows);
+a CSS module selector must contain a local class, so the shared focus
+rule is scoped under the frame's class. A scroll region without keyboard
+access fails axe, so the frame wraps usage text and clips oversize stages
+rather than scrolling them.
+
+### Next action
+
+Merge I1 (chain running), launch E1, then review and merge B11 and C4;
+close I1, B11, C4 and E1 in the plan; then E2 to E8 as a wave over E1,
+H9 (lead), I2 after E8 and D2, and the H routes once E2 to E8 land.
