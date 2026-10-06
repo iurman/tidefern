@@ -110,16 +110,46 @@ jobs:
               console.log("commit messages passed");
             });'
 
-      - name: Generated files are current (tokens, brand copies, OpenAPI, growth data)
+      - name: Generated files are current (tokens, brand copies, OpenAPI, client types, growth data)
         run: |
           pnpm tokens:check
           pnpm tokens:contrast
           pnpm --filter web brand:check
           pnpm openapi:check
+          pnpm client:check
           pnpm growth:check
 
       - name: Formatting
         run: pnpm format:check
+
+      # The contract drift gate of architecture 5.1 and 16.1: an error-level change in
+      # openapi/v1.json (a removed required field, a retyped field, a new required parameter or a
+      # dropped path) fails the pull request, because installed clients keep calling v1 for months.
+      # Removing an optional response field is info level in oasdiff and passes; whether it should
+      # fail is a 16.1 decision, not this step's. The base copy goes under node_modules/.cache,
+      # which no later step formats, lints or builds, inside the workspace the action's container
+      # mounts. The commit-message step above already fetched the base branch.
+      - name: Read the base branch's contract (pull requests)
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          mkdir -p node_modules/.cache/oasdiff
+          git show "origin/$BASE_REF:openapi/v1.json" > node_modules/.cache/oasdiff/base-v1.json
+
+      # review: false keeps both specs in CI (the default uploads them to oasdiff.com), and with it
+      # the action sends no telemetry and posts no comment; the empty token makes sure of the
+      # latter, so the job keeps contents: read. The result is in the step log and as annotations
+      # on the changed lines; fail-on: ERR fails the job on any error-level change.
+      - name: No breaking change to the v1 contract (pull requests)
+        if: github.event_name == 'pull_request'
+        uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
+        with:
+          base: node_modules/.cache/oasdiff/base-v1.json
+          revision: openapi/v1.json
+          fail-on: ERR
+          review: false
+          github-token: ""
 
       - name: Lint
         run: pnpm lint

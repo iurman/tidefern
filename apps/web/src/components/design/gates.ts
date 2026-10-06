@@ -27,6 +27,8 @@ export const gateDescriptions: Record<string, string> = {
   "pnpm --filter web brand:check":
     "The brand files the app serves from public/brand match the canonical copies beside the tokens.",
   "pnpm openapi:check": "The committed OpenAPI document matches the API routes and schemas.",
+  "pnpm client:check":
+    "The api-client's generated types match the committed OpenAPI document, so the client never drifts from the contract.",
   "pnpm growth:check": "The growth data JSON matches the vendored CSV tables it is built from.",
   "pnpm format:check": "Prettier agrees with every file.",
   "turbo run lint":
