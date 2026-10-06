@@ -1,6 +1,6 @@
 import { createRoute } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
-import type { Context } from "hono";
+import type { Context, TypedResponse } from "hono";
 import { stream } from "hono/streaming";
 import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
@@ -20,11 +20,12 @@ import {
   CloseInput,
   CloseState,
   CloseUndone,
-  ClosureRequest,
+  CloseAnswer,
   ExportLine,
   Problem,
 } from "@tidefern/schemas";
 import type {
+  Problem as ProblemShape,
   ActivityEvent as ActivityEventShape,
   ClosureRequest as ClosureRequestShape,
   ExportLine as ExportLineShape,
@@ -34,6 +35,7 @@ import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
 import { audit, auditActions } from "../middleware/audit";
 import { problem } from "../problem";
+import type { ProblemCode } from "../problem";
 
 /**
  * The account area of architecture record 11: the activity view over the
@@ -93,6 +95,24 @@ function actorOf(c: Context<ApiEnv>) {
 
 /** A problem response, typed as the 401 every route here documents. */
 const PROBLEM = { "application/problem+json": { schema: Problem } };
+
+/** The statuses this module answers a problem with from a handler. */
+type HandlerProblemStatus = 404 | 409 | 422;
+
+/**
+ * `problem()` answered with its status narrowed to the one named, which is
+ * what `app.openapi()` checks against a route's documented responses. Kept
+ * here rather than in problem.ts so this area changes no shared module.
+ */
+function problemAt<Status extends HandlerProblemStatus>(
+  c: Context,
+  status: Status,
+  code: ProblemCode,
+  extra: Partial<Pick<ProblemShape, "detail" | "errors">> = {},
+): Response & TypedResponse<ProblemShape, Status, "json"> {
+  return problem(c, status, code, extra) as unknown as Response &
+    TypedResponse<ProblemShape, Status, "json">;
+}
 
 // The activity view. ----------------------------------------------------------
 
@@ -186,12 +206,12 @@ export const exportRoute = createRoute({
   tags: ["account"],
   summary: "Export the actor's own data",
   description:
-    "Streams the person's own rows as newline-delimited JSON, one ExportLine per line: an ExportHeader first, then one ExportRecord per row with encrypted text decrypted on the fly. Built on demand inside the actor's transaction and never stored. Requires an authentication within the last ten minutes and is recorded in the activity view.",
+    "Streams the person's own rows as newline-delimited JSON, one ExportLine per line: an ExportHeader first, then one ExportRecord per row with encrypted text decrypted on the fly, then an ExportEnd with the record count. The status is sent before the rows, so a file that does not end with the ExportEnd line was cut off and is incomplete. Built on demand inside the actor's transaction and never stored. Requires an authentication within the last ten minutes and is recorded in the activity view.",
   middleware: [requireActor, requireFreshAuth()] as const,
   responses: {
     200: {
       description:
-        "The export as an attachment: newline-delimited JSON, each line one ExportLine (the ExportHeader first, then ExportRecord rows)",
+        "The export as an attachment: newline-delimited JSON, each line one ExportLine (the ExportHeader first, then ExportRecord rows, then the ExportEnd that marks the file complete)",
       content: { [EXPORT_CONTENT_TYPE]: { schema: ExportLine } },
     },
     401: {
@@ -229,7 +249,11 @@ async function writeExport(
   write: (line: ExportLineShape) => Promise<void>,
 ): Promise<void> {
   await write({ kind: "export", format: 1, subjectId: me, generatedAt: new Date().toISOString() });
-  const record = (kind: string, data: Plain) => write({ kind, data });
+  let records = 0;
+  const record = (kind: string, data: Plain) => {
+    records += 1;
+    return write({ kind, data });
+  };
 
   const [profile] = await tx
     .select()
@@ -376,6 +400,11 @@ async function writeExport(
     .orderBy(schema.disclosures.createdAt)) {
     await record("disclosure", plain(row));
   }
+
+  // Last, and only once every record is out: the response is already 200
+  // when the first line leaves, so a failure partway shows as a file with no
+  // end line rather than as a status.
+  await write({ kind: "end", records });
 }
 
 // Account closure. ----------------------------------------------------------------
@@ -386,13 +415,14 @@ export const closeRoute = createRoute({
   tags: ["account"],
   summary: "Close the account",
   description:
-    "Revokes every other session and every grant held or given, locks the account by filing the closure request, and enqueues the deletion job: due when the undo window ends, or at once for delete now. Requires an authentication within the last ten minutes and an Idempotency-Key. Answers the request with its deadlines.",
+    "Revokes every other session and every grant held or given, files the closure request, and enqueues the deletion job: due when the undo window ends, or at once for delete now. Requires an authentication within the last ten minutes and an Idempotency-Key. Answers the request with its deadlines; a replay with the same Idempotency-Key answers the request's id only (ClosureReplay, with the replay header), so read GET /v1/me/close for the state.",
   middleware: [requireActor, requireFreshAuth()] as const,
   request: { body: { content: { "application/json": { schema: CloseInput } }, required: true } },
   responses: {
     200: {
-      description: "The closure request",
-      content: { "application/json": { schema: ClosureRequest } },
+      description:
+        "The closure request, or on a replay of the same Idempotency-Key its id only (ClosureReplay)",
+      content: { "application/json": { schema: CloseAnswer } },
     },
     400: { description: "No Idempotency-Key", content: PROBLEM },
     401: {
@@ -427,7 +457,7 @@ export const closeUndoRoute = createRoute({
   tags: ["account"],
   summary: "Undo the closure",
   description:
-    "Cancels an open closure inside its undo window and unlocks the account. The sessions and grants revoked at closure stay revoked, and the answer says so. Requires an Idempotency-Key.",
+    "Cancels an open closure inside its undo window and removes its deletion job. The sessions and grants revoked at closure stay revoked, and the answer says so. Requires an Idempotency-Key.",
   middleware: [requireActor] as const,
   responses: {
     200: {
@@ -493,6 +523,13 @@ async function closeAccount(
   mode: "undo-window" | "now",
 ): Promise<{ request: DataRequestRow; jobId: string } | "open"> {
   return withSystem(async (tx) => {
+    // Two closes with different Idempotency-Keys would otherwise both pass
+    // the open-closure check under READ COMMITTED. The lock is the person's,
+    // held to the end of this transaction, so the second waits and then sees
+    // the first one's row.
+    await tx.execute(
+      sql`select pg_advisory_xact_lock(hashtextextended(${`account.close:${me}`}, 0))`,
+    );
     if ((await openClosure(tx, me)) !== undefined) return "open";
     const now = new Date();
     const undoUntil = mode === "undo-window" ? new Date(now.getTime() + UNDO_WINDOW_MS) : null;
@@ -630,7 +667,7 @@ export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
     if (cursor !== undefined) {
       after = decodeActivityCursor(cursor);
       if (after === null) {
-        return problem(c, 422, "validation_failed", {
+        return problemAt(c, 422, "validation_failed", {
           detail: ACTIVITY_CURSOR_INVALID,
           errors: [{ path: "cursor", message: "The cursor is not one this list issued." }],
         });
@@ -707,7 +744,7 @@ export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
     const { mode } = c.req.valid("json");
     const outcome = await closeAccount(db, actor.id, session.id, mode);
     if (outcome === "open") {
-      return problem(c, 409, "conflict", { detail: CLOSURE_IN_PROGRESS });
+      return problemAt(c, 409, "conflict", { detail: CLOSURE_IN_PROGRESS });
     }
     c.var.drainJobs([outcome.jobId]);
     return c.json(closureBody(outcome.request), 200);
@@ -724,9 +761,9 @@ export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
     const { actor } = actorOf(c);
     const { db } = injected(c);
     const outcome = await undoClosure(db, actor.id);
-    if (outcome === "none") return problem(c, 404, "not_found");
+    if (outcome === "none") return problemAt(c, 404, "not_found");
     if (outcome === "closed") {
-      return problem(c, 409, "conflict", { detail: UNDO_WINDOW_CLOSED });
+      return problemAt(c, 409, "conflict", { detail: UNDO_WINDOW_CLOSED });
     }
     return c.json(
       {

@@ -70,8 +70,8 @@ export const ActivityQuery = z.object({
 export type ActivityQuery = z.infer<typeof ActivityQuery>;
 
 /**
- * How the person wants the account closed: `undo-window` keeps the account
- * locked for seven days during which the closure can be undone, `now`
+ * How the person wants the account closed: `undo-window` holds the
+ * deletion for seven days during which the closure can be undone, `now`
  * starts the deletion at once with no undo.
  */
 export const CloseMode = z.enum(["undo-window", "now"]);
@@ -107,9 +107,27 @@ export const ClosureRequest = z
   .meta({
     id: "ClosureRequest",
     description:
-      "An account closure: the account is locked, every other session and every grant is revoked, and the deletion job runs when the undo window ends.",
+      "An account closure: every other session and every grant is revoked, the request is filed, and the deletion job runs when the undo window ends.",
   });
 export type ClosureRequest = z.infer<typeof ClosureRequest>;
+
+/**
+ * What a replayed close answers (architecture 5.3 as built in E1): the
+ * stored status and the request's id, never a re-rendered body. Read
+ * `GET /v1/me/close` for the state.
+ */
+export const ClosureReplay = z
+  .object({ id: Id.describe("The closure request the first call filed") })
+  .meta({
+    id: "ClosureReplay",
+    description:
+      "The answer to a close replayed with the same Idempotency-Key: the request's id only. Read GET /v1/me/close for its state.",
+  });
+export type ClosureReplay = z.infer<typeof ClosureReplay>;
+
+/** The 200 of `POST /v1/me/close`: the request, or its id alone on a replay. */
+export const CloseAnswer = z.union([ClosureRequest, ClosureReplay]);
+export type CloseAnswer = z.infer<typeof CloseAnswer>;
 
 export const CloseState = z
   .object({
@@ -136,7 +154,7 @@ export const CloseUndone = z
   .meta({
     id: "CloseUndone",
     description:
-      "A closure cancelled inside its window. The account is unlocked; nothing revoked comes back.",
+      "A closure cancelled inside its window. The request is cancelled and its deletion job removed; nothing revoked comes back.",
   });
 export type CloseUndone = z.infer<typeof CloseUndone>;
 
@@ -156,8 +174,10 @@ export const ExportRecord = z
   .object({
     kind: z
       .string()
-      .regex(/^[a-z][A-Za-z]*$/)
-      .describe("Which kind of row, such as profile, note or cycleEntry"),
+      .regex(/^(?!export$|end$)[a-z][A-Za-z]*$/)
+      .describe(
+        "Which kind of row, such as profile, note or cycleEntry; never export or end, which name the first and last lines",
+      ),
     data: z.record(z.string(), z.unknown()),
   })
   .meta({
@@ -167,5 +187,22 @@ export const ExportRecord = z
   });
 export type ExportRecord = z.infer<typeof ExportRecord>;
 
-export const ExportLine = z.union([ExportHeader, ExportRecord]);
+/**
+ * The last line, written only after every record: a file that does not end
+ * with it was cut off (the response is already 200 when the first byte
+ * leaves, so a failure partway can only show as a missing end).
+ */
+export const ExportEnd = z
+  .object({
+    kind: z.literal("end"),
+    records: z.number().int().min(0).describe("How many ExportRecord lines came before this one"),
+  })
+  .meta({
+    id: "ExportEnd",
+    description:
+      "The last line of a complete export file. A file without it is incomplete and should be requested again.",
+  });
+export type ExportEnd = z.infer<typeof ExportEnd>;
+
+export const ExportLine = z.union([ExportHeader, ExportEnd, ExportRecord]);
 export type ExportLine = z.infer<typeof ExportLine>;

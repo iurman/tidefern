@@ -1,12 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import type { z } from "zod";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
 import { schema } from "@tidefern/db";
 import {
   ActivityPage,
   CloseState,
   CloseUndone,
+  ClosureReplay,
   ClosureRequest,
+  ExportEnd,
+  ExportHeader,
   ExportLine,
+  ExportRecord,
   Problem,
 } from "@tidefern/schemas";
 
@@ -93,9 +98,36 @@ const post = (
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   });
 
+/**
+ * Parses a body and fails when the raw JSON carries anything the schema
+ * would strip: zod objects drop unknown keys, so a projection check run on
+ * the parsed value alone could never see a leaked column.
+ */
+function exact<Schema extends z.ZodType>(shape: Schema, raw: unknown): z.infer<Schema> {
+  const parsed = shape.parse(raw);
+  expect(parsed).toStrictEqual(raw);
+  return parsed;
+}
+
 async function problemOf(response: Response) {
   expect(response.headers.get("content-type")).toContain("application/problem+json");
-  return Problem.parse(await response.json());
+  return exact(Problem, await response.json());
+}
+
+/** An export body split into its header, its records and its end line, each parsed exactly. */
+function exportOf(text: string) {
+  const raw = text
+    .split("\n")
+    .filter((line) => line.length > 0)
+    .map((line) => JSON.parse(line) as unknown);
+  const lines = raw.map((line) => exact(ExportLine, line));
+  expect(lines.length).toBeGreaterThanOrEqual(2);
+  const header = exact(ExportHeader, raw[0]);
+  const end = exact(ExportEnd, raw[raw.length - 1]);
+  const records = raw.slice(1, -1).map((line) => exact(ExportRecord, line));
+  expect(end.records).toBe(records.length);
+  expect(lines).toHaveLength(records.length + 2);
+  return { header, records, end };
 }
 
 describe("GET /v1/me/activity", () => {
@@ -119,7 +151,7 @@ describe("GET /v1/me/activity", () => {
   it("lists the rows where the person is actor or subject, newest first, with no content", async () => {
     const response = await get(client, "/me/activity", TOKENS.anna);
     expect(response.status).toBe(200);
-    const page = ActivityPage.parse(await response.json());
+    const page = exact(ActivityPage, await response.json());
     expect(page.items.map((item) => item.id)).toEqual([
       AUDIT.caraReadsAnna,
       AUDIT.benReadsAnna,
@@ -147,13 +179,13 @@ describe("GET /v1/me/activity", () => {
   });
 
   it("never shows another person's rows: Cara reading the child is not Anna's activity", async () => {
-    const page = ActivityPage.parse(await (await get(client, "/me/activity", TOKENS.anna)).json());
+    const page = exact(ActivityPage, await (await get(client, "/me/activity", TOKENS.anna)).json());
     const ids = page.items.map((item) => item.id);
     expect(ids).not.toContain(AUDIT.caraReadsChild);
     expect(ids).not.toContain(AUDIT.benGrantCara);
     expect(ids).not.toContain(AUDIT.caraEarlyMicro);
 
-    const ben = ActivityPage.parse(await (await get(client, "/me/activity", TOKENS.ben)).json());
+    const ben = exact(ActivityPage, await (await get(client, "/me/activity", TOKENS.ben)).json());
     for (const item of ben.items) {
       expect(item.actorId === BEN || item.subjectId === BEN).toBe(true);
     }
@@ -168,7 +200,7 @@ describe("GET /v1/me/activity", () => {
       const query: string = cursor === null ? "?limit=1" : `?limit=1&cursor=${cursor}`;
       const response = await get(client, `/me/activity${query}`, TOKENS.cara);
       expect(response.status).toBe(200);
-      const page = ActivityPage.parse(await response.json());
+      const page = exact(ActivityPage, await response.json());
       expect(page.items.length).toBeLessThanOrEqual(1);
       seen.push(...page.items.map((item) => item.id));
       cursor = page.nextCursor;
@@ -184,12 +216,14 @@ describe("GET /v1/me/activity", () => {
   });
 
   it("pages Anna's list two at a time to the same order as one page", async () => {
-    const first = ActivityPage.parse(
+    const first = exact(
+      ActivityPage,
       await (await get(client, "/me/activity?limit=2", TOKENS.anna)).json(),
     );
     expect(first.items).toHaveLength(2);
     expect(first.nextCursor).not.toBeNull();
-    const second = ActivityPage.parse(
+    const second = exact(
+      ActivityPage,
       await (
         await get(client, `/me/activity?limit=2&cursor=${first.nextCursor ?? ""}`, TOKENS.anna)
       ).json(),
@@ -283,11 +317,7 @@ describe("GET /v1/me/export", () => {
     expect(response.headers.get("cache-control")).toBe("private, no-store");
 
     const text = await response.text();
-    const lines = text
-      .split("\n")
-      .filter((line) => line.length > 0)
-      .map((line) => ExportLine.parse(JSON.parse(line)));
-    const [header, ...records] = lines;
+    const { header, records } = exportOf(text);
     expect(header).toMatchObject({ kind: "export", format: 1, subjectId: ANNA });
 
     // The decrypted texts are there, as plain strings.
@@ -337,7 +367,7 @@ describe("GET /v1/me/export", () => {
     const rows = await exportAuditRows(ANNA);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ actorId: ANNA, subjectId: ANNA, category: null });
-    const page = ActivityPage.parse(await (await get(client, "/me/activity", TOKENS.anna)).json());
+    const page = exact(ActivityPage, await (await get(client, "/me/activity", TOKENS.anna)).json());
     expect(page.items[0]).toMatchObject({ action: "export.create", actorId: ANNA });
   });
 
@@ -345,6 +375,7 @@ describe("GET /v1/me/export", () => {
     const response = await get(client, "/me/export", TOKENS.ben);
     expect(response.status).toBe(200);
     const text = await response.text();
+    expect(exportOf(text).header.subjectId).toBe(BEN);
     expect(text).toContain(TEXTS.benPrivate);
     expect(text).not.toContain(TEXTS.annaPrivate);
     expect(text).not.toContain(TEXTS.annaShared);
@@ -356,13 +387,10 @@ describe("GET /v1/me/export", () => {
     const response = await get(client, "/me/export", TOKENS.cara);
     expect(response.status).toBe(200);
     const text = await response.text();
-    const kinds = new Set(
-      text
-        .split("\n")
-        .filter((line) => line.length > 0)
-        .map((line) => ExportLine.parse(JSON.parse(line)).kind),
-    );
-    expect([...kinds].sort()).toEqual(["activity", "export", "grant"]);
+    const { header, records } = exportOf(text);
+    expect(header.subjectId).toBe(CARA);
+    const kinds = new Set(records.map((line) => line.kind));
+    expect([...kinds].sort()).toEqual(["activity", "grant"]);
     for (const secret of [
       TEXTS.annaPrivate,
       TEXTS.annaShared,
@@ -458,11 +486,11 @@ describe("account closure", () => {
   it("reports no closure before one is asked for", async () => {
     const response = await get(client, "/me/close", TOKENS.anna);
     expect(response.status).toBe(200);
-    expect(CloseState.parse(await response.json())).toEqual({ request: null });
+    expect(exact(CloseState, await response.json())).toEqual({ request: null });
     expect((await get(client, "/me/close")).status).toBe(401);
   });
 
-  it("locks and revokes at once, enqueues the deletion for the end of the window and answers the deadlines", async () => {
+  it("revokes at once, files the request, enqueues the deletion for the end of the window and answers the deadlines", async () => {
     const before = Date.now();
     const response = await post(
       client,
@@ -472,7 +500,7 @@ describe("account closure", () => {
       TOKENS.anna,
     );
     expect(response.status).toBe(200);
-    closure = ClosureRequest.parse(await response.json());
+    closure = exact(ClosureRequest, await response.json());
     expect(closure).toMatchObject({ mode: "undo-window", state: "requested" });
     const requestedAt = Date.parse(closure.requestedAt);
     expect(requestedAt).toBeGreaterThanOrEqual(before - 1);
@@ -494,7 +522,8 @@ describe("account closure", () => {
       .where(eq(schema.grants.id, GRANTS.benToCaraStatus));
     expect(benToCara?.revokedAt).toBeNull();
 
-    // The lock is the open closure request.
+    // The closure is the open request (enforcing it on other routes is the
+    // session layer's, a request to the lead).
     const rows = await closureRows(ANNA);
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ id: closure.id, state: "requested" });
@@ -535,7 +564,7 @@ describe("account closure", () => {
     );
     expect(replay.status).toBe(200);
     expect(replay.headers.get(IDEMPOTENCY_REPLAYED_HEADER)).toBe("true");
-    expect(await replay.json()).toEqual({ id: closure.id });
+    expect(exact(ClosureReplay, await replay.json())).toEqual({ id: closure.id });
     expect(await closureRows(ANNA)).toHaveLength(1);
     expect(await auditRows(ANNA, "account.close")).toHaveLength(1);
   });
@@ -555,7 +584,7 @@ describe("account closure", () => {
   });
 
   it("answers the open request as the state", async () => {
-    const state = CloseState.parse(await (await get(client, "/me/close", TOKENS.anna)).json());
+    const state = exact(CloseState, await (await get(client, "/me/close", TOKENS.anna)).json());
     expect(state.request).toEqual(closure);
   });
 
@@ -566,10 +595,10 @@ describe("account closure", () => {
     expect((await closureRows(ANNA))[0]?.state).toBe("requested");
   });
 
-  it("undoes inside the window: unlocked, the job gone, sessions and grants still revoked", async () => {
+  it("undoes inside the window: cancelled, the job gone, sessions and grants still revoked", async () => {
     const response = await post(client, "/me/close/undo", KEYS.annaUndo, undefined, TOKENS.anna);
     expect(response.status).toBe(200);
-    const body = CloseUndone.parse(await response.json());
+    const body = exact(CloseUndone, await response.json());
     expect(body.sessionsRestored).toBe(false);
     expect(body.grantsRestored).toBe(false);
     expect(body.request).toMatchObject({ id: closure.id, state: "cancelled", mode: "undo-window" });
@@ -594,7 +623,7 @@ describe("account closure", () => {
     expect(undone).toHaveLength(1);
     expect(undone[0]).toMatchObject({ subjectId: ANNA });
 
-    const state = CloseState.parse(await (await get(client, "/me/close", TOKENS.anna)).json());
+    const state = exact(CloseState, await (await get(client, "/me/close", TOKENS.anna)).json());
     expect(state.request).toBeNull();
   });
 
@@ -618,7 +647,7 @@ describe("account closure", () => {
       TOKENS.anna,
     );
     expect(reclose.status).toBe(200);
-    const second = ClosureRequest.parse(await reclose.json());
+    const second = exact(ClosureRequest, await reclose.json());
     expect(second.id).not.toBe(closure.id);
     // No grant was left to revoke the second time.
     expect(await auditRows(ANNA, "grant.revoke")).toHaveLength(4);
@@ -639,7 +668,7 @@ describe("account closure", () => {
     const before = Date.now();
     const response = await post(client, "/me/close", KEYS.benNow, { mode: "now" }, TOKENS.ben);
     expect(response.status).toBe(200);
-    const request = ClosureRequest.parse(await response.json());
+    const request = exact(ClosureRequest, await response.json());
     expect(request).toMatchObject({ mode: "now", undoUntil: null, state: "requested" });
 
     expect(await sessionsOf(BEN)).toEqual([SESSIONS.ben]);

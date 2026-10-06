@@ -6,6 +6,7 @@ import {
   ActivityQuery,
   CloseInput,
   CloseUndone,
+  ClosureReplay,
   ClosureRequest,
   DataCategory,
   ExportLine,
@@ -123,5 +124,19 @@ describe("ExportLine", () => {
     });
     expect(ExportLine.safeParse({ kind: "cycle_entry", data: {} }).success).toBe(false);
     expect(ExportLine.safeParse({ kind: "export", format: 2 }).success).toBe(false);
+  });
+
+  it("ends with an end line counting the records, and no record may take the header's or the end's kind", () => {
+    expect(ExportLine.parse({ kind: "end", records: 3 })).toEqual({ kind: "end", records: 3 });
+    expect(ExportLine.safeParse({ kind: "end", records: -1 }).success).toBe(false);
+    expect(ExportLine.safeParse({ kind: "end", data: {} }).success).toBe(false);
+    expect(ExportLine.safeParse({ kind: "export", data: {} }).success).toBe(false);
+  });
+});
+
+describe("ClosureReplay", () => {
+  it("is the request id alone, as a replayed close answers", () => {
+    expect(ClosureReplay.parse({ id: ID })).toEqual({ id: ID });
+    expect(ClosureReplay.safeParse({ id: "not-an-id" }).success).toBe(false);
   });
 });
