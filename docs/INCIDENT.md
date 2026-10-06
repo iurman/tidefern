@@ -115,9 +115,10 @@ WHERE a.action = 'partner.read'
   AND a.occurred_at BETWEEN '<from>' AND '<to>'
   AND NOT EXISTS (
     SELECT 1 FROM grants g
-    WHERE g.grantee_id = a.actor_id AND g.owner_id = a.subject_id
+    WHERE g.grantee_id = a.actor_id
       AND g.category::text = a.category::text
-      AND (g.child_id IS NOT DISTINCT FROM a.child_id)
+      AND CASE WHEN a.child_id IS NOT NULL THEN g.child_id = a.child_id
+               ELSE g.owner_id = a.subject_id AND g.child_id IS NULL END
       AND g.created_at <= a.occurred_at
       AND (g.revoked_at IS NULL OR g.revoked_at > a.occurred_at)
   )
@@ -157,14 +158,20 @@ FROM data_requests
 WHERE state NOT IN ('completed', 'cancelled', 'refused')
 ORDER BY deadline_at;
 
--- Q10. How many people, for the thresholds in section 4.
-SELECT count(*) AS people FROM "user";
+-- Q10. How many people, for the thresholds in section 4: accounts,
+-- children, and people without an account whose email is stored.
+SELECT count(*) AS accounts FROM "user";
+SELECT count(*) AS children FROM children WHERE deleted_at IS NULL;
+SELECT count(DISTINCT lower(invitee_email)) AS invitees FROM invitations;
 ```
 
 Q4 note for whoever adapts it: `grants.category` and
 `audit_events.category` are different enum types in the schema; the text
-cast compares their labels. If Q4 errors, run Q1 and Q3 and match by hand;
-the match is the evidence, not the query.
+cast compares their labels. A child read is matched by `child_id`, not by
+owner: the audit row's `subject_id` is the child, while the covering
+grant's `owner_id` is the guardian who granted it, so an adult read is
+matched on `owner_id` with no `child_id`. If Q4 errors, run Q1 and Q3 and
+match by hand; the match is the evidence, not the query.
 
 4. Vercel. On Pro, export the runtime logs for the window the same day
    (section 19) into the incident folder. On Hobby there is nothing to
@@ -176,8 +183,8 @@ the match is the evidence, not the query.
 6. Resend. If email is involved, save the message ids and the delivery
    events from the Resend log; do not forward the messages anywhere.
 7. Vendor notices. If a vendor told us about an incident on their side,
-   save their notice with its receipt time; the 60 days count from our
-   discovery, which is that receipt.
+   save their notice with its receipt time; which time starts the 60 days
+   is for `[OWNER]` attorney (section 3, question 6).
 
 ## 3. The first week: assess
 
@@ -202,8 +209,9 @@ evidence that can rebut it is what section 2 preserved.
      the KEK is outside the Rule's unsecured category (9.6). A copy with the
      KEK, or a leak through the running application, which holds plaintext
      in memory (9.5), is inside it.
-   - Account data: email, name, session addresses and browsers. Not health
-     data on its own; still personal, and still part of the notice.
+   - Account data: email, name, session addresses and browsers. Whether it
+     is health data on its own is for `[OWNER]` attorney; it is still
+     personal, and still part of the notice.
 3. Was it acquired, or only accessible? Three cases:
    - A `can()` or RLS bug: Q4 lists partner reads with no covering grant.
      Each row is a disclosure of that category to that actor on that day
@@ -226,7 +234,9 @@ evidence that can rebut it is what section 2 preserved.
    by subject: the owner of each row, every child (a child's data entered
    by a parent is the child's consumer health data, 9.6), and every
    grantee whose grant rows or notes were exposed. The count decides the
-   thresholds in section 4. Q10 is the ceiling.
+   thresholds in section 4. Q10 counts accounts, children and stored
+   invitee addresses separately; their sum is the ceiling, and an invitee
+   who later made an account is counted twice.
 5. Where do they live? The product stores a time zone and no address
    (profile settings, `/privacy`), so the "500 or more residents of one
    state" media threshold cannot be computed from the database.
@@ -255,14 +265,14 @@ HBNR row in architecture 9.6 and the incident outline in section 19, and
 `[OWNER]` attorney confirms each against the current rule before the first
 notice goes out.
 
-| Who                                                                            | When                                                                                                                                  | How                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Each person affected                                                           | Without unreasonable delay and within 60 calendar days of discovery                                                                   | By email where the person chose email (9.6). Every Tidefern account has an email address that was confirmed at sign-up; `[OWNER]` attorney confirms that this counts as choosing email, and names the fallback where it does not. The subject line stays generic (9.1: no health fact in an email subject); the body carries the notice below. Sent through Resend, one message per person, never a list |
-| The FTC                                                                        | At the same time as the individuals when 500 or more people are affected; otherwise within 60 days after the calendar year ends        | `[OWNER]` attorney supplies the submission route and keeps the receipt                                                                                                                                                                                                                                                                                                                                                                              |
-| Prominent media                                                                | When 500 or more residents of one state are affected                                                                                  | `[OWNER]` attorney supplies the outlets and the wording; the content is the same five elements                                                                                                                                                                                                                                                                                                                                                       |
-| A parent or guardian for a child                                               | With the individuals                                                                                                                  | The notice about a child goes to each guardian of record (the guardianship rows, section 8.2), as the child's data is the child's                                                                                                                                                                                                                                                                                                                   |
-| Processors                                                                     | Where a processor contract requires it (9.6: 19.373.060) or where the processor needs to act (delete a message, rotate a key)         | Through the vendor contact in the runbook; record the time and the ticket id                                                                                                                                                                                                                                                                                                                                                                        |
-| People without an account whose email is stored (invitees, former partners)    | With the individuals, if their stored email was exposed                                                                               | Same notice, to the stored address                                                                                                                                                                                                                                                                                                                                                                                                                  |
+| Who                                                                         | When                                                                                                                            | How                                                                                                                                                                                                                                                                                                                                                                                                      |
+| --------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Each person affected                                                        | Without unreasonable delay and within 60 calendar days of discovery                                                             | By email where the person chose email (9.6). Every Tidefern account has an email address that was confirmed at sign-up; `[OWNER]` attorney confirms that this counts as choosing email, and names the fallback where it does not. The subject line stays generic (9.1: no health fact in an email subject); the body carries the notice below. Sent through Resend, one message per person, never a list |
+| The FTC                                                                     | At the same time as the individuals when 500 or more people are affected; otherwise within 60 days after the calendar year ends | `[OWNER]` attorney supplies the submission route and keeps the receipt                                                                                                                                                                                                                                                                                                                                   |
+| Prominent media                                                             | When 500 or more residents of one state are affected                                                                            | `[OWNER]` attorney supplies the outlets and the wording; the content is the same five elements                                                                                                                                                                                                                                                                                                           |
+| A parent or guardian for a child                                            | With the individuals; `[OWNER]` attorney confirms this duty                                                                     | The notice about a child goes to each guardian of record (the guardianship rows, section 8.2), as the child's data is the child's                                                                                                                                                                                                                                                                        |
+| Processors                                                                  | Where a processor contract requires it (9.6: 19.373.060) or where the processor needs to act (delete a message, rotate a key)   | Through the vendor contact in the runbook; record the time and the ticket id                                                                                                                                                                                                                                                                                                                             |
+| People without an account whose email is stored (invitees, former partners) | With the individuals, if their stored email was exposed; `[OWNER]` attorney confirms this duty                                  | Same notice, to the stored address                                                                                                                                                                                                                                                                                                                                                                       |
 
 The Washington act's own duties that 9.6 names and that an incident touches:
 the 45 day clock on every rights request keeps running during the incident
@@ -309,11 +319,12 @@ the key was involved. If notes were involved say so plainly.] [If the
 answer differs for a child's record, say so and name the child as the
 guardian would.]
 
-What you can do. [Steps that apply, for example: sign in and check Sharing
-for who holds a grant and take back any you do not want; change your
-password at Settings, Security; sign out other devices; delete any entry
-or note you no longer want kept; ask us for the full record of what was
-seen.] You can also close your account at any time; the page at
+What you can do. [Steps that apply, for example: sign in and check who
+holds a grant and take back any you do not want; change your password;
+turn on two-step sign-in at Settings, Two-step sign-in; sign out other
+devices at Settings, Devices; delete any entry or note you no longer want
+kept; ask us for the full record of what was seen. Update these screen
+names to the ones that exist when the notice is sent.] You can also close your account at any time; the page at
 [production origin]/account/delete explains what that deletes and when.
 
 What we are doing. [What was contained and how; what evidence was kept;
@@ -449,4 +460,7 @@ each statement.
   the confirmed sign-up email counts as choosing email; whether any
   Washington breach-notice duty applies beyond the HBNR; the retention
   period for the notice register; the element list of 318.6 against the
-  letter in 4.1.
+  letter in 4.1; whether the guardian notice and the notice to people
+  without an account in the section 4 table are duties; whether account data
+  alone is health data (section 3 item 2); which time starts the 60 days
+  when a vendor's notice arrives (section 2 step 7).
