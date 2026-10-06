@@ -80,6 +80,11 @@ describe("SegmentedDateInput", () => {
       screen.getByText("That date does not exist. Check the day and the month."),
     ).toBeVisible();
     expect(screen.getByRole("textbox", { name: "Day" })).toHaveAttribute("aria-invalid", "true");
+    for (const name of ["Day", "Month", "Year"]) {
+      expect(screen.getByRole("textbox", { name })).toHaveAccessibleDescription(
+        "For example, 03 04 2027 That date does not exist. Check the day and the month.",
+      );
+    }
   });
 
   it("starts from a default value and follows a controlled one", () => {

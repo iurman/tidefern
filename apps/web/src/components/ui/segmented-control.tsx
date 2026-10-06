@@ -53,8 +53,9 @@ export function SegmentedControl<T extends string = string>({
 
   return (
     <fieldset
-      className={[styles.group, className].filter(Boolean).join(" ")}
-      data-tone={tone}
+      className={[styles.group, tone === "period" ? styles.periodTone : null, className]
+        .filter(Boolean)
+        .join(" ")}
       disabled={disabled}
       aria-describedby={error ? errorId : undefined}
       data-invalid={error ? true : undefined}

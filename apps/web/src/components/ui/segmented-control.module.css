@@ -18,7 +18,7 @@
   display: inline-flex;
   flex-wrap: wrap;
   gap: var(--space-1);
-  padding: var(--space-1);
+  padding: 0;
   border: 1px solid var(--soft-border);
   border-radius: var(--radius-round);
   background: var(--surface);
@@ -51,7 +51,7 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  min-height: calc(var(--size-control) - 2 * var(--space-1));
+  min-height: var(--size-control);
   padding: 0 var(--space-4);
   border: 1px solid transparent;
   border-radius: var(--radius-round);
@@ -78,12 +78,8 @@
   filter: brightness(1.08);
 }
 
-.group[data-tone="period"] .radio:checked:hover + .text,
-[data-specimen-state="hover"]
-  > .group[data-tone="period"]
-  .segment:first-child
-  .radio:checked
-  + .text {
+.group.periodTone .radio:checked:hover + .text,
+[data-specimen-state="hover"] > .group.periodTone .segment:first-child .radio:checked + .text {
   background: var(--data-period);
 }
 
@@ -104,7 +100,7 @@
   border-color: var(--action);
 }
 
-.group[data-tone="period"] .radio:checked + .text {
+.group.periodTone .radio:checked + .text {
   background: var(--data-period);
   color: var(--surface);
   border-color: var(--data-period);

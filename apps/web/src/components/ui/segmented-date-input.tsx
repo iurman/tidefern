@@ -166,6 +166,7 @@ export function SegmentedDateInput({
               value={parts[part]}
               onChange={(event) => update(part, event)}
               aria-invalid={message ? true : undefined}
+              aria-describedby={describedBy}
               aria-required={required ? true : undefined}
               required={required}
             />

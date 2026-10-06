@@ -80,6 +80,8 @@ test("the flow scale is one radio group that the arrow keys move", async ({ page
   await page.keyboard.press("ArrowLeft");
   await page.keyboard.press("ArrowLeft");
   await expect(stage.getByRole("radio", { name: "Spotting" })).toBeChecked();
+  const box = await light.boundingBox();
+  expect(box?.height ?? 0).toBeGreaterThanOrEqual(44);
 });
 
 test("chips press, unpress and reveal the rest in place", async ({ page }) => {
