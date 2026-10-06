@@ -2,10 +2,26 @@
   --specimen-width: 1200px;
   display: grid;
   gap: var(--space-8);
+  /* Grid children default to min-width auto; without this a wide specimen could widen the page. */
+  min-width: 0;
+}
+
+/*
+ * The frame forces hover, focus-visible and active through this attribute on
+ * the component's root (docs/design/COMPONENTS.md). Hover and active are
+ * drawn by each module's twin rule; the focus ring is drawn once here, the
+ * same way the global :focus-visible rule draws it, so no module restates it.
+ */
+[data-specimen-state="focus-visible"] > * {
+  outline: 2px solid var(--focus);
+  outline-offset: 4px;
+  border-radius: 4px;
 }
 
 .widthControl {
   display: inline-flex;
+  flex-wrap: wrap;
+  max-width: 100%;
   gap: var(--space-2);
   padding: var(--space-1);
   border: 1px solid var(--soft-border);
@@ -33,6 +49,7 @@
 .card {
   display: grid;
   gap: var(--space-4);
+  min-width: 0;
   padding-block: var(--space-6);
   border-top: 1px solid var(--soft-border);
 }
@@ -55,7 +72,8 @@
 }
 
 .theme {
-  max-width: var(--specimen-width);
+  max-width: min(var(--specimen-width), 100%);
+  min-width: 0;
   padding: var(--space-4);
   border: 1px solid var(--soft-border);
   border-radius: var(--radius-card);
@@ -74,7 +92,8 @@
 
 .states {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(min(200px, 100%), 1fr));
+  min-width: 0;
   gap: var(--space-4);
   margin: 0;
   padding: 0;
@@ -85,6 +104,7 @@
   display: grid;
   gap: var(--space-2);
   align-content: start;
+  min-width: 0;
 }
 
 .stateLabel,
@@ -98,6 +118,9 @@
   display: grid;
   align-items: start;
   min-height: 56px;
+  min-width: 0;
+  /* A specimen wider than its cell (a rail, a chart) scrolls inside the cell instead of widening the page. */
+  overflow-x: auto;
 }
 
 .notes {

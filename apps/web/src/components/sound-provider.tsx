@@ -3,7 +3,7 @@ import { useEffect } from "react";
 import { haptic, play, unlockAudio, unlockIfActivated } from "@/lib/sound";
 
 const INTERACTIVE =
-  'a[href], button, summary, input, select, textarea, [role="button"], [role="tab"], [role="switch"]';
+  'a[href], button, summary, input, select, textarea, [role="button"], [role="tab"], [role="switch"], [role="option"], [role="menuitem"]';
 
 /**
  * Attaches sound and haptic feedback to every interactive element through
