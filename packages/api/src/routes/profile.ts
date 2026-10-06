@@ -2,27 +2,30 @@ import { createHash } from "node:crypto";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { and, asc, count, eq, gt, inArray, isNull, or } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import { can, listScope, stageAfter } from "@tidefern/core";
 import type { Category, Pregnancy, Stage } from "@tidefern/core";
-import { isActorId, schema, withActor } from "@tidefern/db";
+import { isActorId, schema, withActor, withSystem } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
 import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
 import {
+  CONSENT_DISCLOSURES,
   ConsentInput,
   ConsentList,
   ConsentRecord,
   ConsentWithdrawal,
   DataSummary,
   Id,
+  IdempotentReplay,
   Problem,
   Profile,
   ProfileInput,
 } from "@tidefern/schemas";
-import type { Consent, DataCategory, Processor } from "@tidefern/schemas";
+import type { Consent, ConsentBasis, DataCategory, Processor } from "@tidefern/schemas";
 
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
+import { audit, auditActions } from "../middleware/audit";
 import { problem } from "../problem";
 
 /**
@@ -60,10 +63,13 @@ export const CURSOR_INVALID = "cursor_invalid";
 
 /**
  * The processors of architecture record 9.5 as the data summary lists them
- * (architecture record 11: every processor with its contact). The contact
- * is the online mechanism each vendor publishes for data processing
- * matters, as recorded in docs/research/RESEARCH.md and
- * docs/LAUNCH_RUNBOOK.md; the owner confirms the list before launch.
+ * (architecture record 11: every processor with its contact address). The
+ * `contact` today is the page where each vendor publishes its data
+ * processing terms, as sourced in docs/research/RESEARCH.md, which records
+ * no privacy contact address for any of them. [OWNER] Replace each with the
+ * vendor's privacy contact address and confirm the list before launch. The
+ * names match the processors the consent text names (`CONSENT_DISCLOSURES`),
+ * which profile.test.ts pins.
  */
 export const PROCESSORS: readonly Processor[] = [
   {
@@ -185,7 +191,7 @@ export const createConsentRoute = createRoute({
   tags: ["profile"],
   summary: "Record the collection consent as the page showed it",
   description:
-    "One row per category, each bound to a SHA-256 of the whole disclosure (categories, purposes, processors, text version, terms version). A consent is immutable; a new disclosure is a new record.",
+    "The client names the categories, the consent text version and the terms version; the server writes each category's basis and purpose sentence from the catalog for that version, never text from the client. One row per category, each bound to a SHA-256 of the whole disclosure (categories, bases, purposes, processors, text version, terms version). A consent is immutable; a new disclosure is a new record.",
   middleware: [requireActor] as const,
   request: {
     headers: idempotencyHeader,
@@ -196,8 +202,11 @@ export const createConsentRoute = createRoute({
   },
   responses: {
     201: {
-      description: "The consent rows written",
-      content: { "application/json": { schema: ConsentRecord } },
+      description:
+        "The consent rows written. An idempotent replay (Idempotency-Replayed: true) answers the record's id alone; GET /v1/me/consents has the rows.",
+      content: {
+        "application/json": { schema: z.union([ConsentRecord, IdempotentReplay]) },
+      },
     },
     422: problemResponse("Validation failed"),
     ...commonProblems,
@@ -227,7 +236,7 @@ export const withdrawConsentRoute = createRoute({
   tags: ["profile"],
   summary: "Withdraw the collection consent and start account closure",
   description:
-    "Needs fresh authentication. Every active consent of the person is withdrawn at one instant, a closure request with a seven day undo window is written and the closure job is queued for the end of that window. A child's consent is withdrawn with the child's records through the child's closure path, not here.",
+    "Needs fresh authentication. Starts account closure at once: every active consent of the person is withdrawn, every grant she gave or holds is revoked (each audited), every other session of hers is ended, a closure request with a seven day undo window is written and the closure job is queued for the end of that window. A child's consent is withdrawn with the child's records through the child's closure path, not here.",
   middleware: [requireActor, requireFreshAuth()] as const,
   request: {
     params: z.object({ id: Id }),
@@ -235,8 +244,11 @@ export const withdrawConsentRoute = createRoute({
   },
   responses: {
     200: {
-      description: "Withdrawn; the closure that follows",
-      content: { "application/json": { schema: ConsentWithdrawal } },
+      description:
+        "Withdrawn; the closure that follows. An idempotent replay (Idempotency-Replayed: true) answers the consent id alone.",
+      content: {
+        "application/json": { schema: z.union([ConsentWithdrawal, IdempotentReplay]) },
+      },
     },
     404: problemResponse("No such consent for this person"),
     409: problemResponse("Already withdrawn"),
@@ -249,7 +261,8 @@ export const dataSummaryRoute = createRoute({
   method: "get",
   path: "/v1/me/data-summary",
   tags: ["profile"],
-  summary: "What is held: categories with counts, processors with contacts, people with grants",
+  summary:
+    "What is held: categories with counts, processors with contacts, people with grants, the disclosure ledger",
   middleware: [requireActor] as const,
   responses: {
     200: {
@@ -328,18 +341,45 @@ export function parseIfMatch(raw: string): number | null {
   return /^[1-9]\d{0,8}$/.test(bare) ? Number(bare) : null;
 }
 
+/** The disclosure the page showed: the catalog's words for the categories she agreed to. */
+export interface Disclosure {
+  categories: { category: DataCategory; basis: ConsentBasis; purpose: string }[];
+  processors: string[];
+  textVersion: ConsentInput["textVersion"];
+  termsVersion: string;
+}
+
 /**
- * SHA-256 of the disclosure the page showed, in a canonical order so the
- * same disclosure hashes the same whatever order a client lists it in.
+ * Expands a consent request into the disclosure it agreed to, from
+ * `CONSENT_DISCLOSURES` for the version named. Every sentence comes from
+ * the catalog; nothing the client wrote reaches a row. Categories are in
+ * the vocabulary's order, so the same agreement expands the same whatever
+ * order a client lists it in.
  */
-export function disclosureHash(input: ConsentInput): string {
-  const canonical = JSON.stringify({
-    categories: [...input.categories]
-      .sort((a, b) => a.category.localeCompare(b.category))
-      .map(({ category, basis, purpose }) => ({ category, basis, purpose })),
-    processors: [...input.processors].sort(),
+export function disclosureFor(input: ConsentInput): Disclosure {
+  const catalog = CONSENT_DISCLOSURES[input.textVersion];
+  const categories = [...input.categories]
+    .sort((a, b) => a.localeCompare(b))
+    .map((category) => ({ category, ...catalog.categories[category] }));
+  return {
+    categories,
+    processors: [...catalog.processors],
     textVersion: input.textVersion,
     termsVersion: input.termsVersion,
+  };
+}
+
+/** SHA-256 of the disclosure, over a canonical JSON form. */
+export function disclosureHash(disclosure: Disclosure): string {
+  const canonical = JSON.stringify({
+    categories: disclosure.categories.map(({ category, basis, purpose }) => ({
+      category,
+      basis,
+      purpose,
+    })),
+    processors: [...disclosure.processors].sort(),
+    textVersion: disclosure.textVersion,
+    termsVersion: disclosure.termsVersion,
   });
   return createHash("sha256").update(canonical).digest("hex");
 }
@@ -372,11 +412,16 @@ interface StageRefusal {
 }
 
 /**
- * The stage changes the domain forbids (core's stages.ts): while a record
- * is active the stage is whatever `stageAfter` says and only the record's
- * own route changes it; the `pregnancy` stage is entered only by starting
- * that record through its own route. The first choice at onboarding is not
- * a change, so `current` is null then and only the first rule applies.
+ * The stage changes this route refuses. The first rule is the domain's
+ * (core's stages.ts): while a record is active the stage is whatever
+ * `stageAfter` says and only the record's own route changes it. The second
+ * is this task's inference and not yet in core or the record: after
+ * onboarding the `pregnancy` stage is entered only by starting the record
+ * through its own route (E4), while onboarding itself may pick `pregnancy`
+ * before any record exists, so the two paths are asymmetric. [OWNER]
+ * Confirm the rule, or move it into core beside `stageAfter` so E2 and E4
+ * share it. The first choice at onboarding is not a change, so `current`
+ * is null then and only the first rule applies.
  */
 export function stageChangeRefusal(
   current: Stage | null,
@@ -582,44 +627,122 @@ async function startClosure(
   return { requestId, state: "requested", undoUntil, jobId };
 }
 
-async function withdrawConsent(
+type WithdrawDecision = "proceed" | "missing" | "already" | "child";
+
+/**
+ * Whether this actor may withdraw this consent, read inside her own
+ * `withActor()` transaction so row level security hides any consent she
+ * may not see, and decided by `can()`. A child's consent names the child
+ * as subject and the guardian who gave it.
+ */
+async function decideWithdrawal(
   tx: Transaction,
   actor: ReturnType<typeof actorOf>,
   consentId: string,
-  now: Date,
-): Promise<WithdrawOutcome> {
+): Promise<WithdrawDecision> {
   const [row] = await tx
     .select()
     .from(schema.consents)
     .where(and(eq(schema.consents.id, consentId), isNull(schema.consents.deletedAt)))
     .limit(1);
-  if (row === undefined) return { kind: "missing" };
-  // A child's consent names the child as subject and the guardian who gave it.
+  if (row === undefined) return "missing";
   const resource =
     row.consentingGuardianId === null
       ? { subjectId: row.subjectId, category: row.category as Category }
       : { subjectId: row.subjectId, category: row.category as Category, childId: row.subjectId };
   const decision = can(actor, "delete", resource);
-  if (!decision.allowed) return { kind: "missing" };
-  if (decision.reason === "guardian") return { kind: "child" };
-  if (row.withdrawnAt !== null) return { kind: "already" };
+  if (!decision.allowed) return "missing";
+  if (decision.reason === "guardian") return "child";
+  if (row.withdrawnAt !== null) return "already";
+  return "proceed";
+}
 
-  await tx
+/**
+ * Withdrawing the collection consent starts account closure (architecture
+ * record 11), and closure revokes every session and grant at once (7.3 and
+ * 11): in one transaction every active consent of hers is withdrawn, every
+ * grant she gave or holds is audited and revoked, every session but the
+ * one making this request is ended, and the closure request and its job
+ * are written. It runs as system for the reasons E8's close gives: a
+ * grantee may not update the grants she holds (`grants_update` is the
+ * owner's or a guardian's), and Better Auth's `session` table sits outside
+ * row level security. The access decision was already made by `can()` in
+ * `decideWithdrawal`; every row here is keyed to the signed-in person, and
+ * nothing from the request names whose account this is.
+ */
+async function withdrawAndClose(
+  tx: Transaction,
+  actorId: string,
+  sessionId: string,
+  consentId: string,
+  now: Date,
+): Promise<WithdrawOutcome> {
+  const withdrawn = await tx
     .update(schema.consents)
-    .set({ withdrawnAt: now, updatedAt: now, version: row.version + 1 })
+    .set({ withdrawnAt: now, updatedAt: now, version: sql`${schema.consents.version} + 1` })
     .where(
       and(
-        eq(schema.consents.subjectId, actor.id),
+        eq(schema.consents.subjectId, actorId),
         isNull(schema.consents.withdrawnAt),
         isNull(schema.consents.deletedAt),
       ),
-    );
-  const closure = await startClosure(tx, actor.id, now);
+    )
+    .returning({ id: schema.consents.id });
+  // A concurrent withdrawal won between the decision and this update.
+  if (withdrawn.length === 0) return { kind: "already" };
+
+  // Every grant in either direction, audited before the revoke (the audit
+  // helper's rule), then revoked in one statement.
+  const active = await tx
+    .select({
+      id: schema.grants.id,
+      ownerId: schema.grants.ownerId,
+      category: schema.grants.category,
+      childId: schema.grants.childId,
+    })
+    .from(schema.grants)
+    .where(
+      and(
+        or(eq(schema.grants.ownerId, actorId), eq(schema.grants.granteeId, actorId)),
+        isNull(schema.grants.revokedAt),
+        isNull(schema.grants.deletedAt),
+      ),
+    )
+    .orderBy(asc(schema.grants.createdAt), asc(schema.grants.id));
+  for (const grant of active) {
+    await audit(tx, {
+      actorId,
+      action: auditActions.grantRevoke,
+      subjectId: grant.childId ?? grant.ownerId,
+      category: grant.category,
+      childId: grant.childId ?? undefined,
+      occurredAt: now,
+    });
+  }
+  if (active.length > 0) {
+    await tx
+      .update(schema.grants)
+      .set({ revokedAt: now, updatedAt: now, version: sql`${schema.grants.version} + 1` })
+      .where(
+        inArray(
+          schema.grants.id,
+          active.map((grant) => grant.id),
+        ),
+      );
+  }
+
+  // Every other session; the one making this request stays, so she can
+  // still cancel the closure from here inside the undo window.
+  await tx
+    .delete(schema.session)
+    .where(and(eq(schema.session.userId, actorId), ne(schema.session.id, sessionId)));
+
+  const closure = await startClosure(tx, actorId, now);
   return {
     kind: "withdrawn",
     jobId: closure.jobId,
     body: {
-      id: row.id,
+      id: consentId,
       withdrawnAt: now.toISOString(),
       closure: {
         requestId: closure.requestId,
@@ -851,7 +974,27 @@ async function dataSummary(
     });
   }
 
-  return { categories, processors: [...PROCESSORS], people: [...people.values()] };
+  // The disclosure ledger of 7.4, empty in v1; row level security shows
+  // her only her own entries, and the filter says the same.
+  const ledger = await tx
+    .select()
+    .from(schema.disclosures)
+    .where(eq(schema.disclosures.userId, actor.id))
+    .orderBy(asc(schema.disclosures.createdAt), asc(schema.disclosures.id));
+  const disclosures = ledger.map((entry) => ({
+    id: entry.id,
+    recipient: entry.recipient,
+    contact: entry.contact,
+    purpose: entry.purpose,
+    createdAt: entry.createdAt.toISOString(),
+  }));
+
+  return {
+    categories,
+    processors: [...PROCESSORS],
+    people: [...people.values()],
+    disclosures,
+  };
 }
 
 /** Adds the profile, consent and data summary routes; called once from the registry. */
@@ -905,7 +1048,8 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const actor = actorOf(c);
     const input = c.req.valid("json");
     const now = new Date();
-    const textHash = disclosureHash(input);
+    const disclosure = disclosureFor(input);
+    const textHash = disclosureHash(disclosure);
     // The subject is the actor by construction (`/me`): no decision to make,
     // and B8's insert policy refuses any other subject underneath.
     const rows = await withActor(
@@ -914,7 +1058,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
         tx
           .insert(schema.consents)
           .values(
-            input.categories.map((item) => ({
+            disclosure.categories.map((item) => ({
               id: uuidv7(),
               subjectId: actor.id,
               consentingGuardianId: null,
@@ -932,11 +1076,14 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
       databaseFor(c),
     );
     rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+    const first = rows[0];
+    if (first === undefined) throw new Error("the consent insert returned no row");
     const record: ConsentRecord = {
+      id: first.id,
       textHash,
-      textVersion: input.textVersion,
-      termsVersion: input.termsVersion,
-      processors: input.processors,
+      textVersion: disclosure.textVersion,
+      termsVersion: disclosure.termsVersion,
+      processors: disclosure.processors,
       items: rows.map(consentBody),
     };
     return c.json(record, 201);
@@ -965,10 +1112,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           .from(schema.consents)
           .where(
             and(
-              or(
-                inArray(schema.consents.subjectId, subjects),
-                eq(schema.consents.consentingGuardianId, actor.id),
-              ),
+              inArray(schema.consents.subjectId, subjects),
               isNull(schema.consents.deletedAt),
               ...(after === undefined ? [] : [gt(schema.consents.id, after)]),
             ),
@@ -990,11 +1134,20 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const actor = actorOf(c);
     const { id } = c.req.valid("param");
     const now = new Date();
-    const outcome = await withActor(
+    const session = c.var.session;
+    if (session === null) throw new Error("requireActor must run before the profile handlers");
+    const decision = await withActor(
       actor.id,
-      (tx) => withdrawConsent(tx, actor, id, now),
+      (tx) => decideWithdrawal(tx, actor, id),
       databaseFor(c),
     );
+    const outcome: WithdrawOutcome =
+      decision === "proceed"
+        ? await withSystem(
+            (tx) => withdrawAndClose(tx, actor.id, session.id, id, now),
+            databaseFor(c),
+          )
+        : { kind: decision };
     switch (outcome.kind) {
       case "missing":
         return problem(c, 404, "not_found");

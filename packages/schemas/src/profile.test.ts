@@ -2,30 +2,22 @@ import { describe, expect, it } from "vitest";
 
 import { ShareCategory, Stage } from "./index";
 import {
+  CONSENT_DISCLOSURES,
   ConsentInput,
+  ConsentRecord,
   ConsentWithdrawal,
   DataCategory,
   DataSummary,
+  IdempotentReplay,
   Profile,
   ProfileInput,
   TimeZone,
+  consentTextVersions,
   isSupportedTimeZone,
 } from "./profile";
 
 const disclosure = {
-  categories: [
-    {
-      category: "cycle.history",
-      basis: "necessary",
-      purpose: "Keep the dates you log so the calendar and the estimates work.",
-    },
-    {
-      category: "journal.private",
-      basis: "necessary",
-      purpose: "Keep your notes, encrypted, so you can read them later.",
-    },
-  ],
-  processors: ["Vercel", "Neon (Databricks, Inc.)", "Resend"],
+  categories: ["cycle.history", "journal.private"],
   textVersion: "2026-10",
   termsVersion: "2026-10",
 };
@@ -97,38 +89,69 @@ describe("DataCategory", () => {
 });
 
 describe("ConsentInput", () => {
-  it("accepts the disclosure the page showed", () => {
+  it("accepts the categories she agreed to with the text and terms versions", () => {
     expect(ConsentInput.parse(disclosure)).toEqual(disclosure);
   });
 
-  it("refuses an empty category list, a repeated category and no processors", () => {
+  it("refuses an empty category list, a repeated category and a category outside the vocabulary", () => {
     expect(ConsentInput.safeParse({ ...disclosure, categories: [] }).success).toBe(false);
     expect(
-      ConsentInput.safeParse({
-        ...disclosure,
-        categories: [disclosure.categories[0], disclosure.categories[0]],
-      }).success,
+      ConsentInput.safeParse({ ...disclosure, categories: ["cycle.history", "cycle.history"] })
+        .success,
     ).toBe(false);
-    expect(ConsentInput.safeParse({ ...disclosure, processors: [] }).success).toBe(false);
+    expect(ConsentInput.safeParse({ ...disclosure, categories: ["everything"] }).success).toBe(
+      false,
+    );
   });
 
-  it("refuses a category outside the vocabulary and an empty purpose", () => {
+  it("carries no sentence from the client: a purpose object, an unknown version or prose as a version is refused", () => {
     expect(
       ConsentInput.safeParse({
         ...disclosure,
-        categories: [{ category: "everything", basis: "consent", purpose: "All of it." }],
+        categories: [{ category: "cycle.history", basis: "consent", purpose: "All of it." }],
       }).success,
     ).toBe(false);
+    expect(ConsentInput.safeParse({ ...disclosure, textVersion: "2026-11" }).success).toBe(false);
     expect(
-      ConsentInput.safeParse({
-        ...disclosure,
-        categories: [{ category: "cycle.history", basis: "consent", purpose: " " }],
-      }).success,
+      ConsentInput.safeParse({ ...disclosure, termsVersion: "I had a loss in May" }).success,
     ).toBe(false);
+    expect(ConsentInput.safeParse({ ...disclosure, termsVersion: "2026-10.1" }).success).toBe(true);
+  });
+});
+
+describe("CONSENT_DISCLOSURES", () => {
+  it("has a sentence and a basis for every category in every version, and names processors", () => {
+    expect(Object.keys(CONSENT_DISCLOSURES)).toEqual([...consentTextVersions]);
+    for (const version of consentTextVersions) {
+      const catalog = CONSENT_DISCLOSURES[version];
+      expect(Object.keys(catalog.categories).sort()).toEqual([...DataCategory.options].sort());
+      for (const item of Object.values(catalog.categories)) {
+        expect(item.purpose.trim().length).toBeGreaterThan(0);
+        expect(item.purpose.length).toBeLessThanOrEqual(500);
+        expect(["necessary", "consent"]).toContain(item.basis);
+      }
+      expect(catalog.processors.length).toBeGreaterThan(0);
+    }
   });
 });
 
 describe("the response shapes", () => {
+  it("give the consent record its first row's id, which is what a replay answers", () => {
+    const id = "018f5e7a-5000-7000-8000-000000000001";
+    expect(
+      ConsentRecord.safeParse({
+        id,
+        textHash: "a".repeat(64),
+        textVersion: "2026-10",
+        termsVersion: "2026-10",
+        processors: ["Vercel"],
+        items: [],
+      }).success,
+    ).toBe(true);
+    expect(IdempotentReplay.parse({ id })).toEqual({ id });
+    expect(IdempotentReplay.safeParse({ id: "latest" }).success).toBe(false);
+  });
+
   it("name the closure a withdrawal starts with its undo deadline", () => {
     const parsed = ConsentWithdrawal.parse({
       id: "018f5e7a-5000-7000-8000-000000000001",
@@ -166,6 +189,7 @@ describe("the response shapes", () => {
           ],
         },
       ],
+      disclosures: [],
     });
     expect(parsed.people[0]?.grants[0]?.level).toBe("summary");
     expect(
@@ -173,7 +197,12 @@ describe("the response shapes", () => {
         categories: [{ category: "cycle.history", count: -1 }],
         processors: [],
         people: [],
+        disclosures: [],
       }).success,
     ).toBe(false);
+    // The disclosure ledger is part of the answer even when it is empty.
+    expect(DataSummary.safeParse({ categories: [], processors: [], people: [] }).success).toBe(
+      false,
+    );
   });
 });

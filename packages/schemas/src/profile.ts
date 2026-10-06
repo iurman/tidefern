@@ -143,55 +143,93 @@ export type DataCategory = z.infer<typeof DataCategory>;
 export const ConsentBasis = z.enum(["necessary", "consent"]).meta({ id: "ConsentBasis" });
 export type ConsentBasis = z.infer<typeof ConsentBasis>;
 
-/** One category the consent page showed, with its basis and the purpose text as shown. */
-export const ConsentCategoryInput = z
-  .object({
-    category: DataCategory,
-    basis: ConsentBasis,
-    purpose: z
-      .string()
-      .trim()
-      .min(1)
-      .max(500)
-      .describe("The purpose sentence the page showed for this category, verbatim"),
-  })
-  .meta({ id: "ConsentCategoryInput" });
-export type ConsentCategoryInput = z.infer<typeof ConsentCategoryInput>;
+/** What a disclosure says about one category: its basis and its purpose sentence. */
+export interface ConsentDisclosureItem {
+  basis: ConsentBasis;
+  purpose: string;
+}
+
+/** One version of the collection consent text as the onboarding page shows it. */
+export interface ConsentDisclosure {
+  /** Every category, so any subset a person is asked about has its sentence. */
+  categories: Readonly<Record<DataCategory, ConsentDisclosureItem>>;
+  /** The processors the page names, as architecture record 9.5 lists them. */
+  processors: readonly string[];
+}
+
+/** The versions of the consent text, oldest first; the last is what the page shows now. */
+export const consentTextVersions = ["2026-10"] as const;
+export type ConsentTextVersion = (typeof consentTextVersions)[number];
+
+/**
+ * The catalog of consent text, keyed by version. The page renders these
+ * sentences and the server writes them into the consent rows, so the
+ * plaintext `purpose` column only ever holds the product's own words and
+ * never anything a client typed (AGENTS.md: free text only in encrypted
+ * fields). A changed sentence is a new version; a version, once shipped, is
+ * never edited. The 2026-10 wording is the seed's (packages/db seed); the
+ * owner confirms it with the attorney before launch [OWNER].
+ */
+export const CONSENT_DISCLOSURES: Readonly<Record<ConsentTextVersion, ConsentDisclosure>> = {
+  "2026-10": {
+    categories: {
+      "cycle.status": {
+        basis: "consent",
+        purpose: "Show a status card to the people you choose.",
+      },
+      "cycle.history": {
+        basis: "necessary",
+        purpose: "Keep the dates you log so the calendar and the estimates work.",
+      },
+      "cycle.symptoms": {
+        basis: "necessary",
+        purpose: "Keep what you log on a day so you can look back at it.",
+      },
+      "journal.private": {
+        basis: "necessary",
+        purpose: "Keep your private notes, readable by you alone.",
+      },
+      "pregnancy.overview": {
+        basis: "necessary",
+        purpose: "Keep your due date, appointments and milestones.",
+      },
+      "pregnancy.photos": {
+        basis: "consent",
+        purpose: "Keep the photos you add to your journey.",
+      },
+      child: {
+        basis: "necessary",
+        purpose: "Keep this child's feeds, sleep, growth and milestones.",
+      },
+    },
+    processors: ["Vercel", "Neon (Databricks, Inc.)", "GitHub", "Resend", "Cloudflare"],
+  },
+};
+
+/** A version label such as `2026-10`: letters, digits, dots and hyphens only, never prose. */
+const versionLabel = z
+  .string()
+  .regex(/^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$/, "Expected a version label such as 2026-10");
 
 /**
  * The collection consent as the onboarding page collected it (architecture
- * record 12.2): the categories with their purposes, the processors named,
- * the version of the disclosure text and the version of the terms accepted
- * beside it. The server hashes the whole disclosure into every row it
- * writes, so the exact text shown is bound to the consent.
+ * record 12.2): the categories she agreed to, the version of the consent
+ * text the page showed and the version of the terms accepted beside it.
+ * The client sends no sentence: the server takes each category's basis and
+ * purpose and the processor names from `CONSENT_DISCLOSURES` for that
+ * version and hashes the whole disclosure into every row it writes.
  */
 export const ConsentInput = z
   .object({
     categories: z
-      .array(ConsentCategoryInput)
+      .array(DataCategory)
       .min(1)
       .max(dataCategoryValues.length)
-      .refine(
-        (items) => new Set(items.map((item) => item.category)).size === items.length,
-        "Each category appears once",
-      ),
-    processors: z
-      .array(z.string().trim().min(1).max(80))
-      .min(1)
-      .max(20)
-      .describe("The processor names the page showed, as shown"),
+      .refine((items) => new Set(items).size === items.length, "Each category appears once"),
     textVersion: z
-      .string()
-      .trim()
-      .min(1)
-      .max(40)
-      .describe("The version of the disclosure text shown"),
-    termsVersion: z
-      .string()
-      .trim()
-      .min(1)
-      .max(40)
-      .describe("The version of the terms accepted beside the consent"),
+      .enum(consentTextVersions)
+      .describe("The version of the consent text shown, a key of the catalog"),
+    termsVersion: versionLabel.describe("The version of the terms accepted beside the consent"),
   })
   .meta({ id: "ConsentInput" });
 export type ConsentInput = z.infer<typeof ConsentInput>;
@@ -218,6 +256,9 @@ export type Consent = z.infer<typeof Consent>;
 /** What `POST /v1/me/consents` answers: the rows written under one disclosure hash. */
 export const ConsentRecord = z
   .object({
+    id: id.describe(
+      "The id of the record's first row, which the consent list carries too; an idempotent replay answers it alone",
+    ),
     textHash: z.string(),
     textVersion: z.string(),
     termsVersion: z.string(),
@@ -259,7 +300,11 @@ export const Processor = z
   .object({
     name: z.string(),
     receives: z.string(),
-    contact: z.url().describe("The processor's privacy or data processing contact page"),
+    contact: z
+      .url()
+      .describe(
+        "Where the processor publishes its data processing terms; the owner replaces each with a privacy contact address before launch",
+      ),
   })
   .meta({ id: "Processor" });
 export type Processor = z.infer<typeof Processor>;
@@ -277,9 +322,27 @@ export const DataSummaryGrant = z
 export type DataSummaryGrant = z.infer<typeof DataSummaryGrant>;
 
 /**
+ * One entry of the disclosure ledger (architecture record 7.4): a third
+ * party or affiliate data was shared with, with a contact mechanism. The
+ * ledger is empty in v1, because a grant to a partner is a disclosure to a
+ * consumer and not sharing; the access right returns it all the same.
+ */
+export const DataSummaryDisclosure = z
+  .object({
+    id,
+    recipient: z.string(),
+    contact: z.string(),
+    purpose: z.string(),
+    createdAt: instant,
+  })
+  .meta({ id: "DataSummaryDisclosure" });
+export type DataSummaryDisclosure = z.infer<typeof DataSummaryDisclosure>;
+
+/**
  * The confirm and access answer of architecture record 11: the categories
- * held with row counts only, every processor with its contact, and every
- * person holding an active grant. The data itself comes with the export.
+ * held with row counts only, every processor with its contact, every
+ * person holding an active grant and the disclosure ledger of 7.4. The data
+ * itself comes with the export.
  */
 export const DataSummary = z
   .object({
@@ -300,6 +363,21 @@ export const DataSummary = z
         grants: z.array(DataSummaryGrant),
       }),
     ),
+    disclosures: z
+      .array(DataSummaryDisclosure)
+      .describe("Every third party or affiliate data was shared with; empty in v1"),
   })
   .meta({ id: "DataSummary" });
 export type DataSummary = z.infer<typeof DataSummary>;
+
+/**
+ * What an idempotent replay answers (architecture record 5.3 as E1 built
+ * it): the stored status with the created or changed resource's id only,
+ * marked by the `Idempotency-Replayed: true` header. A client that needs
+ * the full body re-reads the resource.
+ */
+export const IdempotentReplay = z.object({ id }).meta({
+  id: "IdempotentReplay",
+  description: "A replayed answer: the resource id only, with Idempotency-Replayed: true",
+});
+export type IdempotentReplay = z.infer<typeof IdempotentReplay>;
