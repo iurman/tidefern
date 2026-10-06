@@ -6,6 +6,7 @@ import type { ActorDatabase } from "@tidefern/db";
 import type { ApiEnv } from "../context";
 import { registerNotes } from "./notes";
 import { registerSharing } from "./sharing/index";
+import { registerPregnancy } from "./pregnancy/index";
 
 /** What every resource area needs from the host: the actor database and the key provider. */
 export interface RouteOptions {
@@ -30,5 +31,5 @@ export function registerRoutes(app: OpenAPIHono<ApiEnv>, options: RouteOptions =
   const resolved = { db: options.db, keys: options.keys ?? new EnvKeyProvider() };
   registerNotes(app);
   registerSharing(app);
-  void resolved;
+  registerPregnancy(app, resolved);
 }
