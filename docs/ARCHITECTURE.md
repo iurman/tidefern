@@ -505,8 +505,10 @@ such membership, and the app never connects as a role that can bypass RLS:
   can_write(subject_id, category)`, `FOR UPDATE USING ... WITH CHECK
   can_write(...)`, `FOR DELETE USING subject_id = current_actor()`. The
   helpers are `SECURITY DEFINER`, `STABLE`, with `SET search_path =
-  pg_catalog, public`, and they mirror `can()` in `core`: ownership,
-  guardianship, and an active grant at a sufficient level.
+  pg_catalog, public, pg_temp` (`pg_temp` last, so a temporary table the
+  app role creates can never shadow a table a helper reads; task E10), and
+  they mirror `can()` in `core`: ownership, guardianship, and an active
+  grant at a sufficient level.
 - `withActor(actorId, fn)` in `packages/db` opens a transaction, runs
   `select set_config('app.actor_id', $1, true)` and `SET LOCAL ROLE
   tidefern_app` (a no-op when already that role, and the way tests on
