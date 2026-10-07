@@ -1,0 +1,146 @@
+/*
+ * The calendar page (DESIGN.md 3.4): the heading with the Month and List
+ * switch, then the view with the prediction sentences beside it once the
+ * page is wide enough, and the footer last. Semantic tokens only, so both
+ * themes come from the token file; the one warmth surface is the week
+ * strip's today, drawn by the strip itself.
+ */
+
+.calendar {
+  container: calendar / inline-size;
+  display: grid;
+  gap: var(--space-6);
+  max-width: var(--size-container);
+}
+
+.top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3) var(--space-6);
+}
+
+.title {
+  margin: 0;
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+}
+
+/*
+ * The view, then what the prediction says, then the empty state and Today.
+ * On a narrow page that is the reading order top to bottom; from 52rem of
+ * page the sentences move beside the view and run down both rows, the
+ * second row taking whatever height they need.
+ */
+.body {
+  display: grid;
+  grid-template-areas:
+    "view"
+    "extras";
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.withAside {
+  grid-template-areas:
+    "view"
+    "aside"
+    "extras";
+}
+
+@container calendar (min-width: 52rem) {
+  .withAside {
+    grid-template-columns: minmax(0, 1fr) minmax(16rem, 22rem);
+    grid-template-rows: auto 1fr;
+    grid-template-areas:
+      "view aside"
+      "extras aside";
+    column-gap: var(--space-8);
+    align-items: start;
+  }
+}
+
+.view {
+  grid-area: view;
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.extras {
+  grid-area: extras;
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* The grid keeps a calm proportion on wide screens; below that it follows the column. */
+.grid {
+  width: 100%;
+  max-width: 42rem;
+}
+
+/* An empty live region takes no room, but stays in place so a new line is announced. */
+.notice {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--text);
+}
+
+.listHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.listMonth {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+}
+
+.listNav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.todayRow {
+  display: flex;
+}
+
+/* The failed read: one sentence and the way to try again, in the reading width. */
+.failure {
+  display: grid;
+  gap: var(--space-4);
+  max-width: var(--size-reading);
+}
+
+.aside {
+  grid-area: aside;
+  display: grid;
+  gap: var(--space-4);
+  max-width: var(--size-reading);
+}
+
+.sentence {
+  margin: 0;
+}
+
+.child {
+  margin: 0;
+  font-weight: var(--weight-sans-strong);
+}
+
+.footer {
+  margin: 0;
+  max-width: 72ch;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
