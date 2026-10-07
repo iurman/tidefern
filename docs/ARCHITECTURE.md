@@ -1540,7 +1540,8 @@ Better Auth's built-in production rule allows three sign-ins per ten
 seconds; tests never relax the rate limit. `@smoke` tests never
 authenticate, because the production deployment they also run against has
 no seeded users. Dates in seeds and assertions are relative to
-`TIDEFERN_FAKE_NOW`, which `todayIn()` honors outside production, so
+`TIDEFERN_FAKE_NOW`, which the seed and the API's calendar clock
+(`packages/api/src/clock.ts`, task E11) honor outside production, so
 prediction copy does not drift with the calendar. CI runs the browser
 suite against a `postgres:18.6` service container that is migrated and
 seeded before `pnpm build` (task B11); PGlite serves unit tests only.
