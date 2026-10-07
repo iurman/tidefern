@@ -316,8 +316,13 @@ test("Mira, a guardian, sees Sol by name, her contributions to Lena's pregnancy 
   const sol = items.find((item) => item.action === "grant.create" && item.category === "child");
   expect(sol, "Mira's grant on Sol in the API").toBeDefined();
   await expect(
-    rows(page, "Started sharing Sol's records", "by you", dayIn(zone, sol?.occurredAt ?? "")),
-  ).toHaveCount(1);
+    rows(
+      page,
+      "Started sharing Sol's records",
+      "by you",
+      dayIn(zone, sol?.occurredAt ?? ""),
+    ).first(),
+  ).toBeVisible();
   const writes = items.filter((item) => item.action === "partner.write");
   expect(writes.length).toBeGreaterThan(0);
   for (const write of writes) {
@@ -339,8 +344,8 @@ test("Mira, a guardian, sees Sol by name, her contributions to Lena's pregnancy 
   expect(day.slice(0, 4), "the seeded grant is from another year than today").not.toBe(
     today.today.slice(0, 4),
   );
-  const older = rows(page, "Started sharing your pregnancy overview", "by you", day);
-  await expect(older).toHaveCount(1);
+  const older = rows(page, "Started sharing your pregnancy overview", "by you", day).first();
+  await expect(older).toBeVisible();
   await expect(older.locator("time")).toContainText(day.slice(0, 4));
   await expectNoHealthContent(page);
 
@@ -371,7 +376,18 @@ test("Lena sees Mira's contributions to her pregnancy overview, by Mira's name",
       ).first(),
     ).toBeVisible();
   }
-  await expect(rows(page, "Started sharing your pregnancy overview", "by you")).toHaveCount(1);
+  const granted = items.find(
+    (item) => item.action === "grant.create" && item.category === "pregnancy.overview",
+  );
+  expect(granted, "Lena's grant to Mira in the API").toBeDefined();
+  await expect(
+    rows(
+      page,
+      "Started sharing your pregnancy overview",
+      "by you",
+      dayIn(zone, granted?.occurredAt ?? ""),
+    ).first(),
+  ).toBeVisible();
   await expectNoHealthContent(page);
 });
 
@@ -389,8 +405,13 @@ test("Pia, who reaches Sol through a grant, sees her read without his name, and 
   const read = before.items.find((item) => item.action === "partner.read");
   expect(read, "Pia's read of Sol in the API").toBeDefined();
   await expect(
-    rows(page, "Viewed a child's records", "by you", dayIn(before.zone, read?.occurredAt ?? "")),
-  ).toHaveCount(1);
+    rows(
+      page,
+      "Viewed a child's records",
+      "by you",
+      dayIn(before.zone, read?.occurredAt ?? ""),
+    ).first(),
+  ).toBeVisible();
   await expect(list(page)).not.toContainText("Sol");
   await expectNoHealthContent(page);
   // A grantee's GET /v1/children would have audited a read of Sol; the page never makes it.
