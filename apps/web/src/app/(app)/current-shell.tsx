@@ -16,8 +16,9 @@ const keys: readonly DestinationKey[] = [
 
 /**
  * Routes in the group that are not destinations of their own, by the
- * destination they are reached from (DESIGN.md section 2): the day sheet
- * as a page opens from Calendar, and Activity from Settings.
+ * destination they belong to (DESIGN.md section 2): the day sheet as a page
+ * opens from Calendar and from Today and belongs to Calendar, and Activity
+ * is reached from Settings.
  */
 const parents = new Map<string, DestinationKey>([
   ["log", "calendar"],
@@ -43,13 +44,20 @@ export function destinationFor(pathname: string): DestinationKey {
 export function CurrentShell({
   stage,
   hasChild,
+  sharedPregnancy = false,
   children,
 }: ShellProfile & { children: ReactNode }) {
   const current = destinationFor(usePathname());
   return (
     <QuickLogProvider>
       {(onQuickLog) => (
-        <AppShell stage={stage} hasChild={hasChild} current={current} onQuickLog={onQuickLog}>
+        <AppShell
+          stage={stage}
+          hasChild={hasChild}
+          sharedPregnancy={sharedPregnancy}
+          current={current}
+          onQuickLog={onQuickLog}
+        >
           {children}
         </AppShell>
       )}

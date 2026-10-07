@@ -30,6 +30,9 @@ function flags(state: ComponentState) {
 
 const cycleProfile = { stage: "cycle", hasChild: false } as const;
 
+/** What the quick log would open; the specimen opens nothing, but the control shows as it does once Today registers. */
+const openSheet = () => undefined;
+
 /** The consent step's facts, in the person's words, from architecture 8.2 and 9.5. */
 export const consentFacts = {
   categories: [
@@ -96,7 +99,7 @@ export const specimens: SpecimenGroup = {
         empty: "none",
       },
       render: () => (
-        <AppShell {...cycleProfile} current="today" fit="content">
+        <AppShell {...cycleProfile} current="today" fit="content" onQuickLog={openSheet}>
           <p className="muted-note">The route renders here, between the rail and the bar.</p>
         </AppShell>
       ),
@@ -109,7 +112,13 @@ export const specimens: SpecimenGroup = {
       keyboard:
         "Tab moves across the destinations and the quick-log button; Enter follows a link or opens the log. A route always has at least four destinations, and a navigation is never disabled, loading or in error, so those states are none.",
       states: { disabled: "none", loading: "none", error: "none", empty: "none" },
-      render: () => <TabBar destinations={shellDestinations(cycleProfile)} current="today" />,
+      render: () => (
+        <TabBar
+          destinations={shellDestinations(cycleProfile)}
+          current="today"
+          onQuickLog={openSheet}
+        />
+      ),
     },
     {
       name: "Rail",
@@ -123,6 +132,7 @@ export const specimens: SpecimenGroup = {
         <Rail
           destinations={shellDestinations({ stage: "pregnancy", hasChild: true })}
           current="today"
+          onQuickLog={openSheet}
         />
       ),
     },

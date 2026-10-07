@@ -74,6 +74,24 @@ describe("chooseMailer", () => {
     ]);
   });
 
+  test("every evaluation in one process shares one capture store, as a production build's copies do", async () => {
+    // A Next.js build loads this package once per runtime; the second copy's
+    // chooseMailer must write where the first copy's endpoint reads.
+    const first = chooseMailer({ E2E_MAIL_CAPTURE: "true" });
+    const second = chooseMailer({ E2E_MAIL_CAPTURE: "true" });
+    expect(second).toBe(first);
+    await second.send({
+      to: "b@example.com",
+      subject: "You are invited",
+      text: "https://tidefern.example/sharing#invitation=t",
+    });
+    const storedUnderTheSharedKey = (globalThis as Record<symbol, unknown>)[
+      Symbol.for("tidefern.captureMailer")
+    ];
+    expect(storedUnderTheSharedKey).toBe(first);
+    expect(capturedMail().map((mail) => mail.to)).toEqual(["b@example.com"]);
+  });
+
   test("choosing another transport turns capture off", async () => {
     const capture = chooseMailer({ E2E_MAIL_CAPTURE: "true" });
     await capture.send({

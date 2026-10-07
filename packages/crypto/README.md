@@ -29,12 +29,12 @@ layer, with `DecryptionError` and nothing about the key in the message.
 
 ```ts
 import { EnvKeyProvider, provisionSubjectKey, provisionChildKey, destroySubjectKey } from "@tidefern/crypto";
-import { withSystem } from "@tidefern/db";
+import { withActor } from "@tidefern/db";
 
 const provider = new EnvKeyProvider(); // TIDEFERN_KEK_V1, read on first use
 
 // Sign-up: the Better Auth hook in packages/auth does this for every new user.
-await withSystem((tx) => provisionSubjectKey(tx, userId, provider));
+await withActor(userId, (tx) => provisionSubjectKey(tx, userId, provider));
 
 // Child creation (task E5): in the same transaction as the child row.
 await provisionChildKey(tx, childId, provider);
@@ -62,11 +62,14 @@ row is gone the only material left is the KEK, which never sealed a field,
 so every ciphertext under that DEK is unreadable at once (architecture 9.2,
 item 5). A child's key is destroyed only when the last guardian leaves.
 
-The sign-up hook provisions through `withSystem()` because no actor is
-signed in yet when the user row lands. Inside `withActor()` row level
-security on `subject_keys` decides whose key an actor may read: no policy
-before B8, so the app role sees no rows, and the `can_read` mirror after
-it, so a stranger still sees none. The test reads another subject's key
+The sign-up hook provisions as the new user, inside `withActor()`: the
+`subject_keys` policies let a subject insert and read its own key, and
+`withSystem()` would be refused, because `is_system()` is false for
+`tidefern_app`, the role `DATABASE_URL` names outside PGlite (architecture
+7.2; task D3). Inside `withActor()` row level security on `subject_keys`
+decides whose key an actor may read: no policy before B8, so the app role
+sees no rows, and the `can_read` mirror after it, so a stranger still sees
+none. The test reads another subject's key
 under `withActor()` and expects `SubjectKeyMissingError`, which holds in
 both states.
 

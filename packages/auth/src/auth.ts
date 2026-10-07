@@ -123,11 +123,12 @@ export type Auth = ReturnType<typeof createAuth>;
 export type Session = Auth["$Infer"]["Session"];
 
 /**
- * The one transport this process sends mail through, chosen once from the
+ * The transport this module copy sends mail through, chosen once from the
  * environment. The host hands the same instance to the API for the mail it
- * sends itself (the sharing invitation), because `chooseMailer()` also
- * decides which capture mailer the E2E endpoint reads: a second call would
- * leave Better Auth's messages in a mailer nobody reads.
+ * sends itself (the sharing invitation). A Next.js production build loads
+ * this module once per runtime, so a process can hold two copies; under
+ * capture they share one process-wide store (`./mail/capture.ts`), so the
+ * E2E endpoint reads every copy's messages.
  */
 export const mailer: Mailer = chooseMailer(process.env);
 

@@ -22,6 +22,14 @@ describe("shellDestinations", () => {
     }
   });
 
+  it("adds Journey for someone a pregnancy is shared with, whatever their own stage", () => {
+    expect(
+      shellDestinations({ stage: "none", hasChild: false, sharedPregnancy: true }).map(
+        (d) => d.label,
+      ),
+    ).toEqual(["Today", "Calendar", "Journey", "Sharing", "Settings"]);
+  });
+
   it("adds Family when a child exists, and both when both apply", () => {
     expect(shellDestinations({ stage: "none", hasChild: true }).map((d) => d.label)).toEqual([
       "Today",

@@ -28,12 +28,13 @@ export interface AppShellProps extends ShellProfile {
 export function AppShell({
   stage,
   hasChild,
+  sharedPregnancy = false,
   current,
   onQuickLog,
   fit = "viewport",
   children,
 }: AppShellProps) {
-  const destinations = shellDestinations({ stage, hasChild });
+  const destinations = shellDestinations({ stage, hasChild, sharedPregnancy });
   // The quick log opens the day sheet, a body question the none stage is never asked (DESIGN.md 3.3).
   const quickLog = current === "today" && stage !== "none";
   const className = fit === "content" ? `${styles.shell} ${styles.content}` : styles.shell;

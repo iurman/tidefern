@@ -126,6 +126,14 @@
   transform: scale(0.94);
 }
 
+/* Until the page on screen registers what the quick log opens (useQuickLog), it cannot be pressed. */
+.quickLog:disabled {
+  cursor: default;
+  opacity: 0.55;
+  filter: none;
+  transform: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .link,
   .quickLog,

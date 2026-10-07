@@ -16,13 +16,14 @@ const fallbackProfile: ShellProfile = { stage: "none", hasChild: false };
 /**
  * The authenticated frame for every route in the group (DESIGN.md section
  * 2): the session is read once per request through GET /api/v1/me on the
- * in-process client (`sessionMe` in lib/api-server.ts, which pages call
- * too and get the same answer), a visitor without a session is
- * sent to sign in before anything renders, and the destinations follow the
- * profile's stage and children. A read that failed rather than answered 401
- * keeps the person here with the always-on destinations and says so; the
- * pages' own reads settle the rest. The public header never renders here,
- * and the two policy links stay reachable in a quiet line under the page.
+ * in-process client (`sessionMe` in lib/api-server.ts, which pages call too
+ * and get the same answer), a visitor without a session is sent to sign in
+ * before anything renders, and the destinations follow the profile's stage,
+ * its children and the grants it holds. A read that failed rather than
+ * answered 401 keeps the person here with the always-on destinations and
+ * says so; the pages' own reads settle the rest. The public header never
+ * renders here, and the two policy links stay reachable in a quiet line
+ * under the page.
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const lookup = await sessionMe();
@@ -31,11 +32,20 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
     lookup.kind === "ok"
       ? {
           stage: lookup.me.profile?.stage ?? fallbackProfile.stage,
-          hasChild: lookup.me.guardianOf.length > 0,
+          hasChild:
+            lookup.me.guardianOf.length > 0 ||
+            lookup.me.grants.some((grant) => grant.category === "child"),
+          sharedPregnancy: lookup.me.grants.some(
+            (grant) => grant.category === "pregnancy.overview",
+          ),
         }
       : fallbackProfile;
   return (
-    <CurrentShell stage={profile.stage} hasChild={profile.hasChild}>
+    <CurrentShell
+      stage={profile.stage}
+      hasChild={profile.hasChild}
+      sharedPregnancy={profile.sharedPregnancy ?? false}
+    >
       <main id="main" tabIndex={-1}>
         {lookup.kind === "failed" ? (
           <p className={styles.notice}>

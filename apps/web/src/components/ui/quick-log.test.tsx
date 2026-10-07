@@ -38,6 +38,26 @@ describe("the quick-log action", () => {
     expect(onOpen).toHaveBeenCalledTimes(2);
   });
 
+  it("keeps a newer opener when an older registrant leaves afterwards", async () => {
+    const user = userEvent.setup();
+    const first = vi.fn();
+    const second = vi.fn();
+    const { rerender } = render(
+      <Shell>
+        <Page key="first" onOpen={first} />
+        <Page key="second" onOpen={second} />
+      </Shell>,
+    );
+    rerender(
+      <Shell>
+        <Page key="second" onOpen={second} />
+      </Shell>,
+    );
+    await user.click(screen.getAllByRole("button", { name: "Log today" })[0] as HTMLElement);
+    expect(second).toHaveBeenCalledTimes(1);
+    expect(first).not.toHaveBeenCalled();
+  });
+
   it("does nothing once the page that registered it is gone", async () => {
     const user = userEvent.setup();
     const onOpen = vi.fn();
@@ -52,6 +72,7 @@ describe("the quick-log action", () => {
       </Shell>,
     );
     for (const button of screen.getAllByRole("button", { name: "Log today" })) {
+      expect(button).toBeDisabled();
       await user.click(button);
     }
     expect(onOpen).not.toHaveBeenCalled();

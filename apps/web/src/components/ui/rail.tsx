@@ -51,7 +51,12 @@ export function Rail({
         })}
       </ul>
       {quickLog ? (
-        <button type="button" className={styles.quickLog} onClick={onQuickLog}>
+        <button
+          type="button"
+          className={styles.quickLog}
+          onClick={onQuickLog}
+          disabled={onQuickLog === undefined}
+        >
           <Icon name="plus" size={20} />
           <span>Log today</span>
         </button>

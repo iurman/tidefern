@@ -51,6 +51,7 @@ export function TabBar({
               className={styles.quickLog}
               aria-label="Log today"
               onClick={onQuickLog}
+              disabled={onQuickLog === undefined}
             >
               <span className={styles.quickLogMark}>
                 <Icon name="plus" size={24} />
