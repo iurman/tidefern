@@ -7,22 +7,6 @@ findings and the next concrete action. Resume from the last entry and
 
 ## Owner actions pending (kept current by the lead; details in the newest entry)
 
-0. Blocking every merge since 2026-10-06 about 07:00 UTC: the repository
-   is now private, and GitHub refuses CodeQL uploads on a private
-   repository without GitHub Advanced Security ("Code scanning is not
-   enabled for this repository"). The analysis itself runs clean; only the
-   upload fails, so the required `CodeQL` check is red on every pull
-   request and the ruleset refuses the merge. The lead will not change the
-   ruleset, weaken the workflow or buy a plan. Pick one:
-   - make the repository public again:
-     `gh repo edit iurman/tidefern --visibility public --accept-visibility-change-consequences`
-   - or keep it private and drop `CodeQL` from the required checks in the
-     main ruleset (Settings, Rules), then tell the lead to set the workflow
-     to analyze without uploading so the check still runs.
-   Once either is done, the ready pull requests merge with
-   `gh pr merge <n> --squash` in this order: #46 (J5), #47 (J8), then the
-   E areas and G6, G7 as listed in the newest entry.
-
 1. Vercel connector: the MCP connection is authorized for the personal scope
    only and answers 403 for the `iurman's projects` team. Re-authorize it at
    team scope so A2, A4 and the deployment checks can use it. Until then the
@@ -37,6 +21,15 @@ findings and the next concrete action. Resume from the last entry and
 4. Dependabot alerts are disabled on the repository (the API answers 404 for
    vulnerability alerts); enable them under Settings, Code security, so the
    lockfile pins get advisories. The lead cannot change this setting.
+5. Neon (A3, A4, B10): the Neon project on Postgres 18 with its three
+   branches, the Vercel integration, and then the real-branch role and RLS
+   checks with the lead, per `docs/LAUNCH_RUNBOOK.md` (Neon). Until then
+   every database test runs on PGlite or the CI service container.
+6. F5: answer the WHO permission question in architecture section 21
+   before the daily WHO tables are vendored.
+7. J7: the restore rehearsal with the lead, once A3 is done
+   (`docs/LAUNCH_RUNBOOK.md`, Restore).
+8. The `[OWNER]` inputs in `docs/design/CONTENT.md` and `docs/INCIDENT.md`.
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -1210,3 +1203,54 @@ merges.
 
 Merge the route-group restructure, then launch H1 to H8 as one wave, then
 J1 to J4 and the owner tasks.
+
+### The route groups merged; the tenth wave claimed (2026-10-06, lead session dfc54107)
+
+The route-group restructure merged by squash as `6fab907` (pull request
+#65) after a fresh-context review that found no major and three minor
+issues, all fixed on the branch: an error thrown by an app page fell
+through to the root error page and its public header (now
+`(app)/error.tsx` with two tests), Today showed two failure sentences on a
+failed read, and stale paths in the docs. `/` and the policy, design and
+auth pages sit in a `(public)` group with the public header and footer;
+`/today` and `/settings` sit in an `(app)` group whose layout reads the
+session once, sends a visitor without one to sign in and draws the app
+shell with the two policy links under the page. The route manifest (44
+entries) and an anonymous and signed-in status probe of every URL were
+identical before and after. Gates on the branch: `pnpm check` 27 of 27
+tasks, `pnpm test:e2e` 164 passed. The preview was smoked by hand (run
+37525828165 against
+`https://tidefern-git-claude-app-shell-groups-iurmans-projects.vercel.app`,
+green); after the merge CI 37525971289, CodeQL 37525971149 and the
+production smoke 37526091664 passed on `6fab907`, and the scheduled uptime
+runs 37527192542 and 37550130400 are green.
+
+This session started from `6fab907` with no pull requests open. Commands
+and results: `pnpm install --frozen-lockfile` (binaries linked);
+`pnpm check` exit 0, 27 of 27 tasks; the `@smoke` subset against a
+database-free production server on port 3101, 6 passed; the full browser
+suite against a local copy of the CI topology (a `postgres:18.6`
+container on the pinned digest, migrated, the app role given login, the
+cast seeded at `2026-10-05`, the build and server given CI's test-only
+values, port 3102), 164 passed in 2.9 minutes. A signed-in capture of
+`/today` as Noor rendered her name through the in-process read, which is
+how the H pages will be reviewed: server components call the API in
+process, so a browser-level canned answer cannot reach them, and the
+builders run the seeded database locally instead.
+
+Owner action 0 is cleared (the repository is public and CodeQL uploads
+again) and is removed from the list above; the owner items from the plan
+(Neon, F5, J7 and the `[OWNER]` inputs) are added to it. Dependabot alerts
+still answer 404.
+
+The plan claims H1 to H8 for this session, implementation delegated per
+route with the lead reviewing captures of every page in both themes before
+each merge. Follow-ups kept for the routes they touch: H2 drops Today's own
+session read, the rail panel ends at its content height on desktop, and
+the social card's alt text lives in both `site.ts` and
+`opengraph-image.alt.txt`.
+
+### Next action
+
+Finish the readiness sweep of H1 to H8 (API calls, gaps, shared files),
+land any lead prework it calls for, then launch the wave.
