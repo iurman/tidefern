@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useId, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
-import type { FlowLevel, MoodCode, Note, NoteCategory } from "@tidefern/schemas";
+import type { Note, NoteCategory } from "@tidefern/schemas";
 import { Icon } from "@/components/icons";
 import {
   EMPTY_DRAFT,
@@ -15,11 +15,10 @@ import {
 import { BottomSheet } from "./bottom-sheet";
 import { Button } from "./button";
 import { ChipGroup, symptomOptions } from "./chip-group";
-import { flowOptions } from "./flow-scale";
+import { FlowScale } from "./flow-scale";
 import { FormField } from "./form-field";
 import { InlineFeedback } from "./inline-feedback";
-import { moodOptions } from "./mood-selector";
-import { SegmentedControl } from "./segmented-control";
+import { MoodSelector } from "./mood-selector";
 import { Switch } from "./switch";
 import { Textarea } from "./textarea";
 import styles from "./day-sheet.module.css";
@@ -146,10 +145,8 @@ export interface DayLogFormProps {
   cues?: boolean;
 }
 
-/** The radio groups' "nothing chosen yet": no option carries it, so no radio is checked. */
-const UNSET = "unset";
-type FlowChoice = FlowLevel | typeof UNSET;
-type MoodChoice = MoodCode | typeof UNSET;
+/** What the Period switch does, under its label (DESIGN.md 5.1 step 2). */
+const PERIOD_HELP = "Logs a period day at Medium. Change the flow below.";
 
 const noSubscription = () => () => {};
 
@@ -239,6 +236,7 @@ export function DayLogForm({
   const shareRow = useRef<HTMLDivElement>(null);
   const shareErrorLine = useRef<HTMLDivElement>(null);
   const noticeLine = useRef<HTMLDivElement>(null);
+  const moodGroup = useRef<HTMLDivElement>(null);
   /** Where focus goes after the next render; set only by her own presses, never on mount. */
   const focusNext = useRef<"share-title" | "share-button" | null>(null);
 
@@ -291,6 +289,17 @@ export function DayLogForm({
 
   function update(patch: Partial<DayDraft>) {
     setDraft((current) => ({ ...current, ...patch }));
+  }
+
+  /**
+   * Back to no mood: a radio group never unselects by pressing (the APG
+   * radio group pattern), so this is its own quiet control. It goes away
+   * with the choice, so focus moves to the first mood, where Tab would enter
+   * the group.
+   */
+  function clearMood() {
+    update({ mood: null });
+    moodGroup.current?.querySelector<HTMLInputElement>('input[type="radio"]')?.focus();
   }
 
   function submit() {
@@ -367,13 +376,12 @@ export function DayLogForm({
       {tracksPeriod ? (
         <>
           <div className={styles.periodRow}>
-            <div>
+            <div className={styles.periodText}>
               <p id={periodLabelId} className={styles.periodLabel}>
                 Period
               </p>
               <p id={periodHelpId} className={styles.periodHelp}>
-                One press logs a period day and picks Medium below; change it before you save. The
-                same press takes it back.
+                {PERIOD_HELP}
               </p>
             </div>
             <Switch
@@ -383,17 +391,7 @@ export function DayLogForm({
               aria-describedby={periodHelpId}
             />
           </div>
-          <div className={styles.flowScale}>
-            <SegmentedControl<FlowChoice>
-              label="Flow"
-              options={flowOptions}
-              value={draft.flow ?? UNSET}
-              onChange={(flow) => {
-                if (flow !== UNSET) update({ flow });
-              }}
-              tone="period"
-            />
-          </div>
+          <FlowScale label="Flow" value={draft.flow} onChange={(flow) => update({ flow })} />
         </>
       ) : null}
 
@@ -405,14 +403,20 @@ export function DayLogForm({
         visible={6}
       />
 
-      <SegmentedControl<MoodChoice>
-        label="Mood"
-        options={moodOptions}
-        value={draft.mood ?? UNSET}
-        onChange={(mood) => {
-          if (mood !== UNSET) update({ mood });
-        }}
-      />
+      <div ref={moodGroup}>
+        <MoodSelector
+          label="Mood"
+          value={draft.mood}
+          onChange={(mood) => update({ mood })}
+          action={
+            draft.mood !== null ? (
+              <Button variant="quiet" onClick={clearMood} aria-label="Clear mood">
+                Clear
+              </Button>
+            ) : null
+          }
+        />
+      </div>
 
       {entryError ? (
         <PartFailure error={entryError} cue={cues} saving={saving} onRetry={submit} />

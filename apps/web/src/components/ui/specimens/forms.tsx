@@ -224,12 +224,17 @@ export const specimens: SpecimenGroup = {
   value={entry.flow}
   onChange={setFlow}
 />`,
-      keyboard: "One tab stop; arrow keys move between the five values and select as they go.",
-      states: { loading: "none", empty: "none" },
+      keyboard:
+        "One tab stop; arrow keys move between the five values and select as they go. With nothing chosen yet, Tab lands on None without choosing it.",
+      /* A fixed set of values: nothing loads. Empty is a day with no flow logged yet, nothing
+         chosen (the product passes value={null}; here no starting value, so it stays pressable).
+         Wide, so the pill shows where it fits; the phone width shows the columns. */
+      states: { loading: "none" },
+      wide: true,
       render: (state) => (
         <FlowScale
           label="Flow"
-          defaultValue="light"
+          defaultValue={state === "empty" ? undefined : "light"}
           error={state === "error" ? "Choose one value for this day." : undefined}
           {...common(state)}
         />
@@ -267,12 +272,16 @@ export const specimens: SpecimenGroup = {
   value={entry.mood}
   onChange={setMood}
 />`,
-      keyboard: "One tab stop; arrow keys move between the three values and select as they go.",
-      states: { loading: "none", empty: "none" },
+      keyboard:
+        "One tab stop; arrow keys move between the three values and select as they go. With nothing chosen yet, Tab lands on Low without choosing it.",
+      /* Empty is a day with no mood logged yet, nothing chosen (value={null} in the product). The
+         day sheet's Clear, which goes back to it, is shown on the patterns page. */
+      states: { loading: "none" },
+      wide: true,
       render: (state) => (
         <MoodSelector
           label="Mood"
-          defaultValue="steady"
+          defaultValue={state === "empty" ? undefined : "steady"}
           error={state === "error" ? "Choose one value for this day." : undefined}
           {...common(state)}
         />
