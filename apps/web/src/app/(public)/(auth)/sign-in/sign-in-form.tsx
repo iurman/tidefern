@@ -13,7 +13,7 @@ import {
 import type { AuthClientError, PasskeyHost } from "@/lib/auth-client";
 import { takeInvitationFragment } from "@/lib/invitation-fragment";
 import styles from "../auth.module.css";
-import { authCopy, describeAuthFailure, normaliseCode } from "../copy";
+import { authCopy, describeAuthFailure, normalizeCode } from "../copy";
 
 const copy = authCopy.signIn;
 
@@ -138,7 +138,7 @@ export function SignInForm() {
     event.preventDefault();
     if (busy !== "none") return;
     const form = new FormData(event.currentTarget);
-    const code = normaliseCode(String(form.get("code") ?? ""));
+    const code = normalizeCode(String(form.get("code") ?? ""));
     setFailure(null);
     setBusy("code");
     const result =
