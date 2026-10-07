@@ -4,6 +4,8 @@ import { Hono } from "hono";
 import { sweep } from "@tidefern/db/jobs";
 import type { ActorDatabase, SweepCounts } from "@tidefern/db/jobs";
 
+import { realCalendarClock } from "../../clock";
+import type { CalendarClock } from "../../clock";
 import { drainDue } from "../../jobs/index";
 import type { DrainOutcome, JobHandlers } from "../../jobs/index";
 import { enqueueReminders } from "../../jobs/reminders";
@@ -39,10 +41,12 @@ export interface JobsOptions {
   claimLimit?: number | undefined;
   /** How long a run may keep starting drain batches; `DEFAULT_DRAIN_BUDGET_MS` when unset. */
   drainBudgetMs?: number | undefined;
-  /** The clock, for tests. */
+  /** The real clock, for tests; the calendar is the app's clock (clock.ts). */
   now?: (() => Date) | undefined;
   /** The reminder step; `enqueueReminders` when unset, replaced only in tests. */
-  reminders?: ((db: ActorDatabase, now: Date) => Promise<ReminderSweepCounts>) | undefined;
+  reminders?:
+    | ((db: ActorDatabase, now: Date, clock: CalendarClock) => Promise<ReminderSweepCounts>)
+    | undefined;
 }
 
 export type NoticeOutcome = "sent" | "skipped" | "none";
@@ -91,11 +95,12 @@ async function drainAll(
   handlers: JobHandlers,
   now: Date,
   budgetMs: number,
+  clock: CalendarClock,
 ): Promise<DrainOutcome> {
   const started = Date.now();
   const total: DrainOutcome = { claimed: 0, done: [], failed: [], dead: [] };
   for (;;) {
-    const batch = await drainDue(db, limit, handlers, now);
+    const batch = await drainDue(db, limit, handlers, now, clock);
     total.claimed += batch.claimed;
     total.done.push(...batch.done);
     total.failed.push(...batch.failed);
@@ -112,9 +117,12 @@ async function drainAll(
  * as a caller can tell. A run enqueues the day's reminders, drains what is
  * due, sweeps, and sends the owner a count-only notice when any job is
  * dead. A reminder step that throws is logged without content and the run
- * goes on, so the drain, the purges and the notice never wait on it.
+ * goes on, so the drain, the purges and the notice never wait on it. The
+ * reminder step and the handlers decide each person's day on `clock`, the
+ * app's calendar clock; the drain, the sweep and every stored time read the
+ * real `now`.
  */
-export function internalJobs(options: JobsOptions) {
+export function internalJobs(options: JobsOptions, clock: CalendarClock = realCalendarClock) {
   const app = new Hono();
   app.get("/jobs/run", async (c) => {
     const secret = options.cronSecret;
@@ -124,7 +132,7 @@ export function internalJobs(options: JobsOptions) {
     const now = options.now?.() ?? new Date();
     let reminders: ReminderSweepCounts | "failed";
     try {
-      reminders = await (options.reminders ?? enqueueReminders)(options.db, now);
+      reminders = await (options.reminders ?? enqueueReminders)(options.db, now, clock);
     } catch {
       reminders = "failed";
       console.warn("jobs_reminders_failed");
@@ -135,6 +143,7 @@ export function internalJobs(options: JobsOptions) {
       options.handlers ?? {},
       now,
       options.drainBudgetMs ?? DEFAULT_DRAIN_BUDGET_MS,
+      clock,
     );
     const counts = await sweep(options.db, now);
     let notice: NoticeOutcome = "none";

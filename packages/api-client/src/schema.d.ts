@@ -57,7 +57,7 @@ export interface paths {
     };
     /**
      * The signed-in actor
-     * @description The actor id, the profile summary, guardianships, active grants held and the session expiry: every client bootstraps from this one call.
+     * @description The actor id, the profile summary with today's date in its time zone, guardianships, active grants held and the session expiry: every client bootstraps from this one call.
      */
     get: {
       parameters: {
@@ -8809,6 +8809,11 @@ export interface components {
       id: string;
       /** @description The profile summary, or null until onboarding creates the profile */
       profile: components["schemas"]["MeProfile"] | null;
+      /**
+       * Format: date
+       * @description Today in the profile's time zone on the server's calendar clock, the one today every screen counts from instead of the device clock; null until onboarding creates the profile
+       */
+      today: string | null;
       /** @description Children this actor is a guardian of */
       guardianOf: string[];
       /** @description Active grants where this actor is the grantee */

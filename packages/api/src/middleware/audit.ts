@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { todayIn } from "@tidefern/core";
 import { schema } from "@tidefern/db";
 import type { Transaction } from "@tidefern/db";
 import { jobId as uuidv7 } from "@tidefern/db/jobs";
@@ -45,11 +46,22 @@ export interface AuditEvent {
   childId?: string | undefined;
   /**
    * For a partner read: the calendar day in the subject's time zone as
-   * `YYYY-MM-DD` (the caller computes it with `todayIn()`). Reads collapse
+   * `YYYY-MM-DD` (the caller computes it with `auditDay()`). Reads collapse
    * to one row per actor, subject, category and day.
    */
   day?: string | undefined;
   occurredAt?: Date | undefined;
+}
+
+/**
+ * The day a partner read is filed under (`AuditEvent.day`): today in the
+ * subject's zone on the real clock. It is the day the read happened and
+ * must agree with the row's `occurred_at`, so it never follows the calendar
+ * clock (clock.ts): an audit time is one of the instants that stay real
+ * when `TIDEFERN_FAKE_NOW` freezes the calendar.
+ */
+export function auditDay(timeZone: string, now: Date = new Date()): string {
+  return todayIn(timeZone, now);
 }
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;

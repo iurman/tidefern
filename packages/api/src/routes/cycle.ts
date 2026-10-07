@@ -11,7 +11,6 @@ import {
   plausibleCycleLengths,
   predictCycle,
   projectRow,
-  todayIn,
 } from "@tidefern/core";
 import type {
   Access,
@@ -39,8 +38,10 @@ import type { PredictionBasis, SymptomCode } from "@tidefern/schemas";
 
 import type { RequestActor } from "../actor";
 import { requireActor } from "../auth";
+import { pinCalendar } from "../clock";
+import type { CalendarClock } from "../clock";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/audit";
+import { audit, auditActions, auditDay } from "../middleware/audit";
 import { problem } from "../problem";
 import type { ProblemCode } from "../problem";
 
@@ -183,14 +184,14 @@ async function subjectTimeZone(
   return row?.timeZone ?? fallback;
 }
 
-/** One `partner.read` row per category, collapsed per day by the audit helper. */
+/** One `partner.read` row per category, collapsed per day (a real day, `auditDay`) by the audit helper. */
 async function auditPartnerRead(
   tx: Transaction,
   actor: RequestActor,
   subjectId: string,
   categories: readonly (CycleCategory | "cycle.status")[],
 ): Promise<void> {
-  const day = todayIn(
+  const day = auditDay(
     await subjectTimeZone(tx, subjectId, actor.profile?.timeZone ?? DEFAULT_TIME_ZONE),
   );
   for (const category of categories) {
@@ -411,9 +412,17 @@ async function storePrediction(
  * function re-checks `can_read(subject, 'cycle.status')` for the actor of
  * the transaction and answers no row when it does not hold, so a grant
  * revoked after the session was loaded still ends in a 404. It takes no
- * date, so nobody can ask it about another day, and it returns no entry.
+ * date, so no request can ask it about another day, and it returns no
+ * entry. Which day is today is the calendar clock's: a frozen instant
+ * reaches the function through `app.calendar_now` (migration 0011), set in
+ * this same transaction from the clock and never from the request.
  */
-async function statusFor(tx: Transaction, subjectId: string): Promise<CycleStatus | null> {
+async function statusFor(
+  tx: Transaction,
+  subjectId: string,
+  clock: CalendarClock,
+): Promise<CycleStatus | null> {
+  await pinCalendar(tx, clock);
   const result = (await tx.execute(
     sql`select to_char(s.today, 'YYYY-MM-DD') as today, s.cycle_day, s.period_day, s.in_fertile_window from cycle_status_for(${subjectId}::uuid) s`,
   )) as {
@@ -1093,7 +1102,8 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
       async (tx): Promise<CyclePrediction> => {
         const computed = await computePrediction(tx, subjectId);
         await storePrediction(tx, subjectId, computed.prediction, now);
-        const today = todayIn(actor.profile?.timeZone ?? DEFAULT_TIME_ZONE, now);
+        // How late the period is counts calendar days: the clock's today, not the stamp's.
+        const today = c.var.clock.today(actor.profile?.timeZone ?? DEFAULT_TIME_ZONE, now);
         return ownerExtras(
           predictionBody(subjectId, now, factsOf(computed.prediction)),
           computed,
@@ -1118,7 +1128,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
     const status = await withActor(
       actor.id,
       async (tx): Promise<CycleStatus | null> => {
-        const derived = await statusFor(tx, subjectId);
+        const derived = await statusFor(tx, subjectId, c.var.clock);
         if (derived === null) return null;
         if (decision.reason === "grant") {
           await auditPartnerRead(tx, actor, subjectId, ["cycle.status"]);

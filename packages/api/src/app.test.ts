@@ -1,8 +1,13 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { Health, Problem } from "@tidefern/schemas";
 import { createApp } from "./app";
+import { ClockConfigurationError } from "./clock";
 
 const app = createApp();
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 describe("api", () => {
   it("answers health with a validated body and private caching", async () => {
@@ -37,5 +42,41 @@ describe("api", () => {
   it("emits problem types as stable URNs with a closed code list", async () => {
     const body = Problem.parse(await (await app.request("/api/v1/missing")).json());
     expect(body.type).toBe("urn:tidefern:problem:not_found");
+  });
+});
+
+describe("the calendar clock a host does not pass (task E11)", () => {
+  /** A probe route that answers what the request's clock says in one zone. */
+  function probe(hosted: ReturnType<typeof createApp>) {
+    hosted.get("/v1/probe", (c) =>
+      c.json({ frozenAt: c.var.clock.frozenAt, today: c.var.clock.today("Europe/Berlin") }),
+    );
+    return hosted;
+  }
+
+  it("is read from the environment, so a server started with TIDEFERN_FAKE_NOW is frozen", async () => {
+    vi.stubEnv("VERCEL_ENV", "");
+    vi.stubEnv("TIDEFERN_FAKE_NOW", "2026-10-05");
+    const hosted = probe(createApp());
+    expect(await (await hosted.request("/api/v1/probe")).json()).toEqual({
+      frozenAt: "2026-10-05T00:00:00.000Z",
+      today: "2026-10-05",
+    });
+  });
+
+  it("is the real clock when the environment does not freeze it", async () => {
+    vi.stubEnv("TIDEFERN_FAKE_NOW", "");
+    const hosted = probe(createApp());
+    const body = (await (await hosted.request("/api/v1/probe")).json()) as { frozenAt: unknown };
+    expect(body.frozenAt).toBeNull();
+  });
+
+  it("refuses on production before the app answers anything", () => {
+    vi.stubEnv("VERCEL_ENV", "production");
+    vi.stubEnv("TIDEFERN_FAKE_NOW", "2026-10-05");
+    expect(() => createApp()).toThrow(ClockConfigurationError);
+    expect(() => createApp()).toThrow(
+      /TIDEFERN_FAKE_NOW must not be set when VERCEL_ENV is production/,
+    );
   });
 });

@@ -129,6 +129,7 @@ describe("the journal", () => {
       "0008_idempotency_response",
       "0009_child_event_side_and_open_closure",
       "0010_cycle_status_functions",
+      "0011_cycle_status_calendar_clock",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

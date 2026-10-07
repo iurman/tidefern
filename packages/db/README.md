@@ -12,7 +12,7 @@ database access goes through. Imported by `packages/api` (and later
 | `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run` | The owner role's direct string; migrations and the job runner |
 | `MIGRATE_DESTRUCTIVE`   | the owner-triggered migration workflow (B12) | `1` lets the runner apply a contract migration (DROP, RENAME, ALTER COLUMN ... TYPE, TRUNCATE) |
 | `TIDEFERN_KEK_V1`       | `scripts/seed.ts`                            | The KEK the seed seals its free text under; base64 of 32 bytes, the environment's own value |
-| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`                            | An ISO 8601 instant that freezes the seed's "today"; refused when `VERCEL_ENV` is `production` |
+| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`, and the server's calendar clock (`packages/api/src/clock.ts`) | An ISO 8601 instant that freezes "today" for the seed and for every calendar decision the server makes outside production (task E11), handed to `cycle_status_for` as `app.calendar_now`; refused when `VERCEL_ENV` is `production` |
 | `DATABASE_URL` and `DATABASE_URL_UNPOOLED` together | `scripts/grant-login.ts` (CI only) | The owner URL runs `ALTER ROLE tidefern_app WITH LOGIN PASSWORD`, with the role and password taken from `DATABASE_URL`; refused when `VERCEL_ENV` is `production` |
 
 ## Commands
@@ -235,7 +235,7 @@ behaviour on PGlite inside `withActor`, which drops to `tidefern_app`.
 | `is_household_member(household_id, role)`, `has_members(household_id)`, `may_join(household_id, role)` | definer | membership and invitation lookups |
 | `is_related(other_id)` | definer | a grant in either direction, a shared household, or a shared child |
 | `accept_invitation(invitation_id)` | definer, writes | sets `accepted_at` on an open invitation to the actor's verified email and nothing else; true when it closed one |
-| `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise |
+| `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise. Since migration `0011` (task E11) "today" is the instant in `app.calendar_now` when the transaction carries one, else `now()` |
 | `refresh_cycle_prediction(subject)` | definer, writes | migration `0010`, task B14: when `can_write(subject, 'cycle.history')` holds, keeps the live `cycle_predictions` row equal to the entries and pregnancies and answers true; false and nothing written otherwise |
 
 The `category` argument is text and the policies pass the literal they file
@@ -344,11 +344,22 @@ back derived values only:
 
 - `cycle_status_for(subject)` re-checks `can_read(subject, 'cycle.status')`
   for the current actor, so a grant revoked after the session was loaded
-  answers no row. It takes no date: "today" is computed from `now()` in the
-  subject's profile zone (then the actor's, then UTC), so a grantee cannot
-  walk it back through the history. `GET /v1/cycle/status` calls it for the
-  subject and for a grantee alike and audits a grantee's read under
-  `cycle.status`.
+  answers no row. It takes no date, so no request can walk it back through
+  the history: "today" is read in the subject's profile zone (then the
+  actor's, then UTC) from `now()`, or, since migration
+  `0011_cycle_status_calendar_clock` (task E11), from the instant in the
+  transaction-local setting `app.calendar_now` when the transaction carries
+  one (an empty value counts as none, because a pooled connection keeps the
+  setting defined and empty after the transaction that set it). The API
+  sets it inside the actor's `withActor` transaction just before the call,
+  and only when `TIDEFERN_FAKE_NOW` froze its calendar clock outside
+  production, so production always reads `now()`. The value comes from the
+  clock, never from a request; code that could write it as `tidefern_app`
+  could equally write `app.actor_id`, which the policies already trust.
+  `GET /v1/cycle/status` calls it for the subject and for a grantee alike
+  and audits a grantee's read under `cycle.status` on the real day.
+  `src/e11-calendar-clock.test.ts` proves the setting, the fallback and that
+  the setting never outlives its transaction.
 - `refresh_cycle_prediction(subject)` re-checks `can_write(subject,
   'cycle.history')` and writes the live prediction row under the caller's
   own insert and update policies; `PUT /v1/cycle/entries/{date}` calls it

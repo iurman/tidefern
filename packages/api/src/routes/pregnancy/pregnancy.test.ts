@@ -8,6 +8,7 @@ import { Pregnancy, PregnancyEvent, PregnancyView, Problem } from "@tidefern/sch
 
 import { createApp } from "../../app";
 import { FRESH_AUTHENTICATION_REQUIRED } from "../../auth";
+import { realCalendarClock } from "../../clock";
 import {
   IDEMPOTENCY_KEY_HEADER,
   IDEMPOTENCY_REPLAYED_HEADER,
@@ -74,7 +75,14 @@ beforeAll(async () => {
   });
   await provisionSubjectKey(db, ANNA, new EnvKeyProvider(), "user");
   fixture.auth.signIn(STALE, ANNA, "anna@example.com", 700);
-  app = createApp({ auth: fixture.auth, db, log: { sink: () => undefined } });
+  // The real calendar whatever the runner's environment says: CI exports
+  // TIDEFERN_FAKE_NOW for its seeded server, and TODAY above is the real one.
+  app = createApp({
+    auth: fixture.auth,
+    db,
+    log: { sink: () => undefined },
+    clock: realCalendarClock,
+  });
   startedAt = new Date(Date.now() - 1_000).toISOString();
 });
 

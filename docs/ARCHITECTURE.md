@@ -1610,7 +1610,7 @@ what, why, checks run, evidence, build-plan task ids.
 | `LOG_HMAC_SECRET` | all, sensitive | Keys the HMAC of user ids in log lines |
 | `E2E_MAIL_CAPTURE` | local and CI only | Exposes a test-only endpoint that returns the last verification link; never set on Vercel |
 | `RESEND_API_KEY`, `EMAIL_FROM` | production only | Transactional email; previews and local use the console transport, so a preview can never send real mail from a seeded persona |
-| `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
+| `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions: the seed and the server's calendar clock (`packages/api/src/clock.ts`, task E11) honor it outside production for every decision about which calendar day it is, never for a stored instant; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
 | `BETTER_AUTH_TELEMETRY` | all, value `0` | Keeps Better Auth's opt-in telemetry off explicitly |
 | `MIGRATE_DESTRUCTIVE` | the owner-triggered migration workflow only | Lets the runner apply a contract migration (section 3.4) |
 | `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset |

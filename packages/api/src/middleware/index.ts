@@ -1,4 +1,4 @@
-export { audit, auditActions, readDedupeKey } from "./audit";
+export { audit, auditActions, auditDay, readDedupeKey } from "./audit";
 export type { AuditAction, AuditCategory, AuditEvent } from "./audit";
 export { CROSS_SITE_REQUEST, crossSite, crossSiteVerdict, originAllowed } from "./cross-site";
 export type { CrossSiteOptions } from "./cross-site";

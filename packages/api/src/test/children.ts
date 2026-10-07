@@ -4,6 +4,7 @@ import { schema } from "@tidefern/db";
 
 import { createApp } from "../app";
 import { FRESH_AUTH_MAX_AGE_SECONDS } from "../auth";
+import { realCalendarClock } from "../clock";
 import { configureChildren } from "../routes/children";
 import { ANNA, BEN, TOKENS, createActorFixture } from "./actors";
 import type { FakeAuth } from "./auth-fake";
@@ -57,6 +58,9 @@ export async function createChildrenFixture(): Promise<ChildrenFixture> {
   ]);
   const keys = new FixedKeyProvider(randomBytes(32), "test");
   configureChildren({ db, keys });
-  const app = createApp({ auth, db, log: { sink: () => undefined } });
+  // The real calendar whatever the runner's environment says: CI exports
+  // TIDEFERN_FAKE_NOW for its seeded server, and the children suite dates
+  // its birthdays from the real today.
+  const app = createApp({ auth, db, log: { sink: () => undefined }, clock: realCalendarClock });
   return { harness, auth, app, keys };
 }

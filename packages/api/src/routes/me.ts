@@ -35,6 +35,12 @@ export const Me = z
     profile: z
       .union([MeProfile, z.null()])
       .describe("The profile summary, or null until onboarding creates the profile"),
+    today: z.iso
+      .date()
+      .nullable()
+      .describe(
+        "Today in the profile's time zone on the server's calendar clock, the one today every screen counts from instead of the device clock; null until onboarding creates the profile",
+      ),
     guardianOf: z.array(Id).describe("Children this actor is a guardian of"),
     grants: z.array(HeldGrant).describe("Active grants where this actor is the grantee"),
     session: z.object({
@@ -51,7 +57,7 @@ export const meRoute = createRoute({
   tags: ["identity"],
   summary: "The signed-in actor",
   description:
-    "The actor id, the profile summary, guardianships, active grants held and the session expiry: every client bootstraps from this one call.",
+    "The actor id, the profile summary with today's date in its time zone, guardianships, active grants held and the session expiry: every client bootstraps from this one call.",
   middleware: [requireActor] as const,
   responses: {
     200: {
@@ -65,7 +71,12 @@ export const meRoute = createRoute({
   },
 });
 
-/** The response body for the actor on the context; the route's middleware guarantees both are set. */
+/**
+ * The response body for the actor on the context; the route's middleware
+ * guarantees both are set. `today` is the calendar clock's (clock.ts), read
+ * in the profile's zone, so a page renders the same day the API decides
+ * cycle days, gestation weeks and ages on.
+ */
 export function meBody(c: Context<ApiEnv>): Me {
   const actor = c.var.actor;
   const session = c.var.session;
@@ -75,6 +86,7 @@ export function meBody(c: Context<ApiEnv>): Me {
   return {
     id: actor.id,
     profile: actor.profile,
+    today: actor.profile === null ? null : c.var.clock.today(actor.profile.timeZone),
     guardianOf: actor.guardianOf,
     grants: actor.grants.map((grant) => ({
       id: grant.id,
