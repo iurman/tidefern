@@ -24,7 +24,8 @@ import {
  * GET /api/v1/me), and seeded rows are asserted by presence, never by count
  * or position, because other specs sign the same people in. Load more needs
  * more rows than a page holds, which no seeded person has, so a fresh
- * account of this file's own makes them with exports; nothing here changes
+ * account of this file's own makes them with exports, and a second one
+ * shows its own sign-ins and a device it signed out; nothing here changes
  * a seeded person beyond the sign-in every spec writes. Against a server
  * without a database the helpers hand back null and the canned cookie, and
  * each test asserts the honest failed-read state instead. Nothing here is
