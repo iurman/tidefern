@@ -51,7 +51,5 @@ export const homeCopy = {
         text: "Closing your account deletes your data within 14 days, including from our database history. You can undo for 7 days.",
       },
     ],
-    designLead: "Curious how it is built?",
-    designLink: "Explore the design system",
   },
 } as const;

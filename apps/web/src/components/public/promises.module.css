@@ -24,11 +24,6 @@
   max-width: 48ch;
 }
 
-.closing {
-  margin: var(--space-12) 0 0;
-  color: var(--muted);
-}
-
 @media (max-width: 600px) {
   .list {
     grid-template-columns: minmax(0, 1fr);

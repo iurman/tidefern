@@ -14,7 +14,7 @@ export const metadata = pageMetadata(
 const variants = [
   {
     file: "tidefern-mark.svg",
-    name: "Full colour",
+    name: "Full color",
     use: "Light surfaces: Mist, Sand, white.",
     theme: "light",
   },
@@ -26,8 +26,8 @@ const variants = [
   },
   {
     file: "tidefern-mark-mono.svg",
-    name: "One colour",
-    use: "Forced colours and print.",
+    name: "One color",
+    use: "Forced colors and print.",
     theme: "light",
   },
   {
@@ -97,7 +97,7 @@ export default function BrandPage() {
           Mark, wordmark and tagline in one file per theme. The wordmark is Newsreader at optical
           size 72 and weight 500, outlined to paths; the swash f is a hand-drawn edit of the
           font&apos;s f, described under typography below. The tagline is Figtree 500, uppercase,
-          tracked 0.18em, in the Sea Glass ink colour.
+          tracked 0.18em, in the Sea Glass ink color.
         </p>
         <div className={styles.pair}>
           <figure className={styles.surface} data-theme="light">
@@ -226,11 +226,11 @@ export default function BrandPage() {
       <section className="design-section" aria-labelledby="themes">
         <h2 id="themes">Light and dark</h2>
         <p className="muted-note">
-          Light surfaces take the full colour mark and the Fern wordmark. Dark surfaces take the
-          dark variant, whose leaf is lifted to Sage and whose wordmark is Mist; it is never the
-          light mark inverted. Under forced colours and in print the one colour variant stands in
-          and takes the text colour. The toggles in the header switch the pair; nothing on a page
-          may show the light mark on a dark surface.
+          Light surfaces take the full color mark and the Fern wordmark. Dark surfaces take the dark
+          variant, whose leaf is lifted to Sage and whose wordmark is Mist; it is never the light
+          mark inverted. Under forced colors and in print the one color variant stands in and takes
+          the text color. The toggles in the header switch the pair; nothing on a page may show the
+          light mark on a dark surface.
         </p>
         <div className={styles.pair}>
           <figure className={styles.surface} data-theme="light">
@@ -238,7 +238,7 @@ export default function BrandPage() {
               <img src="/brand/tidefern-mark.svg" alt="" width={96} height={96} />
               <img src="/brand/tidefern-mark-mono.svg" alt="" width={96} height={96} />
             </div>
-            <figcaption>Light: full colour, and the one colour variant beside it.</figcaption>
+            <figcaption>Light: full color, and the one color variant beside it.</figcaption>
           </figure>
           <figure className={styles.surface} data-theme="dark">
             <div className={styles.sizeRow}>
@@ -289,14 +289,14 @@ export default function BrandPage() {
           <li className={styles.surface} data-theme="light">
             <div className={styles.misuseStage}>
               <img
-                className={styles.recoloured}
+                className={styles.recolored}
                 src="/brand/tidefern-mark.svg"
                 alt=""
                 width={96}
                 height={96}
               />
             </div>
-            <p>Never recolour it outside the palette; use the light, dark or one colour file.</p>
+            <p>Never recolor it outside the palette; use the light, dark or one color file.</p>
           </li>
           <li className={styles.surface} data-theme="light">
             <div className={styles.misuseStage}>
@@ -321,8 +321,8 @@ export default function BrandPage() {
               <img src="/brand/tidefern-mark.svg" alt="" width={96} height={96} />
             </div>
             <p>
-              Never set it on a brand colour or a busy background; Mist, Sand, white or the dark
-              page only.
+              Never set it on a brand color or a busy background; Mist, Sand, white or the dark page
+              only.
             </p>
           </li>
           <li className={styles.surface} data-theme="light">
