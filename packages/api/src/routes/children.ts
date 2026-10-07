@@ -12,7 +12,6 @@ import {
   milestoneChecklists,
   milestoneFraming,
   projectRow,
-  todayIn,
 } from "@tidefern/core";
 import type { Action, MilestoneItem, Scope } from "@tidefern/core";
 import {
@@ -53,7 +52,7 @@ import type { GrowthIndicator as PlacedIndicator, GrowthPlacement } from "@tidef
 import type { RequestActor } from "../actor";
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/index";
+import { audit, auditActions, auditDay } from "../middleware/index";
 import { problem as sharedProblem } from "../problem";
 import type { ProblemCode } from "../problem";
 
@@ -414,9 +413,14 @@ function childScope(actor: RequestActor, childId: string, action: Action): Scope
   return listScope(actor, action).find((scope) => scope.childId === childId) ?? null;
 }
 
-/** The calendar day a partner's read is filed under: the actor's zone, UTC until she has a profile. */
-function auditDay(actor: RequestActor): string {
-  return todayIn(actor.profile?.timeZone ?? "UTC");
+/**
+ * The zone the actor's own days are read in, UTC until she has a profile:
+ * the day her partner read is filed under (`auditDay`, the real day), and
+ * the today a child's checklist age and an undated check-off are counted
+ * to (the calendar clock's).
+ */
+function actorZone(actor: RequestActor): string {
+  return actor.profile?.timeZone ?? "UTC";
 }
 
 /** A partner's read or write (reason `grant`) is audited; a guardian's is not (architecture 8.3 step 6). */
@@ -434,7 +438,7 @@ async function auditPartner(
     subjectId: childId,
     category: "child",
     childId,
-    ...(action === "read" ? { day: auditDay(actor) } : {}),
+    ...(action === "read" ? { day: auditDay(actorZone(actor)) } : {}),
   });
 }
 
@@ -1317,8 +1321,9 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         const checklist =
           age === undefined
             ? // Before two months there is no list yet; the first one is what a parent sees.
-              (checklistFor(diffDays(loaded.child.dateOfBirth, auditDay(actor))) ??
-              milestoneChecklists[0])
+              (checklistFor(
+                diffDays(loaded.child.dateOfBirth, c.var.clock.today(actorZone(actor))),
+              ) ?? milestoneChecklists[0])
             : milestoneChecklists.find((candidate) => candidate.months === age);
         if (checklist === undefined) throw new Error("the checklist data has no ages");
         const itemIds = checklist.items.map((item) => item.id);
@@ -1405,7 +1410,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         let check: { id: string; date: string } | null = existing[existing.length - 1] ?? null;
         if (input.checked) {
           if (check === null) {
-            const date = input.date ?? auditDay(actor);
+            const date = input.date ?? c.var.clock.today(actorZone(actor), now);
             const eventId = uuidv7();
             await tx.insert(schema.childEvents).values({
               id: eventId,

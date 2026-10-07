@@ -1,6 +1,8 @@
 export { createApp, API_VERSION, API_PREFIX } from "./app";
 export type { TidefernApi, ApiOptions, Defer, DrainJobs } from "./app";
 export type { ApiEnv, ApiVariables, SessionFacts } from "./context";
+export { ClockConfigurationError, calendarClock } from "./clock";
+export type { CalendarClock, ClockEnvironment } from "./clock";
 export {
   ACCOUNT_CLOSING,
   FRESH_AUTHENTICATION_REQUIRED,

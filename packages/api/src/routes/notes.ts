@@ -2,7 +2,7 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
-import { can, categoriesFor, isKnownTimeZone, projectRow, todayIn } from "@tidefern/core";
+import { can, categoriesFor, isKnownTimeZone, projectRow } from "@tidefern/core";
 import type { Category, SubjectAccess } from "@tidefern/core";
 import {
   EnvKeyProvider,
@@ -30,7 +30,7 @@ import {
 import type { RequestActor } from "../actor";
 import { requireActor } from "../auth";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/audit";
+import { audit, auditActions, auditDay } from "../middleware/audit";
 import { problem } from "../problem";
 
 /**
@@ -224,9 +224,10 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * The calendar day a partner read is filed under (architecture 8.3 step 6):
- * today in the subject's time zone, never the server clock. The subject's
- * profile row is readable to anyone with an active grant from her; without
- * one the day falls back to UTC.
+ * today in the subject's time zone, never the server's zone, on the real
+ * clock (`auditDay`), because it is the day the read happened. The
+ * subject's profile row is readable to anyone with an active grant from
+ * her; without one the day falls back to UTC.
  */
 async function subjectDay(tx: Transaction, subjectId: string): Promise<string> {
   const [profile] = await tx
@@ -236,7 +237,7 @@ async function subjectDay(tx: Transaction, subjectId: string): Promise<string> {
     .limit(1);
   const timeZone =
     profile !== undefined && isKnownTimeZone(profile.timeZone) ? profile.timeZone : "UTC";
-  return todayIn(timeZone);
+  return auditDay(timeZone);
 }
 
 /**

@@ -8,6 +8,7 @@ import { loadActor } from "./actor";
 import { createApp } from "./app";
 import { FRESH_AUTHENTICATION_REQUIRED, requireFreshAuth } from "./auth";
 import type { SessionAuth } from "./auth";
+import { calendarClock } from "./clock";
 import { Me } from "./routes/me";
 import { FakeAuth, sessionHeaders } from "./test/auth-fake";
 import { createApiTestDatabase, installInterimActorReadPolicies } from "./test/database";
@@ -109,7 +110,13 @@ beforeAll(async () => {
   auth.signIn("anna", ANNA, "anna@example.com", 60);
   auth.signIn("ben", BEN, "ben@example.com", 60);
   auth.signIn("anna-stale", ANNA, "anna@example.com", 11 * 60);
-  app = createApp({ auth, db: harness.db });
+  // A fixed calendar (task E11): 22:30 UTC on 5 October is already the 6th
+  // in Anna's Berlin, so /v1/me's today is hers, not the UTC date.
+  app = createApp({
+    auth,
+    db: harness.db,
+    clock: calendarClock({ TIDEFERN_FAKE_NOW: "2026-10-05T22:30:00Z" }),
+  });
   app.get("/v1/_sensitive", requireFreshAuth(600), (c) => c.text("ok"));
 });
 
@@ -257,6 +264,7 @@ describe("GET /v1/me", () => {
       units: "metric",
       notificationDetail: "generic",
     });
+    expect(body.today).toBe("2026-10-06");
     expect(body.guardianOf).toEqual([ANNAS_CHILD]);
     expect(body.grants).toEqual([
       {
@@ -289,7 +297,16 @@ describe("GET /v1/me", () => {
     expect(text).not.toContain("notify");
     expect(text).not.toContain("ageAttestedAt");
     expect(text).not.toContain("deletedAt");
-    expect(Object.keys(body).sort()).toEqual(["grants", "guardianOf", "id", "profile", "session"]);
+    // `today` joined on purpose in task E11: the calendar date in her own
+    // zone that every screen counts from, a date and no fact about her.
+    expect(Object.keys(body).sort()).toEqual([
+      "grants",
+      "guardianOf",
+      "id",
+      "profile",
+      "session",
+      "today",
+    ]);
   });
 
   it("answers with a null profile for a user onboarding has not reached", async () => {
@@ -297,6 +314,7 @@ describe("GET /v1/me", () => {
       await (await app.request("/api/v1/me", { headers: sessionHeaders("ben") })).json(),
     );
     expect(body.profile).toBeNull();
+    expect(body.today).toBeNull();
     expect(body.grants).toEqual([]);
   });
 });

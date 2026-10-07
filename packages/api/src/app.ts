@@ -3,6 +3,8 @@ import { secureHeaders } from "hono/secure-headers";
 import type { ActorDatabase } from "@tidefern/db";
 import { withSession } from "./auth";
 import type { SessionAuth } from "./auth";
+import { calendarClock } from "./clock";
+import type { CalendarClock } from "./clock";
 import type { ApiEnv, Defer, DrainJobs } from "./context";
 import { drainEnqueued } from "./jobs/index";
 import { crossSite, idempotency, logger, rateLimit, routeTemplate } from "./middleware/index";
@@ -75,6 +77,18 @@ export interface ApiOptions {
    * is exactly `true` off Vercel; without it the path is not mounted.
    */
   mailCapture?: MailCaptureOptions | undefined;
+  /**
+   * The calendar clock every decision about which calendar day it is reads
+   * (clock.ts). Without one it is resolved here from `process.env`:
+   * `TIDEFERN_FAKE_NOW` freezes it outside production, and on production
+   * the variable makes this call throw `ClockConfigurationError`, so the
+   * host's route module, which calls this at module scope, fails to load
+   * and no request is ever answered on a frozen calendar. A bare
+   * `createApp()` reads the runner's environment too, and CI exports
+   * `TIDEFERN_FAKE_NOW` to the unit tests, so a test whose answer depends on
+   * the day passes `realCalendarClock` or `calendarClock(facts)`.
+   */
+  clock?: CalendarClock | undefined;
 }
 
 /**
@@ -85,12 +99,13 @@ export interface ApiOptions {
  */
 export function createApp(options: ApiOptions = {}) {
   const defer: Defer = options.defer ?? ((task) => void task());
+  const clock = options.clock ?? calendarClock(process.env);
   const jobs = options.jobs;
   const drainJobs: DrainJobs = jobs
     ? (ids) =>
         defer(async () => {
           try {
-            await drainEnqueued(jobs.db, ids, jobs.handlers ?? {});
+            await drainEnqueued(jobs.db, ids, jobs.handlers ?? {}, new Date(), clock);
           } catch (error) {
             // A failed claim, not a failed job: those are recorded on the row.
             console.error("jobs_drain_error", { name: (error as Error).name });
@@ -114,6 +129,7 @@ export function createApp(options: ApiOptions = {}) {
   app.use("*", async (c, next) => {
     c.set("defer", defer);
     c.set("drainJobs", drainJobs);
+    c.set("clock", clock);
     await next();
   });
   app.use("*", secureHeaders());
@@ -162,7 +178,7 @@ export function createApp(options: ApiOptions = {}) {
 
   // Outside /v1 and outside the OpenAPI document: a plain sub-app, not app.openapi().
   if (jobs) {
-    app.route("/internal", internalJobs(jobs));
+    app.route("/internal", internalJobs(jobs, clock));
   }
   if (options.mailCapture) {
     app.route("/internal", internalMailCapture(options.mailCapture));
