@@ -44,8 +44,9 @@ export interface CheckboxFieldProps {
  * native input covers the whole field, transparent, so a click or a tap
  * anywhere on the box, the label or the help lands on the input itself: the
  * sound provider's delegation gives it the press cue and the touch haptic
- * like every other control, the global focus ring draws around the field,
- * and Space toggles it. Help and error are tied to it with
+ * like every other control, the focus ring draws just inside the field (so
+ * a container that clips its overflow never cuts it), and Space toggles
+ * it. Help and error are tied to it with
  * `aria-describedby`; an error also sets `aria-invalid`.
  */
 export function CheckboxField({

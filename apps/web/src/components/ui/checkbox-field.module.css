@@ -1,10 +1,13 @@
 .field {
   --checkbox-size: 24px;
+  /* Room inside the field for its focus ring: the global ring's reach, 2 px at a 4 px offset. */
+  --checkbox-ring-room: 6px;
   position: relative;
   display: grid;
   gap: var(--space-1);
   width: 100%;
   max-width: var(--size-reading);
+  padding: 0 var(--checkbox-ring-room) var(--space-1);
 }
 
 /* The box, the label and the saving note on one line, 44 px tall at least so the target is too. */
@@ -18,9 +21,8 @@
 }
 
 /* The native checkbox covers the whole field (box, label, help and error), transparent, so clicks,
-   taps and hover land on the input itself without hiding the control, and the global focus ring
-   draws around the field with no text inside it to cross. The specimen frame draws its forced
-   focus ring on the field the same way, so no twin is needed here. */
+   taps and hover land on the input itself without hiding the control, and the focus ring draws
+   around the field with no text inside it to cross. */
 .input {
   position: absolute;
   inset: 0;
@@ -33,6 +35,21 @@
   border: 0;
   border-radius: var(--radius-control);
   cursor: pointer;
+}
+
+/* The global ring, drawn just inside the field instead of 4 px outside it: the field is as wide as
+   its container, so a container that clips its overflow (the specimen stage, a card) would cut the
+   ring's sides. The field's padding keeps the ring as clear of the box as the global offset. */
+.input:focus-visible {
+  outline-offset: -2px;
+  border-radius: var(--radius-control);
+}
+
+/* Display twin: the specimen frame forces its ring on the component root at the global offset; the
+   element type in this selector outranks the frame's rule. */
+[data-specimen-state="focus-visible"] > div.field {
+  outline-offset: -2px;
+  border-radius: var(--radius-control);
 }
 
 .box {
