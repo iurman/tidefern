@@ -61,11 +61,13 @@
   }
 }
 
+/* The view and what follows it keep the grid's calm measure on a wide page with nothing beside them. */
 .view {
   grid-area: view;
   display: grid;
   gap: var(--space-4);
   min-width: 0;
+  max-width: 42rem;
 }
 
 .extras {
@@ -73,6 +75,7 @@
   display: grid;
   gap: var(--space-6);
   min-width: 0;
+  max-width: 42rem;
 }
 
 /* The grid keeps a calm proportion on wide screens; below that it follows the column. */
