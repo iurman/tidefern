@@ -133,7 +133,7 @@ describe("the journal", () => {
       "0012_child_event_feed_method_and_diaper_contents",
       // Task E10: the closure's grant revocation for the app role, and
       // pg_temp last on every function's search_path.
-      "0011_closure_grant_revocation_and_search_path",
+      "0013_closure_grant_revocation_and_search_path",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

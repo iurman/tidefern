@@ -311,7 +311,7 @@ describe("the 0007 migration", () => {
     expect(definers.map((row) => row.signature as string).sort()).toEqual(
       [...DEFINER_HELPERS, ...DEFINER_WRITERS].sort(),
     );
-    // Task E10's migration (0011) moved pg_temp to the end of every
+    // Task E10's migration (0013) moved pg_temp to the end of every
     // function's search_path; 0007 wrote pg_catalog, public, which let a
     // temporary table the app role creates stand in for a real one
     // (src/e10-closure-grants.test.ts shows each attempt failing now).

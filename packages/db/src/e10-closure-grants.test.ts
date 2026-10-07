@@ -22,7 +22,7 @@ import type { Harness, Row } from "./schema/testing";
 import { createTestDatabase } from "./test/harness";
 
 /**
- * Task E10, migration 0011: `revoke_closure_grants()`, the SECURITY DEFINER
+ * Task E10, migration 0013: `revoke_closure_grants()`, the SECURITY DEFINER
  * step of account closure that the closing person's own policies refuse,
  * and the marker terms it writes through. Everything runs through
  * withActor(), which drops to tidefern_app, the role the request pool is on
@@ -223,9 +223,9 @@ afterAll(async () => {
   await harness.close();
 });
 
-describe("migration 0011", () => {
+describe("migration 0013", () => {
   test("applies from empty in journal order", async () => {
-    await expectJournalApplied(harness, "0011_closure_grant_revocation_and_search_path");
+    await expectJournalApplied(harness, "0013_closure_grant_revocation_and_search_path");
   });
 
   test("declares revoke_closure_grants SECURITY DEFINER and VOLATILE with pg_temp last and the marker, one instant in, a boolean out", async () => {

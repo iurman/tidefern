@@ -529,7 +529,7 @@ export async function lockClosure(tx: Transaction, me: string): Promise<void> {
  * its `grant.revoke` audit row, then every session but the one making the
  * request ends, so she can still undo from it.
  *
- * The grants go through `revoke_closure_grants()` (migration 0011), because
+ * The grants go through `revoke_closure_grants()` (migration 0013), because
  * that is the step her own policies refuse: `grants_update` is the owner's
  * or a guardian's, so a grant someone gave her would match no row and stay
  * live, and her audit policy refuses a row about a child she no longer

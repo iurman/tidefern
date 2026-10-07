@@ -204,7 +204,7 @@ describe("migration 0010", () => {
         sql`select p.oid::regprocedure::text as signature, p.prosecdef as definer, p.provolatile as volatility, p.proconfig as config from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname in ('cycle_status_for', 'refresh_cycle_prediction', 'cycle_prediction_facts', 'cycle_period_starts') order by signature`,
       ),
     );
-    // Task E10's migration (0011) moved pg_temp to the end of every
+    // Task E10's migration (0013) moved pg_temp to the end of every
     // function's search_path, so a temporary table can never stand in for
     // a real one; 0010 wrote pg_catalog, public. The rest is as B14 made it.
     const path = "search_path=pg_catalog, public, pg_temp";
@@ -253,7 +253,7 @@ describe("migration 0010", () => {
         sql`select tablename || '.' || policyname as policy from pg_catalog.pg_policies where qual like '%in_policy_helper()%' or with_check like '%in_policy_helper()%' order by policy`,
       ),
     );
-    // The whole set of marker policies. Task E10 (migration 0011) adds the
+    // The whole set of marker policies. Task E10 (migration 0013) adds the
     // marker to audit_events_insert and grants_update, bound to the current
     // actor's own rows, for revoke_closure_grants(); B14 added the two
     // select policies this test is named for.

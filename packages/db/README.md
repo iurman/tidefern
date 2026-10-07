@@ -264,7 +264,7 @@ behaviour on PGlite inside `withActor`, which drops to `tidefern_app`.
 | `accept_invitation(invitation_id)` | definer, writes | sets `accepted_at` on an open invitation to the actor's verified email and nothing else; true when it closed one |
 | `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise. Since migration `0011` (task E11) "today" is the instant in `app.calendar_now` when the transaction carries one, else `now()` |
 | `refresh_cycle_prediction(subject)` | definer, writes | migration `0010`, task B14: when `can_write(subject, 'cycle.history')` holds, keeps the live `cycle_predictions` row equal to the entries and pregnancies and answers true; false and nothing written otherwise |
-| `revoke_closure_grants(closing_at)` | definer, writes | migration `0011`, task E10: when the current actor has an open closure, revokes every live grant she owns or holds at `closing_at`, files one `grant.revoke` audit row per grant in her name (the child as subject for a child grant, the owner otherwise) and answers true; false and nothing written with no actor, no instant or no open closure. It takes no person, so it acts on nobody else |
+| `revoke_closure_grants(closing_at)` | definer, writes | migration `0013`, task E10: when the current actor has an open closure, revokes every live grant she owns or holds at `closing_at`, files one `grant.revoke` audit row per grant in her name (the child as subject for a child grant, the owner otherwise) and answers true; false and nothing written with no actor, no instant or no open closure. It takes no person, so it acts on nobody else |
 
 The `category` argument is text and the policies pass the literal they file
 under, so a row never spans categories except `cycle_entries`, where either
@@ -297,7 +297,7 @@ Three rules the SQL has to keep that `can()` never faces:
   and `invitations_update` does too, for the one write a helper makes
   (`accept_invitation()`). Migration `0010` adds the marker to
   `cycle_entries_select` and `pregnancies_select` for the two cycle
-  functions below. Migration `0011` adds it to `grants_update` and
+  functions below. Migration `0013` adds it to `grants_update` and
   `audit_events_insert` for `revoke_closure_grants()`, and there only for
   the current actor's own rows: a grant she is a party to, an audit row in
   her own name.
@@ -310,11 +310,11 @@ Three rules the SQL has to keep that `can()` never faces:
   path, the session's temporary schema is searched first for tables and
   types, and the app role may create temporary tables, so it could hand a
   helper its own `child_guardians` or `grants` and be told it guards a
-  child or holds a grant. Migrations `0007` and `0010` wrote `pg_catalog,
-  public`; migration `0011` (task E10) moved `pg_temp` to the end of every
-  path, and `src/e10-closure-grants.test.ts` fails on any function in
-  `public` whose path does not end that way, and shows four such attempts
-  failing.
+  child or holds a grant. Migrations `0007`, `0010` and `0011` wrote
+  `pg_catalog, public`; migration `0013` (task E10) moved `pg_temp` to the
+  end of every path, and `src/e10-closure-grants.test.ts` fails on any
+  function in `public` whose path does not end that way, and shows four
+  such attempts failing.
 
 #### The policies
 
