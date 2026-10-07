@@ -249,11 +249,17 @@ describe("migration 0010", () => {
         sql`select tablename || '.' || policyname as policy from pg_catalog.pg_policies where qual like '%in_policy_helper()%' or with_check like '%in_policy_helper()%' order by policy`,
       ),
     );
+    // The whole set of marker policies. Task E10 (migration 0011) adds the
+    // marker to audit_events_insert and grants_update, bound to the current
+    // actor's own rows, for revoke_closure_grants(); B14 added the two
+    // select policies this test is named for.
     expect(policies.map((row) => row.policy)).toEqual([
+      "audit_events.audit_events_insert",
       "child_guardians.child_guardians_select",
       "children.children_select",
       "cycle_entries.cycle_entries_select",
       "grants.grants_select",
+      "grants.grants_update",
       "household_members.household_members_select",
       "invitations.invitations_select",
       "invitations.invitations_update",

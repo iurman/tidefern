@@ -2,10 +2,10 @@ import { createHash } from "node:crypto";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { and, asc, count, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { can, listScope, stageAfter } from "@tidefern/core";
 import type { Category, Pregnancy, Stage } from "@tidefern/core";
-import { isActorId, schema, withActor, withSystem } from "@tidefern/db";
+import { isActorId, schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
 import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
 import {
@@ -25,8 +25,8 @@ import type { Consent, ConsentBasis, DataCategory, Processor } from "@tidefern/s
 
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/audit";
 import { problem } from "../problem";
+import { lockClosure, revokeAtClosure } from "./account";
 
 /**
  * Task E2: the profile, the collection consent and the data summary
@@ -660,15 +660,19 @@ async function decideWithdrawal(
 /**
  * Withdrawing the collection consent starts account closure (architecture
  * record 11), and closure revokes every session and grant at once (7.3 and
- * 11): in one transaction every active consent of hers is withdrawn, every
- * grant she gave or holds is audited and revoked, every session but the
- * one making this request is ended, and the closure request and its job
- * are written. It runs as system for the reasons E8's close gives: a
- * grantee may not update the grants she holds (`grants_update` is the
- * owner's or a guardian's), and Better Auth's `session` table sits outside
- * row level security. The access decision was already made by `can()` in
- * `decideWithdrawal`; every row here is keyed to the signed-in person, and
- * nothing from the request names whose account this is.
+ * 11): in one transaction every active consent of hers is withdrawn, the
+ * closure request and its job are written (or the open closure reused),
+ * every grant she gave or holds is audited and revoked, and every session
+ * but the one making this request is ended, so she can still cancel the
+ * closure from here inside the undo window. It runs in her own
+ * `withActor()` transaction, the one `decideWithdrawal` read in, so it
+ * works on the app role (7.2); `revokeAtClosure` in the account area says
+ * which step her policies refuse and the definer function that takes it.
+ * The closure lock is the close route's, so a close and a withdrawal at
+ * once file one closure between them. The access decision was already made
+ * by `can()` in `decideWithdrawal`; every row here is keyed to the
+ * signed-in person, and nothing from the request names whose account this
+ * is.
  */
 async function withdrawAndClose(
   tx: Transaction,
@@ -677,6 +681,7 @@ async function withdrawAndClose(
   consentId: string,
   now: Date,
 ): Promise<WithdrawOutcome> {
+  await lockClosure(tx, actorId);
   const withdrawn = await tx
     .update(schema.consents)
     .set({ withdrawnAt: now, updatedAt: now, version: sql`${schema.consents.version} + 1` })
@@ -691,53 +696,9 @@ async function withdrawAndClose(
   // A concurrent withdrawal won between the decision and this update.
   if (withdrawn.length === 0) return { kind: "already" };
 
-  // Every grant in either direction, audited before the revoke (the audit
-  // helper's rule), then revoked in one statement.
-  const active = await tx
-    .select({
-      id: schema.grants.id,
-      ownerId: schema.grants.ownerId,
-      category: schema.grants.category,
-      childId: schema.grants.childId,
-    })
-    .from(schema.grants)
-    .where(
-      and(
-        or(eq(schema.grants.ownerId, actorId), eq(schema.grants.granteeId, actorId)),
-        isNull(schema.grants.revokedAt),
-        isNull(schema.grants.deletedAt),
-      ),
-    )
-    .orderBy(asc(schema.grants.createdAt), asc(schema.grants.id));
-  for (const grant of active) {
-    await audit(tx, {
-      actorId,
-      action: auditActions.grantRevoke,
-      subjectId: grant.childId ?? grant.ownerId,
-      category: grant.category,
-      childId: grant.childId ?? undefined,
-      occurredAt: now,
-    });
-  }
-  if (active.length > 0) {
-    await tx
-      .update(schema.grants)
-      .set({ revokedAt: now, updatedAt: now, version: sql`${schema.grants.version} + 1` })
-      .where(
-        inArray(
-          schema.grants.id,
-          active.map((grant) => grant.id),
-        ),
-      );
-  }
-
-  // Every other session; the one making this request stays, so she can
-  // still cancel the closure from here inside the undo window.
-  await tx
-    .delete(schema.session)
-    .where(and(eq(schema.session.userId, actorId), ne(schema.session.id, sessionId)));
-
+  // The request first: the revoke acts only while her closure is open.
   const closure = await startClosure(tx, actorId, now);
+  await revokeAtClosure(tx, actorId, sessionId, now);
   return {
     kind: "withdrawn",
     jobId: closure.jobId,
@@ -1136,18 +1097,15 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const now = new Date();
     const session = c.var.session;
     if (session === null) throw new Error("requireActor must run before the profile handlers");
-    const decision = await withActor(
+    const outcome = await withActor(
       actor.id,
-      (tx) => decideWithdrawal(tx, actor, id),
+      async (tx): Promise<WithdrawOutcome> => {
+        const decision = await decideWithdrawal(tx, actor, id);
+        if (decision !== "proceed") return { kind: decision };
+        return withdrawAndClose(tx, actor.id, session.id, id, now);
+      },
       databaseFor(c),
     );
-    const outcome: WithdrawOutcome =
-      decision === "proceed"
-        ? await withSystem(
-            (tx) => withdrawAndClose(tx, actor.id, session.id, id, now),
-            databaseFor(c),
-          )
-        : { kind: decision };
     switch (outcome.kind) {
       case "missing":
         return problem(c, 404, "not_found");

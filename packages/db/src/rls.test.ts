@@ -76,10 +76,15 @@ const DEFINER_HELPERS = [
 ];
 
 /**
- * The SECURITY DEFINER writers: an invitee closing her invitation, and
- * (task B14) a contributor's prediction refresh.
+ * The SECURITY DEFINER writers: an invitee closing her invitation, (task
+ * B14) a contributor's prediction refresh, and (task E10) the revocation of
+ * every grant a closing person gave or holds.
  */
-const DEFINER_WRITERS = ["accept_invitation(uuid)", "refresh_cycle_prediction(uuid)"];
+const DEFINER_WRITERS = [
+  "accept_invitation(uuid)",
+  "refresh_cycle_prediction(uuid)",
+  "revoke_closure_grants(timestamp with time zone)",
+];
 
 /** Every table 0007 forces, as the catalog orders them. */
 const RLS_TABLES = [

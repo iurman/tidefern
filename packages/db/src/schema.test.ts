@@ -131,6 +131,8 @@ describe("the journal", () => {
       "0010_cycle_status_functions",
       "0011_cycle_status_calendar_clock",
       "0012_child_event_feed_method_and_diaper_contents",
+      // Task E10: the closure's grant revocation for the app role.
+      "0011_closure_grant_revocation",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

@@ -1,7 +1,8 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import type { z } from "zod";
 import { and, eq, inArray, isNull, or } from "drizzle-orm";
-import { schema } from "@tidefern/db";
+import { schema, withActor } from "@tidefern/db";
+import type { ActorDatabase } from "@tidefern/db";
 import {
   ActivityPage,
   CloseState,
@@ -16,7 +17,7 @@ import {
 } from "@tidefern/schemas";
 
 import { createApp } from "../app";
-import { FRESH_AUTHENTICATION_REQUIRED } from "../auth";
+import { ACCOUNT_CLOSING, FRESH_AUTHENTICATION_REQUIRED } from "../auth";
 import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "../middleware/idempotency";
 import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
@@ -30,6 +31,7 @@ import {
   SESSIONS,
   TEXTS,
   TOKENS,
+  asAppRole,
   createAccountFixture,
   withInjected,
 } from "../test/account";
@@ -66,13 +68,32 @@ const KEYS = {
 
 type Client = ReturnType<typeof withInjected>;
 
-function build(fixture: AccountFixture): Client {
+/**
+ * The whole app on the fixture's database, or on `database` when given:
+ * the app-role blocks pass `asAppRole(...)` so every request path runs as
+ * `tidefern_app`, as it does on CI and in production.
+ */
+function build(fixture: AccountFixture, database: ActorDatabase = fixture.harness.db): Client {
   const app = createApp({
     auth: fixture.auth,
-    db: fixture.harness.db,
+    db: database,
     log: { sink: () => undefined },
   });
-  return withInjected(app, { db: fixture.harness.db, keys: KEK });
+  return withInjected(app, { db: database, keys: KEK });
+}
+
+/**
+ * Drizzle wraps a driver error in "Failed query: ..." and keeps the
+ * Postgres error as `cause`; the policy name lives there.
+ */
+async function refusal(promise: Promise<unknown>): Promise<string> {
+  try {
+    await promise;
+  } catch (error) {
+    const cause = (error as { cause?: unknown }).cause;
+    return cause instanceof Error ? cause.message : (error as Error).message;
+  }
+  throw new Error("expected the query to be refused");
 }
 
 const get = (client: Client, path: string, token?: string) =>
@@ -402,6 +423,48 @@ describe("GET /v1/me/export", () => {
   });
 });
 
+/**
+ * What the closure blocks read back, through the harness's own superuser
+ * connection, which sees every row whatever role the app ran as.
+ */
+function closureReads(db: () => AccountFixture["harness"]["db"]) {
+  return {
+    async sessionsOf(userId: string) {
+      const rows = await db()
+        .select({ id: schema.session.id })
+        .from(schema.session)
+        .where(eq(schema.session.userId, userId));
+      return rows.map((row) => row.id).sort();
+    },
+
+    async grantsInvolving(userId: string) {
+      return db()
+        .select()
+        .from(schema.grants)
+        .where(or(eq(schema.grants.ownerId, userId), eq(schema.grants.granteeId, userId)));
+    },
+
+    async closureRows(userId: string) {
+      return db()
+        .select()
+        .from(schema.dataRequests)
+        .where(and(eq(schema.dataRequests.userId, userId), eq(schema.dataRequests.kind, "closure")))
+        .orderBy(schema.dataRequests.requestedAt);
+    },
+
+    async deleteJobs() {
+      return db().select().from(schema.jobs).where(eq(schema.jobs.type, "account.delete"));
+    },
+
+    async auditRows(actorId: string, action: string) {
+      return db()
+        .select()
+        .from(schema.auditEvents)
+        .where(and(eq(schema.auditEvents.actorId, actorId), eq(schema.auditEvents.action, action)));
+    },
+  };
+}
+
 describe("account closure", () => {
   let fixture: AccountFixture;
   let client: Client;
@@ -416,40 +479,7 @@ describe("account closure", () => {
   });
 
   const db = () => fixture.harness.db;
-
-  async function sessionsOf(userId: string) {
-    const rows = await db()
-      .select({ id: schema.session.id })
-      .from(schema.session)
-      .where(eq(schema.session.userId, userId));
-    return rows.map((row) => row.id).sort();
-  }
-
-  async function grantsInvolving(userId: string) {
-    return db()
-      .select()
-      .from(schema.grants)
-      .where(or(eq(schema.grants.ownerId, userId), eq(schema.grants.granteeId, userId)));
-  }
-
-  async function closureRows(userId: string) {
-    return db()
-      .select()
-      .from(schema.dataRequests)
-      .where(and(eq(schema.dataRequests.userId, userId), eq(schema.dataRequests.kind, "closure")))
-      .orderBy(schema.dataRequests.requestedAt);
-  }
-
-  async function deleteJobs() {
-    return db().select().from(schema.jobs).where(eq(schema.jobs.type, "account.delete"));
-  }
-
-  async function auditRows(actorId: string, action: string) {
-    return db()
-      .select()
-      .from(schema.auditEvents)
-      .where(and(eq(schema.auditEvents.actorId, actorId), eq(schema.auditEvents.action, action)));
-  }
+  const { sessionsOf, grantsInvolving, closureRows, deleteJobs, auditRows } = closureReads(db);
 
   it("answers 401 without a session and 401 fresh_authentication_required for a stale one", async () => {
     const anonymous = await post(client, "/me/close", KEYS.anonymous, { mode: "now" });
@@ -693,5 +723,228 @@ describe("account closure", () => {
   it("leaves Cara, who closed nothing, with her session and no request", async () => {
     expect(await sessionsOf(CARA)).toEqual([SESSIONS.cara]);
     expect(await closureRows(CARA)).toHaveLength(0);
+  });
+});
+
+/**
+ * Task E10: `DATABASE_URL` names `tidefern_app` on CI and in production
+ * (architecture 7.2), and `is_system()` is false for that role by design.
+ * Before E10 the close ran `withSystem()` on that pool and answered 500
+ * with the `data_requests` policy error, which PGlite's superuser hid from
+ * the block above. Here every request path runs as the app role.
+ */
+describe("account closure on the app role connection", () => {
+  let fixture: AccountFixture;
+  let client: Client;
+  let closure: ClosureRequest;
+
+  beforeAll(async () => {
+    fixture = await createAccountFixture();
+    client = build(fixture, asAppRole(fixture.harness.db));
+  });
+  afterAll(async () => {
+    await fixture.harness.close();
+  });
+
+  const db = () => fixture.harness.db;
+  const { sessionsOf, grantsInvolving, closureRows, deleteJobs, auditRows } = closureReads(db);
+
+  it("closes with the undo window and revokes every grant in both directions, the one she holds too", async () => {
+    const response = await post(
+      client,
+      "/me/close",
+      KEYS.annaClose,
+      { mode: "undo-window" },
+      TOKENS.anna,
+    );
+    expect(response.status).toBe(200);
+    closure = exact(ClosureRequest, await response.json());
+    expect(closure).toMatchObject({ mode: "undo-window", state: "requested" });
+    const requestedAt = Date.parse(closure.requestedAt);
+
+    // Ben's grant to her is one her own update policy refuses (grants_update
+    // is the owner's or a guardian's), so it is the one that proves the path.
+    const grants = await grantsInvolving(ANNA);
+    expect(grants.map((grant) => grant.id).sort()).toEqual(
+      [
+        GRANTS.annaToBenSymptoms,
+        GRANTS.annaToCaraStatus,
+        GRANTS.annaToCaraChild,
+        GRANTS.benToAnnaHistory,
+      ].sort(),
+    );
+    for (const grant of grants) {
+      expect(grant.revokedAt?.getTime()).toBe(requestedAt);
+      expect(grant.updatedAt.getTime()).toBe(requestedAt);
+      expect(grant.version).toBe(2);
+    }
+    const [benToCara] = await db()
+      .select()
+      .from(schema.grants)
+      .where(eq(schema.grants.id, GRANTS.benToCaraStatus));
+    expect(benToCara?.revokedAt).toBeNull();
+    expect(benToCara?.version).toBe(1);
+
+    expect(await sessionsOf(ANNA)).toEqual([SESSIONS.anna]);
+    expect(await sessionsOf(BEN)).toEqual([SESSIONS.ben, SESSIONS.benStale].sort());
+
+    const rows = await closureRows(ANNA);
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ id: closure.id, state: "requested" });
+    const jobs = await deleteJobs();
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.payloadJson).toEqual({ requestId: closure.id, userId: ANNA });
+    expect(jobs[0]?.runAfter.getTime()).toBe(Date.parse(closure.undoUntil ?? ""));
+    expect(jobs[0]?.status).toBe("queued");
+
+    // One revocation row per grant at the request's instant, the child grant
+    // against the child, and the closure itself.
+    const revoked = await auditRows(ANNA, "grant.revoke");
+    expect(
+      revoked.map((row) => `${row.subjectId}/${row.category ?? ""}/${row.childId ?? ""}`).sort(),
+    ).toEqual(
+      [
+        `${ANNA}/cycle.symptoms/`,
+        `${ANNA}/cycle.status/`,
+        `${CHILD}/child/${CHILD}`,
+        `${BEN}/cycle.history/`,
+      ].sort(),
+    );
+    for (const row of revoked) {
+      expect(row.occurredAt.getTime()).toBe(requestedAt);
+      expect(row.dedupeKey).toBeNull();
+    }
+    const closed = await auditRows(ANNA, "account.close");
+    expect(closed).toHaveLength(1);
+    expect(closed[0]).toMatchObject({ subjectId: ANNA, category: null, childId: null });
+  });
+
+  it("locks the account at once: GET /v1/me answers 401 account_closing, the state route the request", async () => {
+    const me = await get(client, "/me", TOKENS.anna);
+    expect(me.status).toBe(401);
+    expect((await problemOf(me)).detail).toBe(ACCOUNT_CLOSING);
+    const state = exact(CloseState, await (await get(client, "/me/close", TOKENS.anna)).json());
+    expect(state.request).toEqual(closure);
+  });
+
+  it("answers a second close with 409 closure_in_progress and writes nothing", async () => {
+    const again = await post(
+      client,
+      "/me/close",
+      KEYS.annaCloseAgain,
+      { mode: "now" },
+      TOKENS.anna,
+    );
+    expect(again.status).toBe(409);
+    expect((await problemOf(again)).detail).toBe(CLOSURE_IN_PROGRESS);
+    expect(await closureRows(ANNA)).toHaveLength(1);
+    expect(await deleteJobs()).toHaveLength(1);
+    expect(await auditRows(ANNA, "grant.revoke")).toHaveLength(4);
+  });
+
+  it("undoes inside the window and lets her back in, with every grant still revoked", async () => {
+    const response = await post(client, "/me/close/undo", KEYS.annaUndo, undefined, TOKENS.anna);
+    expect(response.status).toBe(200);
+    const body = exact(CloseUndone, await response.json());
+    expect(body.request).toMatchObject({ id: closure.id, state: "cancelled" });
+    expect(await deleteJobs()).toHaveLength(0);
+    expect(await auditRows(ANNA, "account.close.undo")).toHaveLength(1);
+
+    expect((await get(client, "/me", TOKENS.anna)).status).toBe(200);
+    expect((await grantsInvolving(ANNA)).filter((grant) => grant.revokedAt === null)).toEqual([]);
+  });
+
+  it("deletes now and revokes the grant Ben still had", async () => {
+    const response = await post(client, "/me/close", KEYS.benNow, { mode: "now" }, TOKENS.ben);
+    expect(response.status).toBe(200);
+    const request = exact(ClosureRequest, await response.json());
+    expect(request).toMatchObject({ mode: "now", undoUntil: null, state: "requested" });
+
+    const [benToCara] = await db()
+      .select()
+      .from(schema.grants)
+      .where(eq(schema.grants.id, GRANTS.benToCaraStatus));
+    expect(benToCara?.revokedAt?.getTime()).toBe(Date.parse(request.requestedAt));
+    expect((await grantsInvolving(BEN)).every((grant) => grant.revokedAt !== null)).toBe(true);
+    expect(await sessionsOf(BEN)).toEqual([SESSIONS.ben]);
+    expect(await auditRows(BEN, "grant.revoke")).toHaveLength(1);
+  });
+});
+
+/**
+ * A grant the person still owns over a child she no longer guards: Anna
+ * gave Cara a child grant, then stepped down with Ben still guarding Mo
+ * (removing a guardian leaves the grants she gave in place). Her own audit
+ * policy now refuses a row about Mo (`can_use_key`), so only the definer
+ * function the close calls can record that revocation.
+ */
+describe("closing after stepping down as the guardian of a child she shared", () => {
+  let fixture: AccountFixture;
+  let client: Client;
+  let appRole: ActorDatabase;
+
+  beforeAll(async () => {
+    fixture = await createAccountFixture();
+    const { db } = fixture.harness;
+    await db
+      .insert(schema.childGuardians)
+      .values({ id: "018f5e7a-a000-7000-8000-000000000004", childId: CHILD, userId: BEN });
+    await db
+      .delete(schema.childGuardians)
+      .where(and(eq(schema.childGuardians.childId, CHILD), eq(schema.childGuardians.userId, ANNA)));
+    appRole = asAppRole(db);
+    client = build(fixture, appRole);
+  });
+  afterAll(async () => {
+    await fixture.harness.close();
+  });
+
+  it("would be refused that audit row as herself", async () => {
+    const message = await refusal(
+      withActor(
+        ANNA,
+        (tx) =>
+          tx.insert(schema.auditEvents).values({
+            id: "018f5e7a-6000-7000-8000-0000000000e1",
+            actorId: ANNA,
+            action: "grant.revoke",
+            subjectId: CHILD,
+            category: "child",
+            childId: CHILD,
+          }),
+        appRole,
+      ),
+    );
+    expect(message).toMatch(/row-level security policy for table "audit_events"/);
+  });
+
+  it("still closes, revoking that grant with its row against the child", async () => {
+    const response = await post(
+      client,
+      "/me/close",
+      KEYS.annaClose,
+      { mode: "undo-window" },
+      TOKENS.anna,
+    );
+    expect(response.status).toBe(200);
+    const request = exact(ClosureRequest, await response.json());
+
+    const [childGrant] = await fixture.harness.db
+      .select()
+      .from(schema.grants)
+      .where(eq(schema.grants.id, GRANTS.annaToCaraChild));
+    expect(childGrant?.revokedAt?.getTime()).toBe(Date.parse(request.requestedAt));
+    const rows = await fixture.harness.db
+      .select()
+      .from(schema.auditEvents)
+      .where(
+        and(
+          eq(schema.auditEvents.actorId, ANNA),
+          eq(schema.auditEvents.action, "grant.revoke"),
+          eq(schema.auditEvents.subjectId, CHILD),
+        ),
+      );
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ category: "child", childId: CHILD });
   });
 });

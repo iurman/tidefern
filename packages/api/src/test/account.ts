@@ -402,6 +402,25 @@ export async function createAccountFixture(): Promise<AccountFixture> {
 }
 
 /**
+ * The database as the request pool reaches it on CI and in production,
+ * where `DATABASE_URL` names `tidefern_app` (architecture 7.2): every
+ * transaction starts as that role, so `withSystem()` gets no system context
+ * there and a request path works only through what the policies and the
+ * definer functions allow. PGlite's own role is a superuser, which is what
+ * hid the closure defect task E10 fixed; `packages/auth/src/keys.test.ts`
+ * wraps its database the same way.
+ */
+export function asAppRole(db: ApiTestDatabase["db"]): ActorDatabase {
+  return {
+    transaction: (fn) =>
+      db.transaction(async (tx) => {
+        await tx.execute(sql`set local role tidefern_app`);
+        return fn(tx);
+      }),
+  };
+}
+
+/**
  * The app with the test database and key provider on every request's
  * context, where the account routes look for them. The real app is mounted
  * whole, so the session, cross-site, rate limit and idempotency middleware

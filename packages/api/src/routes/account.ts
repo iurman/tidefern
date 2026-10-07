@@ -11,7 +11,7 @@ import {
   unwrapForSubject,
 } from "@tidefern/crypto";
 import type { KeyCache, KeyProvider } from "@tidefern/crypto";
-import { schema, withActor, withSystem } from "@tidefern/db";
+import { schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
 import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
 import {
@@ -508,13 +508,62 @@ function closureBody(row: DataRequestRow): ClosureRequestShape {
 }
 
 /**
+ * Holds the person's closure lock to the end of the transaction. Two closes
+ * with different Idempotency-Keys, or a close and a consent withdrawal,
+ * would otherwise both pass the open-closure check under READ COMMITTED,
+ * and the second would meet the one-open-closure index (B13) as a 500; with
+ * the lock the second waits and then sees the first one's row. Both ways
+ * into a closure take it: this module's close and the profile area's
+ * consent withdrawal.
+ */
+export async function lockClosure(tx: Transaction, me: string): Promise<void> {
+  await tx.execute(
+    sql`select pg_advisory_xact_lock(hashtextextended(${`account.close:${me}`}, 0))`,
+  );
+}
+
+/**
+ * The revoke of architecture 11 that both ways into a closure share, run
+ * in the person's own `withActor()` transaction once her closure request
+ * is written: every grant she gave or holds is revoked at `at`, each with
+ * its `grant.revoke` audit row, then every session but the one making the
+ * request ends, so she can still undo from it.
+ *
+ * The grants go through `revoke_closure_grants()` (migration 0011), because
+ * that is the step her own policies refuse: `grants_update` is the owner's
+ * or a guardian's, so a grant someone gave her would match no row and stay
+ * live, and her audit policy refuses a row about a child she no longer
+ * guards. The function acts only on `current_actor()`'s grants and only
+ * while her closure is open, which is why the request row comes first.
+ * Better Auth's `session` table sits outside row level security, and the
+ * app role may write it.
+ */
+export async function revokeAtClosure(
+  tx: Transaction,
+  me: string,
+  sessionId: string,
+  at: Date,
+): Promise<void> {
+  const result = (await tx.execute(
+    sql`select revoke_closure_grants(${at.toISOString()}::timestamptz) as ok`,
+  )) as { rows: { ok: boolean | null }[] };
+  if (result.rows[0]?.ok !== true) {
+    // No open closure of hers in this transaction: a caller out of order.
+    throw new Error("the closure's grants could not be revoked");
+  }
+  await tx
+    .delete(schema.session)
+    .where(and(eq(schema.session.userId, me), ne(schema.session.id, sessionId)));
+}
+
+/**
  * Locks and revokes at once (architecture 11), in one transaction so none
- * of it lands without the rest. It runs as system rather than as the actor
- * for two reasons the policies make unavoidable: a grantee may not write
- * the grants she holds (`grants_update` is the owner's or a guardian's),
- * and the Better Auth `session` table sits outside row level security. The
- * subject of every row is the signed-in person; nothing from the request
- * body names whose account this is.
+ * of it lands without the rest, and as the person herself: `withActor()`
+ * on the request pool, which is `tidefern_app` on CI and in production
+ * (7.2), where `withSystem()` gets no system context. The request row is
+ * written before the revoke because `revoke_closure_grants()` acts only
+ * while her closure is open. The subject of every row is the signed-in
+ * person; nothing from the request body names whose account this is.
  */
 async function closeAccount(
   db: ActorDatabase | undefined,
@@ -522,94 +571,48 @@ async function closeAccount(
   sessionId: string,
   mode: "undo-window" | "now",
 ): Promise<{ request: DataRequestRow; jobId: string } | "open"> {
-  return withSystem(async (tx) => {
-    // Two closes with different Idempotency-Keys would otherwise both pass
-    // the open-closure check under READ COMMITTED. The lock is the person's,
-    // held to the end of this transaction, so the second waits and then sees
-    // the first one's row.
-    await tx.execute(
-      sql`select pg_advisory_xact_lock(hashtextextended(${`account.close:${me}`}, 0))`,
-    );
-    if ((await openClosure(tx, me)) !== undefined) return "open";
-    const now = new Date();
-    const undoUntil = mode === "undo-window" ? new Date(now.getTime() + UNDO_WINDOW_MS) : null;
+  return withActor(
+    me,
+    async (tx) => {
+      await lockClosure(tx, me);
+      if ((await openClosure(tx, me)) !== undefined) return "open";
+      const now = new Date();
+      const undoUntil = mode === "undo-window" ? new Date(now.getTime() + UNDO_WINDOW_MS) : null;
 
-    // Every grant in either direction, audited before the revoke (the
-    // audit helper's own rule), then revoked in one statement.
-    const active = await tx
-      .select({
-        id: schema.grants.id,
-        ownerId: schema.grants.ownerId,
-        category: schema.grants.category,
-        childId: schema.grants.childId,
-      })
-      .from(schema.grants)
-      .where(
-        and(
-          or(eq(schema.grants.ownerId, me), eq(schema.grants.granteeId, me)),
-          isNull(schema.grants.revokedAt),
-          isNull(schema.grants.deletedAt),
-        ),
-      )
-      .orderBy(schema.grants.createdAt, schema.grants.id);
-    for (const grant of active) {
+      const [request] = await tx
+        .insert(schema.dataRequests)
+        .values({
+          id: uuidv7(),
+          userId: me,
+          kind: "closure",
+          state: "requested",
+          requestedAt: now,
+          deadlineAt: new Date(now.getTime() + REQUEST_DEADLINE_MS),
+          undoUntil,
+          createdAt: now,
+          updatedAt: now,
+        })
+        .returning();
+      if (request === undefined) throw new Error("the closure request was not written");
+
+      await revokeAtClosure(tx, me, sessionId, now);
+
+      const jobId = await enqueue(
+        tx,
+        "account.delete",
+        { requestId: request.id, userId: me },
+        { runAfter: undoUntil ?? now },
+      );
       await audit(tx, {
         actorId: me,
-        action: auditActions.grantRevoke,
-        subjectId: grant.childId ?? grant.ownerId,
-        category: grant.category,
-        childId: grant.childId ?? undefined,
+        action: auditActions.accountClose,
+        subjectId: me,
         occurredAt: now,
       });
-    }
-    if (active.length > 0) {
-      await tx
-        .update(schema.grants)
-        .set({ revokedAt: now, updatedAt: now, version: sql`${schema.grants.version} + 1` })
-        .where(
-          inArray(
-            schema.grants.id,
-            active.map((grant) => grant.id),
-          ),
-        );
-    }
-
-    // Every session but the one making this request, so the person can
-    // still undo from here.
-    await tx
-      .delete(schema.session)
-      .where(and(eq(schema.session.userId, me), ne(schema.session.id, sessionId)));
-
-    const [request] = await tx
-      .insert(schema.dataRequests)
-      .values({
-        id: uuidv7(),
-        userId: me,
-        kind: "closure",
-        state: "requested",
-        requestedAt: now,
-        deadlineAt: new Date(now.getTime() + REQUEST_DEADLINE_MS),
-        undoUntil,
-        createdAt: now,
-        updatedAt: now,
-      })
-      .returning();
-    if (request === undefined) throw new Error("the closure request was not written");
-
-    const jobId = await enqueue(
-      tx,
-      "account.delete",
-      { requestId: request.id, userId: me },
-      { runAfter: undoUntil ?? now },
-    );
-    await audit(tx, {
-      actorId: me,
-      action: auditActions.accountClose,
-      subjectId: me,
-      occurredAt: now,
-    });
-    return { request, jobId };
-  }, db);
+      return { request, jobId };
+    },
+    db,
+  );
 }
 
 async function undoClosure(
