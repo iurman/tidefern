@@ -1,3 +1,4 @@
+import type { ReactNode } from "react";
 import { compareDates, type CalendarDate } from "@tidefern/core";
 import { formatDay } from "./marks-format";
 import styles from "./timeline.module.css";
@@ -21,6 +22,12 @@ export interface TimelineItem {
   expected?: boolean;
   /** Where the row's title leads, when it opens something. */
   href?: string;
+  /**
+   * One control for the row, such as an Edit button, drawn under the row's
+   * text. It names its row in its accessible name, since every row's
+   * control reads the same.
+   */
+  action?: ReactNode;
 }
 
 export interface TimelineProps {
@@ -111,6 +118,7 @@ export function Timeline(props: TimelineProps) {
               </p>
               {item.detail ? <p className={styles.detail}>{item.detail}</p> : null}
               {item.expected ? <p className={styles.note}>Expected</p> : null}
+              {item.action ? <div>{item.action}</div> : null}
             </div>
           </li>
         );
