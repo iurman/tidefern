@@ -98,18 +98,19 @@ proposal: `[OWNER]` approves it, then it becomes a row in the architecture
 then the UI shows a plain placeholder marked `[OWNER]` where the line goes.
 The wording follows the sources: AAP's "should have" becomes "expected",
 AASM's recommendations become "recommended", and each source's "at least",
-its 24-hour basis and whether naps count are kept as the source has them.
+its 24-hour basis, AASM's "on a regular basis" (usual sleep, not one day's)
+and whether naps count are kept as the source has them.
 
 | Range id | Proposed line `[OWNER]` | Source line `[OWNER]`, linking to the source's `url` |
 | --- | --- | --- |
 | `feed-newborn` | "Expected for a newborn: at least 8 to 12 feeds every 24 hours." | "Source: American Academy of Pediatrics" |
 | `wet-diaper-first-days` | "Expected in the first few days after birth: 2 to 3 wet diapers a day." | "Source: American Academy of Pediatrics" |
 | `wet-diaper-after-first-days` | "Expected after the first 4 to 5 days: at least 5 to 6 wet diapers a day." | "Source: American Academy of Pediatrics" |
-| `sleep-4-to-12-months` | "Recommended at 4 to 12 months: 12 to 16 hours of sleep every 24 hours, naps included." | "Source: American Academy of Sleep Medicine" |
-| `sleep-1-to-2-years` | "Recommended at 1 to 2 years: 11 to 14 hours of sleep every 24 hours, naps included." | "Source: American Academy of Sleep Medicine" |
-| `sleep-3-to-5-years` | "Recommended at 3 to 5 years: 10 to 13 hours of sleep every 24 hours, naps included." | "Source: American Academy of Sleep Medicine" |
-| `sleep-6-to-12-years` | "Recommended at 6 to 12 years: 9 to 12 hours of sleep every 24 hours." | "Source: American Academy of Sleep Medicine" |
-| `sleep-13-to-18-years` | "Recommended at 13 to 18 years: 8 to 10 hours of sleep every 24 hours." | "Source: American Academy of Sleep Medicine" |
+| `sleep-4-to-12-months` | "Recommended at 4 to 12 months: 12 to 16 hours of sleep every 24 hours on a regular basis, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-1-to-2-years` | "Recommended at 1 to 2 years: 11 to 14 hours of sleep every 24 hours on a regular basis, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-3-to-5-years` | "Recommended at 3 to 5 years: 10 to 13 hours of sleep every 24 hours on a regular basis, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-6-to-12-years` | "Recommended at 6 to 12 years: 9 to 12 hours of sleep every 24 hours on a regular basis." | "Source: American Academy of Sleep Medicine" |
+| `sleep-13-to-18-years` | "Recommended at 13 to 18 years: 8 to 10 hours of sleep every 24 hours on a regular basis." | "Source: American Academy of Sleep Medicine" |
 
 Once on the page, under the cards `[OWNER]`: "These ranges come from the
 American Academy of Pediatrics and the American Academy of Sleep Medicine.
@@ -125,7 +126,8 @@ from the sources and the decisions `SOURCES.md` records):
   sentence.
 - No line where the function returns nothing: no sleep line before 4
   months, no feed or wet diaper line after the first month.
-- The figures are per 24 hours and today's count is the day so far, so the
+- The figures are per 24 hours, and the sleep figures are for sleep on a
+  regular basis, not one day's; today's count is the day so far, so the
   line states the range and never compares the two.
 - Feeds count breast and bottle feeds; solids are not part of the figure.
   Wet diapers count diapers logged as wet or mixed.
