@@ -16,9 +16,13 @@ import { consentTextVersions, TERMS_VERSION, type Stage } from "@tidefern/schema
  *   kept per persona for the worker, because Better Auth's limiter allows
  *   three sign-ins (and, separately, three sign-ups) per ten seconds, keeps
  *   its count in the database for the whole run, and spec files run one
- *   after another in a single worker. `fresh: true` signs in again, for a
- *   mutation behind fresh authentication: a cookie cached early in the run
- *   is older than the ten-minute window by the time a later spec runs.
+ *   after another in a single worker. A kept session is checked with GET
+ *   /api/v1/me (a read, which no limiter counts) before it is handed back,
+ *   and signed in again when a spec earlier in the run signed it out
+ *   (Settings' Sign out row, a device sign-out), so a later spec never gets
+ *   a dead cookie. `fresh: true` signs in again, for a mutation behind fresh
+ *   authentication: a cookie cached early in the run is older than the
+ *   ten-minute window by the time a later spec runs.
  * - `freshAccount(page)` makes a verified account of its own through the
  *   mail capture endpoint and signs it in; `onboard(page, ...)` then gives
  *   it the consent and the profile the way onboarding (task H1) writes them.
@@ -63,7 +67,7 @@ const CANNED_TOKEN = "e2e-canned";
  * server they start (.github/workflows/ci.yml): not a secret, and never on
  * a deployment. The process's own variable wins when it is set.
  */
-const TEST_ONLY_AUTH_SECRET = "ci-only-better-auth-secret-0123456789abcdef-not-real";
+export const TEST_ONLY_AUTH_SECRET = "ci-only-better-auth-secret-0123456789abcdef-not-real";
 
 /**
  * The canned session cookie's value: the token signed the way Better Auth
@@ -122,8 +126,14 @@ function wait(milliseconds: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, milliseconds));
 }
 
-/** Seconds Better Auth asks a limited caller to wait, from its `X-Retry-After` header. */
-function retryAfterMs(response: APIResponse | { headers(): Record<string, string> }): number {
+/**
+ * How long to wait out a 429: the seconds Better Auth names in its
+ * `X-Retry-After` header (ten, its window, when it names none) and half a
+ * second more.
+ */
+export function retryAfterMs(
+  response: APIResponse | { headers(): Record<string, string> },
+): number {
   const seconds = Number(response.headers()["x-retry-after"]);
   return (Number.isFinite(seconds) && seconds > 0 ? seconds : 10) * 1000 + 500;
 }
@@ -182,9 +192,20 @@ export async function signInAccount(page: Page, account: Account): Promise<Cooki
 }
 
 /**
+ * Whether the session in the page's context is still live. GET /api/v1/me
+ * answers 401 once the session was signed out or has expired; any other
+ * answer (a failing server among them) leaves the decision to the spec.
+ */
+async function sessionIsLive(page: Page): Promise<boolean> {
+  const response = await page.request.get(`${baseOrigin()}/api/v1/me`);
+  return response.status() !== 401;
+}
+
+/**
  * Signs a seed persona in, or reuses the cookies this worker already holds
- * for it, and adds them to the page's context. `fresh: true` signs in again
- * (for a mutation behind fresh authentication) and keeps the new cookies.
+ * for it once they prove live, and adds them to the page's context. `fresh:
+ * true` signs in again (for a mutation behind fresh authentication) and
+ * keeps the new cookies; so does a kept session that was signed out since.
  * Null, with the canned cookie added, when the server has no database.
  */
 export async function signInAs(
@@ -195,7 +216,7 @@ export async function signInAs(
   const cached = jar.get(persona);
   if (cached !== undefined && options.fresh !== true) {
     await page.context().addCookies(cached);
-    return cached;
+    if (await sessionIsLive(page)) return cached;
   }
   const cookies = await signInAccount(page, PERSONAS[persona]);
   if (cookies !== null) jar.set(persona, cookies);

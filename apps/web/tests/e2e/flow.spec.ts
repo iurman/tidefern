@@ -133,6 +133,36 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
+test("/closing sends a live account on to Settings, and says a failed read in the flow frame", async ({
+  page,
+}) => {
+  const session = await sharedSession(page);
+  if (session !== null) {
+    // Live and not closing, so the account belongs in Settings (task H7 builds it there).
+    await page.goto("/closing");
+    await expect(page).toHaveURL(/\/settings$/);
+    return;
+  }
+  // No database: the read fails, so the page says so and claims no closure, and an invitation
+  // fragment that came along leaves the address bar all the same. The closing state itself
+  // needs a closed account, which only task E10 makes possible on the app role.
+  await page.goto("/closing#invitation=abc");
+  await expect(page).toHaveURL(/\/closing$/);
+  await expect(page).toHaveTitle("Your account | Tidefern");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your account");
+  await expect(
+    page.getByText("We could not load your account just now. Reload the page to try again."),
+  ).toBeVisible();
+  await expectFlowFrame(page);
+  await expectNoOverflow(page);
+  for (const theme of ["light", "dark"] as const) {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await expectNoAxeViolations(page, "/closing", theme);
+    }
+  }
+});
+
 test("once the consent and the profile are written, /welcome sends the person on to Today in the shell", async ({
   page,
 }) => {
@@ -192,7 +222,51 @@ test("a sign-in opened from an invitation link drops the token from the address 
   expect(new URL(page.url()).search, "the token never travels in a query").toBe("");
 });
 
-test("signInAs signs a seed persona in once for the worker, and again only when asked for fresh", async ({
+test("the invitation fragment leaves the router's own address too: a refresh keeps it out and Back returns to sign-in", async ({
+  page,
+}) => {
+  // Signed out, so this runs the same on every server: sign-in is public.
+  await page.context().clearCookies();
+  await page.goto("/sign-in#invitation=abc");
+  const heading = page.getByRole("heading", { level: 1, name: "Sign in" });
+  await expect(heading).toBeVisible();
+  await expect(page).toHaveURL(/\/sign-in$/);
+
+  // Pages call router.refresh() after a save (H1 and H6 among them). The router rebuilds the page
+  // for the address it holds and writes that address back with replaceState, so record what it
+  // writes: a token the router still held would come back into the address bar here.
+  const written = await page.evaluate(async () => {
+    const router = (window as unknown as { next: { router: { refresh(): void } } }).next.router;
+    const integrated = window.history.replaceState;
+    const urls: string[] = [];
+    window.history.replaceState = function replaceState(data, unused, url) {
+      if (url !== undefined && url !== null) urls.push(String(url));
+      return integrated.call(window.history, data, unused, url);
+    };
+    try {
+      router.refresh();
+      for (let waited = 0; urls.length === 0 && waited < 10_000; waited += 50) {
+        await new Promise((resolve) => setTimeout(resolve, 50));
+      }
+    } finally {
+      window.history.replaceState = integrated;
+    }
+    return urls;
+  });
+  expect(written.length, "the refresh committed and wrote its address").toBeGreaterThan(0);
+  for (const url of written) expect(url, "the address the router wrote back").not.toContain("#");
+  await expect(page).toHaveURL(/\/sign-in$/);
+
+  // A client navigation away, then Back: the router restores sign-in from the history entry it
+  // owns, which a native replaceState before its own effect would have left without its state.
+  await page.getByRole("link", { name: "Create an account" }).click();
+  await expect(page.getByRole("heading", { level: 1, name: "Create your account" })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(heading).toBeVisible();
+});
+
+test("signInAs signs a seed persona in once for the worker, again when asked for fresh, and again once its session was signed out", async ({
   page,
 }) => {
   test.setTimeout(120_000);
@@ -220,6 +294,22 @@ test("signInAs signs a seed persona in once for the worker, and again only when 
   const fresh = await signInAs(page, "noor", { fresh: true });
   expect(sessionToken(fresh)).not.toBe(sessionToken(first));
   expect(sessionToken(await signInAs(page, "noor"))).toBe(sessionToken(fresh));
+  await page.goto("/today");
+  await expect(page).toHaveURL(/\/today$/);
+
+  // A spec that signs the kept session out (Settings' Sign out row, task H7) leaves a dead cookie
+  // in the worker's jar; the next spec still gets a live session, through one more sign-in.
+  const origin = new URL(page.url()).origin;
+  const signedOut = await page.request.post(`${origin}/sign-out`, {
+    headers: { origin },
+    maxRedirects: 0,
+  });
+  expect(signedOut.status()).toBe(303);
+  expect(signedOut.headers()["location"], "the sign-out was accepted").toBe("/");
+  await page.context().clearCookies();
+  const revived = await signInAs(page, "noor");
+  expect(sessionToken(revived)).not.toBe(sessionToken(fresh));
+  expect(sessionToken(await page.context().cookies())).toBe(sessionToken(revived));
   await page.goto("/today");
   await expect(page).toHaveURL(/\/today$/);
 });
