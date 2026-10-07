@@ -21,6 +21,7 @@ export type { JobContext, JobHandler, JobHandlers } from "./jobs/index";
 export { configureClosure } from "./jobs/closure";
 export type { ClosureSettings, ObjectStore } from "./jobs/closure";
 export type { JobsOptions } from "./routes/internal/jobs";
+export type { CapturedMessage, MailCaptureOptions } from "./routes/internal/mail-capture";
 export {
   audit,
   auditActions,

@@ -11,6 +11,8 @@ import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
 import { internalJobs } from "./routes/internal/jobs";
 import type { JobsOptions } from "./routes/internal/jobs";
+import { internalMailCapture } from "./routes/internal/mail-capture";
+import type { MailCaptureOptions } from "./routes/internal/mail-capture";
 import { registerRoutes } from "./routes/index";
 import { meBody, meRoute } from "./routes/me";
 
@@ -66,6 +68,13 @@ export interface ApiOptions {
    * sink. Without a secret the lines carry no actor field at all.
    */
   log?: LoggerOptions;
+  /**
+   * The browser suite's window onto the capture mailer (architecture 15 and
+   * 17.1): `GET /api/internal/e2e/mail` answers the captured messages and
+   * `DELETE` forgets them. The host passes it only when `E2E_MAIL_CAPTURE`
+   * is exactly `true` off Vercel; without it the path is not mounted.
+   */
+  mailCapture?: MailCaptureOptions | undefined;
 }
 
 /**
@@ -154,6 +163,9 @@ export function createApp(options: ApiOptions = {}) {
   // Outside /v1 and outside the OpenAPI document: a plain sub-app, not app.openapi().
   if (jobs) {
     app.route("/internal", internalJobs(jobs));
+  }
+  if (options.mailCapture) {
+    app.route("/internal", internalMailCapture(options.mailCapture));
   }
 
   app.openapi(healthRoute, (c) =>
