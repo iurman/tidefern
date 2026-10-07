@@ -1,6 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import type { MeLookup } from "@tidefern/api-client";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const session = vi.hoisted(() => {
   /** What `redirect()` throws here; the real one throws Next's own redirect error the same way. */
@@ -30,6 +30,11 @@ function given(lookup: MeLookup) {
 
 beforeEach(() => {
   given({ kind: "anonymous" });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
+  window.history.replaceState(null, "", "/");
 });
 
 describe("the /closing placeholder", () => {
@@ -72,5 +77,15 @@ describe("the /closing placeholder", () => {
     expect(
       screen.getByText("We could not load your account just now. Reload the page to try again."),
     ).toBeVisible();
+  });
+
+  it("takes an invitation link's fragment out of the address bar, since nothing here accepts it", async () => {
+    vi.useFakeTimers();
+    window.history.replaceState(null, "", "/closing#invitation=abc");
+    given({ kind: "closing" });
+    render(await ClosingPage());
+    vi.runAllTimers();
+    expect(window.location.hash).toBe("");
+    expect(window.location.pathname).toBe("/closing");
   });
 });

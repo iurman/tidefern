@@ -79,7 +79,7 @@ export function SignInForm() {
   );
 
   useEffect(() => {
-    // Strict mode runs this twice in development, and the second read finds the fragment gone.
+    // Strict mode runs this twice in development: both reads get the same token, removed once.
     const token = takeInvitationFragment();
     if (token !== null) invitation.current = token;
   }, []);

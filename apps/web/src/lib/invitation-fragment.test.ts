@@ -23,6 +23,7 @@ function host(hash: string, pathname = "/sign-in", search = "") {
 }
 
 afterEach(() => {
+  vi.useRealTimers();
   window.history.replaceState(null, "", "/");
   vi.restoreAllMocks();
 });
@@ -66,40 +67,73 @@ describe("invitationLanding", () => {
 });
 
 describe("takeInvitationFragment", () => {
-  it("returns the token and removes the fragment from the address bar, keeping path and query", () => {
+  it("returns the token at once and removes the fragment a task later, keeping path and query", () => {
+    vi.useFakeTimers();
     window.history.replaceState(null, "", "/sign-in?next=%2Fsettings#invitation=abc");
     expect(takeInvitationFragment()).toBe("abc");
+    // Still there while the page's mount effects run, before Next.js has folded replaceState in.
+    expect(window.location.hash).toBe("#invitation=abc");
+    vi.runAllTimers();
     expect(window.location.hash).toBe("");
     expect(window.location.pathname).toBe("/sign-in");
     expect(window.location.search).toBe("?next=%2Fsettings");
   });
 
+  it("removes it through the replaceState in place when the removal runs, not the one at the call", () => {
+    vi.useFakeTimers();
+    const { host: fake, replaceState: native } = host("#invitation=abc", "/sign-in", "?next=%2Fa");
+    expect(takeInvitationFragment(fake)).toBe("abc");
+    // Next.js's root router swaps in its own replaceState in an effect that runs after the page's.
+    const integrated = vi.fn((data: unknown, unused: string, url?: string | URL | null) =>
+      native(data, unused, url),
+    );
+    fake.history.replaceState = integrated;
+    vi.runAllTimers();
+    expect(integrated).toHaveBeenCalledTimes(1);
+    expect(integrated).toHaveBeenCalledWith(null, "", "/sign-in?next=%2Fa");
+    expect(fake.location).toEqual({ hash: "", pathname: "/sign-in", search: "?next=%2Fa" });
+  });
+
   it("leaves the address bar alone when the page was not opened from an invitation", () => {
+    vi.useFakeTimers();
     const { host: fake, replaceState } = host("#section-2");
     expect(takeInvitationFragment(fake)).toBeNull();
+    vi.runAllTimers();
     expect(replaceState).not.toHaveBeenCalled();
     expect(fake.location.hash).toBe("#section-2");
   });
 
   it("removes a malformed invitation fragment too, and hands back nothing", () => {
+    vi.useFakeTimers();
     const { host: fake, replaceState } = host("#invitation=%3Cscript%3E", "/welcome");
     expect(takeInvitationFragment(fake)).toBeNull();
+    vi.runAllTimers();
     expect(replaceState).toHaveBeenCalledTimes(1);
     expect(fake.location).toEqual({ hash: "", pathname: "/welcome", search: "" });
   });
 
-  it("reads the fragment once: a second read finds it gone", () => {
-    const { host: fake } = host(`#invitation=${minted}`, "/sharing");
+  // Changed on purpose in G10's review: the removal now waits a task for Next.js's router (see
+  // takeInvitationFragment), so a second read before it, such as React strict mode's second
+  // effect run in development, gets the same token instead of null. One removal still happens,
+  // and a read after it finds nothing.
+  it("hands the same token to a read before the removal, removes once, and finds nothing after", () => {
+    vi.useFakeTimers();
+    const { host: fake, replaceState } = host(`#invitation=${minted}`, "/sharing");
     expect(takeInvitationFragment(fake)).toBe(minted);
+    expect(takeInvitationFragment(fake)).toBe(minted);
+    vi.runAllTimers();
+    expect(replaceState).toHaveBeenCalledTimes(1);
     expect(takeInvitationFragment(fake)).toBeNull();
   });
 
   it("never logs the token", () => {
+    vi.useFakeTimers();
     const spies = (["log", "info", "warn", "error", "debug"] as const).map((method) =>
       vi.spyOn(console, method).mockImplementation(() => undefined),
     );
     window.history.replaceState(null, "", `/sharing#invitation=${minted}`);
     takeInvitationFragment();
+    vi.runAllTimers();
     for (const spy of spies) expect(spy).not.toHaveBeenCalled();
   });
 });

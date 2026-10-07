@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { DropInvitationFragment } from "@/components/drop-invitation-fragment";
 import { TideLine } from "@/components/public/tide-line";
 import { sessionMe } from "@/lib/api-server";
 import { SIGN_IN_PATH } from "@/lib/auth-client";
@@ -26,6 +27,10 @@ const SETTINGS_PATH = "/settings";
  * her everywhere but the closure, the export and the consents; anyone else
  * belongs in Settings. The session read is the layout's (`sessionMe`
  * shares one answer per request), and the layout carries the sign-out form.
+ * An invitation link opened by a closing account arrives here with its
+ * `#invitation=` fragment, which nothing here can accept, so the page
+ * takes it out of the address bar and forgets it; keep that when the view
+ * is built.
  */
 export default async function ClosingPage() {
   const lookup = await sessionMe();
@@ -43,6 +48,7 @@ export default async function ClosingPage() {
           : "The undo and your export arrive on this page soon. You can sign out below."}
       </p>
       <TideLine className={styles.tide} />
+      <DropInvitationFragment />
     </section>
   );
 }
