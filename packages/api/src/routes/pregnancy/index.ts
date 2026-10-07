@@ -3,6 +3,7 @@ import type { Context } from "hono";
 import { and, asc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
 import {
   changeDueDate,
+  compareDates,
   endPregnancy,
   isCalendarDate,
   shouldRedate,
@@ -688,8 +689,15 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
         try {
           result = endPregnancy(toRecord(row), { endedAt: body.endedAt, reason: body.reason });
         } catch (error) {
-          if (error instanceof RangeError) return { status: 422 as const };
+          if (error instanceof RangeError)
+            return { status: 422 as const, refused: "early" as const };
           throw error;
+        }
+        // An ending is something that has happened: a day after today in her
+        // zone, on the calendar clock, is refused before anything is written.
+        const today = c.var.clock.today(await subjectTimeZone(tx, row.subjectId), now);
+        if (compareDates(body.endedAt, today) > 0) {
+          return { status: 422 as const, refused: "future" as const };
         }
         const [updated] = await tx
           .update(schema.pregnancies)
@@ -726,7 +734,6 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
               ),
             );
         }
-        const today = c.var.clock.today(await subjectTimeZone(tx, row.subjectId), now);
         return { status: 200 as const, row: updated, resolved, today };
       },
       db,
@@ -734,9 +741,11 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
     if (outcome.status === 404) return problem(c, 404, "not_found");
     if (outcome.status === 409) return ended(c);
     if (outcome.status === 422) {
-      return problem(c, 422, "validation_failed", {
-        errors: [{ path: "endedAt", message: "Not a day after the pregnancy began." }],
-      });
+      const message =
+        outcome.refused === "future"
+          ? "Not a day that has happened yet."
+          : "Not a day after the pregnancy began.";
+      return problem(c, 422, "validation_failed", { errors: [{ path: "endedAt", message }] });
     }
     const view = serializePregnancy(outcome.row, outcome.resolved.access, outcome.today);
     if (view === null || view.status !== "ended") return problem(c, 404, "not_found");
