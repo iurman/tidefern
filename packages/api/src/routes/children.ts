@@ -692,12 +692,18 @@ const EVENT_MOMENT_TEXT = sql<string>`to_char(${EVENT_MOMENT} at time zone 'UTC'
 
 const MOMENT_TEXT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
 
-/** A moment as `EVENT_MOMENT_TEXT` writes it, for a time that exists (2026-02-31 does not). */
+/**
+ * A moment as `EVENT_MOMENT_TEXT` writes it, for a time that exists (2026-02-31 does not)
+ * and that Postgres can cast: JavaScript reads year 0000 as 1 BC, but Postgres has no year
+ * zero and refuses it, so a moment must fall in year 0001 or later.
+ */
 function isMomentText(value: string): boolean {
   if (!MOMENT_TEXT.test(value)) return false;
   const parsed = new Date(value);
   return (
-    !Number.isNaN(parsed.getTime()) && parsed.toISOString().slice(0, 23) === value.slice(0, 23)
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.getUTCFullYear() >= 1 &&
+    parsed.toISOString().slice(0, 23) === value.slice(0, 23)
   );
 }
 

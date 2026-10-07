@@ -1,5 +1,5 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { addDays, todayIn } from "@tidefern/core";
 import type { KeyProvider } from "@tidefern/crypto";
 import { schema } from "@tidefern/db";
@@ -1572,6 +1572,8 @@ describe("events newest first", () => {
       `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: moment, i: "not-an-id" })}`,
       `order=desc&cursor=${forged({ o: "desc", d: "2026-02-31", t: moment, i: ID(1) })}`,
       `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: "2026-02-31T05:00:00.000000Z", i: ID(1) })}`,
+      // JavaScript reads year 0000 as 1 BC; Postgres has no year zero, so the cast would fail.
+      `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: "0000-01-01T00:00:00.000000Z", i: ID(1) })}`,
       `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: "yesterday", i: ID(1) })}`,
       `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, i: ID(1) })}`,
       `cursor=${forged({ d: "2026-13-01", i: ID(1) })}`,
@@ -1584,6 +1586,49 @@ describe("events newest first", () => {
       ).toEqual(["cursor"]);
     }
     await expectProblem(await read("order=newest"), 422, "validation_failed");
+  });
+
+  it("keeps the cursor's moment to the microsecond, so two events logged in one millisecond both come back", async () => {
+    // Two diapers without a time on a day of their own, written straight to the table so
+    // their logged moments sit 100 microseconds apart inside one millisecond. The newer one
+    // has the lower id, so only the moment orders them. A cursor rounded to the millisecond,
+    // as a JavaScript Date would round it, skips the older one or repeats the newer one.
+    const DAY_THREE = addDays(BORN, 22);
+    const loggedAt = (micros: string) => sql`${`${DAY_THREE}T10:00:00.123${micros}Z`}::timestamptz`;
+    await db.insert(schema.childEvents).values([
+      {
+        id: ID(9),
+        childId: wrenId,
+        authorId: DANA,
+        kind: "diaper",
+        date: DAY_THREE,
+        createdAt: loggedAt("200"),
+        updatedAt: loggedAt("200"),
+      },
+      {
+        id: ID(10),
+        childId: wrenId,
+        authorId: DANA,
+        kind: "diaper",
+        date: DAY_THREE,
+        createdAt: loggedAt("100"),
+        updatedAt: loggedAt("100"),
+      },
+    ]);
+
+    const seen: ChildEvent[] = [];
+    let cursor: string | null = null;
+    // Two rows need two pages; the bound makes a cursor that repeats a row fail, not loop.
+    for (let pages = 0; pages < 4; pages += 1) {
+      const query: string = `order=desc&from=${DAY_THREE}&to=${DAY_THREE}&limit=1${cursor === null ? "" : `&cursor=${cursor}`}`;
+      const page: Page = await json<Page>(await read(query));
+      seen.push(...page.items);
+      cursor = page.nextCursor;
+      if (cursor === null) break;
+    }
+    expect(seen.map((item) => item.id)).toEqual([ID(9), ID(10)]);
+    // The API itself shows both at the same millisecond.
+    expect(new Set(seen.map((item) => item.createdAt)).size).toBe(1);
   });
 });
 
