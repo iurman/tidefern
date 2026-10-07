@@ -261,7 +261,11 @@ tests and the production build. CI runs the same plus the browser suite.
 
 - Everything under `/api/v1`. Additive changes only inside `v1`; a breaking
   change means `/api/v2` with an overlap period, because installed mobile
-  builds run for months.
+  builds run for months. Until the first installed client ships, the web
+  app deploys with the API from one commit, so the lead may approve an
+  error-level change that no deployed code calls by a dated line in
+  `openapi/BREAKING.md`, which the `oasdiff` step reads as its ignore file;
+  the first such line is E12's required guardian consent on child creation.
 - `packages/schemas` imports `z` from plain `zod` and names reusable
   components with `.meta({ id, description })`, which zod-to-openapi 9
   reads exactly like `.openapi("Name")`; `z` from `@hono/zod-openapi` and
@@ -1551,7 +1555,7 @@ separately from an application defect.
 | `ci.yml` | push to `main`, pull requests, `workflow_dispatch` for a pre-pull-request run; on pull requests it also rejects commit messages that contain an em dash; from task B11 it starts a `postgres:18.6` service and migrates and seeds it before the build | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
 | `deploy-verify.yml`                | `deployment_status` success (sent by Vercel for every deployment) | curl the deployed home page and `/api/v1/health` with the protection bypass header, then the `@smoke` Playwright subset against the deployment URL; failure shows on the pull request                 |
 | `codeql.yml`                       | push, pull requests, weekly                                       | CodeQL security-and-quality for JavaScript and TypeScript                                                                                                                                             |
-| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` pinned by digest (`b9325c9e0a27ab65b0da3b766522cedec6be81dc`, v0.1.18) against the base branch's `openapi/v1.json`, `fail-on: ERR`, and `review: false` because the default uploads both specs to oasdiff.com; the job keeps `contents: read` and reads the result from the job summary |
+| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` pinned by digest (`b9325c9e0a27ab65b0da3b766522cedec6be81dc`, v0.1.18) against the base branch's `openapi/v1.json`, `fail-on: ERR` with `err-ignore: openapi/BREAKING.md` (the lead's dated approvals, 5.1), and `review: false` because the default uploads both specs to oasdiff.com; the job keeps `contents: read` and reads the result from the job summary |
 | Renovate (`.github/renovate.json`) | weekly | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged, action digests pinned, `typescript` held below 7 and the web app's `eslint` below 10 for the reasons in section 4, 0.x packages never automerged. Automerge stays off; if it is ever turned on, the `main` ruleset must require zero approvals or list the Renovate app as a bypass actor, because any required approval leaves its pull requests waiting forever |
 
 Every action is pinned to a commit digest with its version in a comment

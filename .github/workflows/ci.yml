@@ -140,7 +140,8 @@ jobs:
       # review: false keeps both specs in CI (the default uploads them to oasdiff.com), and with it
       # the action sends no telemetry and posts no comment; the empty token makes sure of the
       # latter, so the job keeps contents: read. The result is in the step log and as annotations
-      # on the changed lines; fail-on: ERR fails the job on any error-level change.
+      # on the changed lines; fail-on: ERR fails the job on any error-level change except one the
+      # lead approved in openapi/BREAKING.md (err-ignore: a dated line per change, with its reason).
       - name: No breaking change to the v1 contract (pull requests)
         if: github.event_name == 'pull_request'
         uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
@@ -148,6 +149,7 @@ jobs:
           base: node_modules/.cache/oasdiff/base-v1.json
           revision: openapi/v1.json
           fail-on: ERR
+          err-ignore: openapi/BREAKING.md
           review: false
           github-token: ""
 
