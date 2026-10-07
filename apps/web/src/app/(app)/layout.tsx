@@ -1,9 +1,8 @@
 import Link from "next/link";
-import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import type { ShellProfile } from "@/components/ui/shell-destinations";
-import { readSessionMe } from "@/lib/api-server";
+import { sessionMe } from "@/lib/api-server";
 import { SIGN_IN_PATH } from "@/lib/auth-client";
 import { CurrentShell } from "./current-shell";
 import styles from "./layout.module.css";
@@ -16,8 +15,9 @@ const fallbackProfile: ShellProfile = { stage: "none", hasChild: false };
 
 /**
  * The authenticated frame for every route in the group (DESIGN.md section
- * 2): the session is read once here through GET /api/v1/me on the
- * in-process client (lib/api-server.ts), a visitor without a session is
+ * 2): the session is read once per request through GET /api/v1/me on the
+ * in-process client (`sessionMe` in lib/api-server.ts, which pages call
+ * too and get the same answer), a visitor without a session is
  * sent to sign in before anything renders, and the destinations follow the
  * profile's stage and children. A read that failed rather than answered 401
  * keeps the person here with the always-on destinations and says so; the
@@ -25,7 +25,7 @@ const fallbackProfile: ShellProfile = { stage: "none", hasChild: false };
  * and the two policy links stay reachable in a quiet line under the page.
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
-  const lookup = await readSessionMe(await headers());
+  const lookup = await sessionMe();
   if (lookup.kind === "anonymous") redirect(SIGN_IN_PATH);
   const profile: ShellProfile =
     lookup.kind === "ok"

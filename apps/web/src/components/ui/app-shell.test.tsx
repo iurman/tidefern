@@ -73,6 +73,15 @@ describe("AppShell", () => {
     expect(onQuickLog).toHaveBeenCalledTimes(1);
   });
 
+  it("leaves the quick-log button out for the none stage, which is never asked a body question", () => {
+    render(
+      <AppShell stage="none" hasChild current="today" onQuickLog={vi.fn()}>
+        <p>Today</p>
+      </AppShell>,
+    );
+    expect(screen.queryByRole("button", { name: "Log today" })).not.toBeInTheDocument();
+  });
+
   it("never puts a health word in an attribute", () => {
     const { container } = render(
       <AppShell stage="pregnancy" hasChild current="journey">

@@ -9,6 +9,8 @@ export interface TabBarProps {
   current: DestinationKey;
   /** The quick-log action: what the page on screen registered with `useQuickLog` (quick-log.tsx). */
   onQuickLog?: () => void;
+  /** Whether the quick-log button shows; Today by default, and never for a stage that asks no body question. */
+  quickLog?: boolean;
 }
 
 /**
@@ -17,7 +19,12 @@ export interface TabBarProps {
  * destination the person is on, the quick-log button on Today, and
  * safe-area padding for phones with a home indicator.
  */
-export function TabBar({ destinations, current, onQuickLog }: TabBarProps) {
+export function TabBar({
+  destinations,
+  current,
+  onQuickLog,
+  quickLog = current === "today",
+}: TabBarProps) {
   return (
     <nav className={styles.bar} aria-label="Main">
       <ul className={styles.list}>
@@ -37,7 +44,7 @@ export function TabBar({ destinations, current, onQuickLog }: TabBarProps) {
             </li>
           );
         })}
-        {current === "today" ? (
+        {quickLog ? (
           <li className={styles.item}>
             <button
               type="button"

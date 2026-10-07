@@ -34,15 +34,27 @@ export function AppShell({
   children,
 }: AppShellProps) {
   const destinations = shellDestinations({ stage, hasChild });
+  // The quick log opens the day sheet, a body question the none stage is never asked (DESIGN.md 3.3).
+  const quickLog = current === "today" && stage !== "none";
   const className = fit === "content" ? `${styles.shell} ${styles.content}` : styles.shell;
   // The root is the size container and the frame is the grid, because a
   // container query never matches the container element itself.
   return (
     <div className={className}>
       <div className={styles.frame}>
-        <Rail destinations={destinations} current={current} onQuickLog={onQuickLog} />
+        <Rail
+          destinations={destinations}
+          current={current}
+          onQuickLog={onQuickLog}
+          quickLog={quickLog}
+        />
         <div className={styles.page}>{children}</div>
-        <TabBar destinations={destinations} current={current} onQuickLog={onQuickLog} />
+        <TabBar
+          destinations={destinations}
+          current={current}
+          onQuickLog={onQuickLog}
+          quickLog={quickLog}
+        />
       </div>
     </div>
   );

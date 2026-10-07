@@ -38,9 +38,11 @@ async function sessionCookies(page: Page, origin: string): Promise<CookiesToAdd>
   return [{ name: "better-auth.session_token", value: "e2e-canned", url: origin }];
 }
 
-async function signedIn(page: Page) {
+/** Adds the session cookies; true when they belong to a real seeded session. */
+async function signedIn(page: Page): Promise<boolean> {
   const base = test.info().project.use.baseURL ?? "http://127.0.0.1:3000";
   await page.context().addCookies(await sessionCookies(page, new URL(base).origin));
+  return seededCookies !== null;
 }
 
 /** CSS locators, because role queries skip whichever navigation is hidden at this width. */
@@ -106,10 +108,17 @@ test("the rail shows at 1440 px and the tab bar at 390 px, the current destinati
 });
 
 test("the quick-log action shows on Today and nowhere else", async ({ page }) => {
-  await signedIn(page);
+  const seeded = await signedIn(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/today");
-  await expect(shellNavigation(page).bar.getByRole("button", { name: "Log today" })).toBeVisible();
+  const quickLog = shellNavigation(page).bar.getByRole("button", { name: "Log today" });
+  if (seeded) {
+    // Noor's stage is cycle, which logs days.
+    await expect(quickLog).toBeVisible();
+  } else {
+    // Without a database the shell falls back to the none stage, which is never asked a body question.
+    await expect(quickLog).toHaveCount(0);
+  }
   await page.goto("/settings/sound");
   await expect(page.getByRole("button", { name: "Log today" })).toHaveCount(0);
 });
