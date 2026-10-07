@@ -383,6 +383,53 @@ describe("signing out", () => {
     expect(await actionsOf(fa)).toEqual(once);
   });
 
+  test("a password reset ends every session and writes no session.revoke, even from a signed-in device", async () => {
+    const nia = await signUp("nia@example.com");
+    const laptop = new Device();
+    await signIn(laptop, "nia@example.com");
+    await signIn(new Device(), "nia@example.com");
+    const requested = await call(laptop, "/request-password-reset", {
+      email: "nia@example.com",
+      redirectTo: "/reset",
+    });
+    expect(requested.status).toBe(200);
+    const link = linkIn(mailer.last("nia@example.com")?.text ?? "");
+    if (link === undefined) throw new Error("no reset link for nia@example.com");
+    const token = new URL(link).pathname.split("/").at(-1);
+
+    const reset = await call(laptop, "/reset-password", {
+      newPassword: "a new horse battery staple",
+      token,
+    });
+    expect(reset.status).toBe(200);
+    expect(await liveSessionsOf(nia)).toBe(0);
+    expect(await actionsOf(nia)).toEqual(["session.sign_in", "session.sign_in"]);
+  });
+
+  test("ending sessions outside any request, as a job or a script would, writes nothing and finishes", async () => {
+    const lev = await signUp("lev@example.com");
+    const { token } = await signIn(new Device(), "lev@example.com");
+    await signIn(new Device(), "lev@example.com");
+    const { internalAdapter } = await auth.$context;
+
+    // Outside a request Better Auth hands the delete hook no context at all.
+    await internalAdapter.deleteSession(token);
+    expect(await sessionExists(token)).toBe(false);
+    await internalAdapter.deleteUserSessions(lev);
+    expect(await liveSessionsOf(lev)).toBe(0);
+    expect(await actionsOf(lev)).toEqual(["session.sign_in", "session.sign_in"]);
+
+    // Deleting a person ends her sessions first; the hook must not stop it before her
+    // accounts and her user row go.
+    await signIn(new Device(), "lev@example.com");
+    await internalAdapter.deleteUser(lev);
+    const left = await harness.db
+      .select({ id: schema.user.id })
+      .from(schema.user)
+      .where(eq(schema.user.id, lev));
+    expect(left).toEqual([]);
+  });
+
   test("signing out everywhere writes one row when another device was signed in, and none when the other had expired", async () => {
     const gus = await signUp("gus@example.com");
     const laptop = new Device();
@@ -466,7 +513,7 @@ describe("when the row cannot be written", () => {
     }
   }
 
-  test("a sign-in fails, hands out no session cookie, and the log names no one", async () => {
+  test("a sign-in fails, hands out no session cookie, leaves no session behind, and the log names no one", async () => {
     const jo = await signUp("jo@example.com");
     const device = new Device();
     const { response, printed } = await whileAuditRefused(() =>
@@ -475,10 +522,55 @@ describe("when the row cannot be written", () => {
     expect(response.status).toBe(500);
     expect(device.holdsSession()).toBe(false);
     expect(await actionsOf(jo)).toEqual([]);
-    // Better Auth logs what the hook threw: the action and the error name, never the id.
+    // Nobody holds the session the sign-in made, so it is ended, not left on her devices list.
+    expect(await liveSessionsOf(jo)).toBe(0);
+    // Better Auth logs what the hook threw: the action and the refusal's code, never the id.
     expect(printed).toContain("SessionAuditError");
+    expect(printed).toContain("42501");
     expect(printed).not.toContain(jo);
     expect(printed).not.toContain("jo@example.com");
+
+    // Trying again once the row can be written lists one device, the one she holds.
+    await signIn(device, "jo@example.com");
+    const listed = await call(device, "/list-sessions");
+    expect(listed.status).toBe(200);
+    expect(await listed.json()).toHaveLength(1);
+    expect(await actionsOf(jo)).toEqual(["session.sign_in"]);
+  });
+
+  test("when that session cannot be ended either, the audit failure is still the error and no log line quotes the token", async () => {
+    const lia = await signUp("lia@example.com");
+    await harness.db.execute(
+      sql`create function refuse_session_delete() returns trigger language plpgsql as $$
+        begin raise exception 'session deletes are refused in this test'; end $$`,
+    );
+    await harness.db.execute(
+      sql`create trigger refuse_session_delete before delete on session for each row execute function refuse_session_delete()`,
+    );
+    try {
+      const device = new Device();
+      const { response, printed } = await whileAuditRefused(() =>
+        call(device, "/sign-in/email", { email: "lia@example.com", password: PASSWORD }),
+      );
+      expect(response.status).toBe(500);
+      expect(device.holdsSession()).toBe(false);
+      expect(await actionsOf(lia)).toEqual([]);
+      const [left] = await harness.db
+        .select({ token: schema.session.token })
+        .from(schema.session)
+        .where(eq(schema.session.userId, lia));
+      if (left === undefined) throw new Error("the refused delete should have left the session");
+      expect(printed).toContain("SessionAuditError");
+      // The leftover is reported by the refusal's code alone (P0001, which the trigger raises).
+      expect(printed).toContain("could not be ended");
+      expect(printed).toContain("P0001");
+      expect(printed).not.toContain(left.token);
+      expect(printed).not.toContain(lia);
+      expect(printed).not.toContain("lia@example.com");
+    } finally {
+      await harness.db.execute(sql`drop trigger refuse_session_delete on session`);
+      await harness.db.execute(sql`drop function refuse_session_delete()`);
+    }
   });
 
   test("a device sign-out answers an error although the device was signed out, and the log names no one", async () => {
@@ -493,6 +585,7 @@ describe("when the row cannot be written", () => {
     expect(await sessionExists(token)).toBe(false);
     expect(await actionsOf(kai)).toEqual(["session.sign_in", "session.sign_in"]);
     expect(printed).toContain("SessionAuditError");
+    expect(printed).toContain("42501");
     expect(printed).not.toContain(kai);
     expect(printed).not.toContain("kai@example.com");
   });

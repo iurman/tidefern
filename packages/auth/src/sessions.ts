@@ -28,17 +28,31 @@ export interface SessionAuditOptions {
 }
 
 /**
+ * The name and code of a failed database call, which quote nothing. A failed
+ * query throws Drizzle's own error, which has neither (its name is plain
+ * `Error`) and whose message quotes the statement's parameters; the driver's
+ * error it keeps as the cause carries the SQLSTATE, so a log line can tell a
+ * refused permission (42501) from a lost connection. An error with no cause,
+ * such as a failed connect, is described as it is.
+ */
+function describeFailure(error: unknown): string {
+  return describeError(
+    error instanceof Error && error.cause instanceof Error ? error.cause : error,
+  );
+}
+
+/**
  * What a failed audit write throws in place of the database's own error,
  * whose message and parameters quote the person's id. Better Auth logs
  * whatever a hook throws, and architecture 9.1 allows no user id in a log
- * line, so this keeps the action and the underlying error's name and code
- * only, as `describeError()` does for the outbox.
+ * line, so this keeps the action and the failure's name and code only
+ * (`describeFailure()`), as `describeError()` does for the outbox.
  */
 export class SessionAuditError extends Error {
   override readonly name = "SessionAuditError";
 
   constructor(action: AuditAction, underlying: unknown) {
-    super(`The ${action} audit row was not written: ${describeError(underlying)}.`);
+    super(`The ${action} audit row was not written: ${describeFailure(underlying)}.`);
   }
 }
 
@@ -105,8 +119,10 @@ async function record(
  * Each row is written after the fact it records and in a transaction of
  * its own. If the write fails the request fails with a `SessionAuditError`:
  * a sign-in answers an error without its session cookie, so no usable
- * session goes unrecorded; a revocation answers an error although the
- * device was signed out, which the devices list then shows.
+ * session goes unrecorded, and ends the session it made, which would
+ * otherwise stay on her devices list, held by nobody, until it expired; a
+ * revocation answers an error although the device was signed out, which
+ * the devices list then shows.
  */
 export function sessionAudit(options: SessionAuditOptions = {}) {
   const { database } = options;
@@ -122,7 +138,10 @@ export function sessionAudit(options: SessionAuditOptions = {}) {
           session: {
             delete: {
               after: async (session, context) => {
-                if (context === null || !REVOKE_PATHS.has(context.path)) return;
+                // Typed `| null`, but a session ended outside a request (a job or a
+                // script through the internal adapter) passes undefined. Neither
+                // is a device sign-out.
+                if (context == null || !REVOKE_PATHS.has(context.path)) return;
                 const current = context.context.session;
                 if (current === null) return;
                 const mine = session.userId === current.session.userId;
@@ -149,7 +168,23 @@ export function sessionAudit(options: SessionAuditOptions = {}) {
             // A rotation or a refresh hands the same person a session she held.
             const held = ctx.context.session;
             if (held !== null && held.session.userId === established.session.userId) return;
-            await record(database, established.session.userId, auditActions.sessionSignIn);
+            try {
+              await record(database, established.session.userId, auditActions.sessionSignIn);
+            } catch (failure) {
+              // The 500 goes out without the cookie, so nobody holds this session:
+              // end it. The path is a sign-in path, so the delete hook writes nothing.
+              try {
+                await ctx.context.internalAdapter.deleteSession(established.session.token);
+                ctx.context.setNewSession(null);
+              } catch (error) {
+                // The audit failure stays the error to report. The delete's own
+                // error quotes the token, so this line keeps its name and code.
+                ctx.context.logger.error(
+                  `The session of a sign-in whose audit row was not written could not be ended: ${describeFailure(error)}.`,
+                );
+              }
+              throw failure;
+            }
           }),
         },
       ],
