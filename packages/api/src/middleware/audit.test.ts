@@ -1,8 +1,12 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { eq } from "drizzle-orm";
-import { schema, withActor } from "@tidefern/db";
+import { auditActions as sharedAuditActions, schema, withActor } from "@tidefern/db";
+import { ActivityPage } from "@tidefern/schemas";
 
-import { ANNA, BEN, CARA, createActorFixture } from "../test/actors";
+import { createApp } from "../app";
+import { KEK, withInjected } from "../test/account";
+import { ANNA, BEN, CARA, TOKENS, createActorFixture } from "../test/actors";
+import { sessionHeaders } from "../test/auth-fake";
 import type { ApiTestDatabase } from "../test/database";
 import { audit, auditActions, readDedupeKey } from "./audit";
 
@@ -267,5 +271,78 @@ describe("audit", () => {
     expect(await count(BEN)).toBe(6);
     expect(await count(ANNA)).toBe(2);
     expect(await count(CARA)).toBe(2);
+  });
+});
+
+describe("the session names (task C7)", () => {
+  let fixture: Awaited<ReturnType<typeof createActorFixture>>;
+
+  beforeAll(async () => {
+    fixture = await createActorFixture();
+  });
+  afterAll(async () => {
+    await fixture.harness.close();
+  });
+
+  it("are the shared vocabulary the session hooks in packages/auth write from", () => {
+    expect(auditActions).toBe(sharedAuditActions);
+    expect(auditActions.sessionSignIn).toBe("session.sign_in");
+    expect(auditActions.sessionRevoke).toBe("session.revoke");
+  });
+
+  it("are listed by the activity route for the person and for nobody else", async () => {
+    // Rows shaped as the hooks write them: the person as actor and subject,
+    // no category, no child. A minute apart, so newest first is one order.
+    const signedIn = new Date("2026-10-05T07:00:00.000Z");
+    const signedOut = new Date("2026-10-05T07:01:00.000Z");
+    for (const [action, occurredAt] of [
+      [auditActions.sessionSignIn, signedIn],
+      [auditActions.sessionRevoke, signedOut],
+    ] as const) {
+      await withActor(
+        ANNA,
+        (tx) => audit(tx, { actorId: ANNA, action, subjectId: ANNA, occurredAt }),
+        fixture.harness.db,
+      );
+    }
+    const app = withInjected(
+      createApp({ auth: fixture.auth, db: fixture.harness.db, log: { sink: () => undefined } }),
+      { db: fixture.harness.db, keys: KEK },
+    );
+    const activityOf = async (token: string) => {
+      const response = await app.request("/api/v1/me/activity", { headers: sessionHeaders(token) });
+      expect(response.status).toBe(200);
+      return ActivityPage.parse(await response.json());
+    };
+
+    const anna = await activityOf(TOKENS.anna);
+    expect(
+      anna.items.map(({ action, actorId, subjectId, occurredAt }) => ({
+        action,
+        actorId,
+        subjectId,
+        occurredAt,
+      })),
+    ).toEqual([
+      {
+        action: "session.revoke",
+        actorId: ANNA,
+        subjectId: ANNA,
+        occurredAt: signedOut.toISOString(),
+      },
+      {
+        action: "session.sign_in",
+        actorId: ANNA,
+        subjectId: ANNA,
+        occurredAt: signedIn.toISOString(),
+      },
+    ]);
+    for (const item of anna.items) {
+      expect(item).not.toHaveProperty("category");
+      expect(item).not.toHaveProperty("childId");
+    }
+    for (const token of [TOKENS.ben, TOKENS.cara]) {
+      expect((await activityOf(token)).items).toEqual([]);
+    }
   });
 });

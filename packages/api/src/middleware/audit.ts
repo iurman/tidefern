@@ -1,38 +1,17 @@
 import { sql } from "drizzle-orm";
 import { todayIn } from "@tidefern/core";
-import { schema } from "@tidefern/db";
-import type { Transaction } from "@tidefern/db";
+import { auditActions, isAuditAction, schema } from "@tidefern/db";
+import type { AuditAction, Transaction } from "@tidefern/db";
 import { jobId as uuidv7 } from "@tidefern/db/jobs";
 
 /**
  * The neutral action names the audit log holds (architecture 8.3 step 6).
- * A read of a shared category by someone other than the subject, a write
- * by such a partner, and every change to a grant. The set grows with the
- * E tasks; a name never carries a category or a fact, the columns do.
+ * The list lives in packages/db since task C7, because the session hooks in
+ * packages/auth write the same log and cannot import this package; the
+ * routes keep importing it from here.
  */
-export const auditActions = {
-  partnerRead: "partner.read",
-  partnerWrite: "partner.write",
-  grantCreate: "grant.create",
-  grantUpdate: "grant.update",
-  grantRevoke: "grant.revoke",
-  noteShare: "note.share",
-  // Sharing (task E7): an invitation sent, withdrawn or accepted. The
-  // subject is the actor herself; the activity view lists them with grants.
-  invitationCreate: "invitation.create",
-  invitationWithdraw: "invitation.withdraw",
-  invitationAccept: "invitation.accept",
-  /** The person streamed an export of her own data (task E8). */
-  exportCreate: "export.create",
-  /** The person asked to close her account; every other session and every grant went with it (task E8). */
-  accountClose: "account.close",
-  /** The person cancelled the closure inside its undo window (task E8). */
-  accountCloseUndo: "account.close.undo",
-} as const;
-
-export type AuditAction = (typeof auditActions)[keyof typeof auditActions];
-
-const ACTIONS: ReadonlySet<string> = new Set(Object.values(auditActions));
+export { auditActions };
+export type { AuditAction };
 
 export type AuditCategory = (typeof schema.dataCategoryValues)[number];
 
@@ -92,7 +71,7 @@ export function readDedupeKey(
  * day's existing row.
  */
 export async function audit(tx: Transaction, event: AuditEvent): Promise<string | null> {
-  if (!ACTIONS.has(event.action)) {
+  if (!isAuditAction(event.action)) {
     throw new TypeError(`unknown audit action: ${event.action}`);
   }
   const dedupeKey = event.action === auditActions.partnerRead ? readDedupeKey(event) : null;
