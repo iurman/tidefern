@@ -311,10 +311,15 @@ describe("the 0007 migration", () => {
     expect(definers.map((row) => row.signature as string).sort()).toEqual(
       [...DEFINER_HELPERS, ...DEFINER_WRITERS].sort(),
     );
+    // Task E10's migration (0011) moved pg_temp to the end of every
+    // function's search_path; 0007 wrote pg_catalog, public, which let a
+    // temporary table the app role creates stand in for a real one
+    // (src/e10-closure-grants.test.ts shows each attempt failing now).
+    const path = "search_path=pg_catalog, public, pg_temp";
     for (const row of definers) {
       const writer = DEFINER_WRITERS.includes(row.signature as string);
       expect(row.provolatile).toBe(writer ? "v" : "s");
-      expect(row.proconfig).toEqual(["search_path=pg_catalog, public", "app.policy_helper=on"]);
+      expect(row.proconfig).toEqual([path, "app.policy_helper=on"]);
     }
 
     // The three readers of the transaction settings run as the caller: an
@@ -330,25 +335,25 @@ describe("the 0007 migration", () => {
       {
         signature: "actor_email()",
         provolatile: "s",
-        proconfig: ["search_path=pg_catalog, public"],
+        proconfig: [path],
         procost: 100,
       },
       {
         signature: "current_actor()",
         provolatile: "s",
-        proconfig: ["search_path=pg_catalog, public"],
+        proconfig: [path],
         procost: 1,
       },
       {
         signature: "in_policy_helper()",
         provolatile: "s",
-        proconfig: ["search_path=pg_catalog, public"],
+        proconfig: [path],
         procost: 1,
       },
       {
         signature: "is_system()",
         provolatile: "s",
-        proconfig: ["search_path=pg_catalog, public"],
+        proconfig: [path],
         procost: 1,
       },
     ]);

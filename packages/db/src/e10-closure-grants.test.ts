@@ -26,8 +26,8 @@ import { createTestDatabase } from "./test/harness";
  * step of account closure that the closing person's own policies refuse,
  * and the marker terms it writes through. Everything runs through
  * withActor(), which drops to tidefern_app, the role the request pool is on
- * CI and in production; the last block re-owns the function to a role that
- * cannot bypass RLS, the shape of a Neon owner under FORCE.
+ * CI and in production; the bound-owner block re-owns the function to a
+ * role that cannot bypass RLS, the shape of a Neon owner under FORCE.
  *
  * The cast: Anna closes. She shares her history with Ben, holds Ben's
  * status card and a child grant Ben gave her over Lu, and still owns a
@@ -36,7 +36,12 @@ import { createTestDatabase } from "./test/harness";
  * relationship to him, so her own audit policy refuses a row about him.
  * Ben shares his status with Cara, which is not hers. A grant of hers
  * revoked last month and a tombstoned one stay as they are. Dana has no
- * relationship with anyone until the last block.
+ * relationship with anyone until the bound-owner block.
+ *
+ * The same migration ends the search_path of every function in public with
+ * pg_temp, and the last block proves on a database of its own that a
+ * temporary table the app role creates under a real table's name no longer
+ * stands in for it.
  */
 let harness: Harness;
 
@@ -91,8 +96,8 @@ async function revocationsBy(actor: string): Promise<Row[]> {
   );
 }
 
-async function openClosureFor(userId: string, requestId: string) {
-  await harness.db.insert(schema.dataRequests).values({
+async function openClosureFor(userId: string, requestId: string, on: Harness = harness) {
+  await on.db.insert(schema.dataRequests).values({
     id: requestId,
     userId,
     kind: "closure",
@@ -220,10 +225,10 @@ afterAll(async () => {
 
 describe("migration 0011", () => {
   test("applies from empty in journal order", async () => {
-    await expectJournalApplied(harness, "0011_closure_grant_revocation");
+    await expectJournalApplied(harness, "0011_closure_grant_revocation_and_search_path");
   });
 
-  test("declares revoke_closure_grants SECURITY DEFINER and VOLATILE with the B8 conventions, one instant in, a boolean out", async () => {
+  test("declares revoke_closure_grants SECURITY DEFINER and VOLATILE with pg_temp last and the marker, one instant in, a boolean out", async () => {
     const functions = rows(
       await harness.db.execute(
         sql`select p.oid::regprocedure::text as signature, p.prosecdef as definer, p.provolatile as volatility, p.proconfig as config, pg_catalog.pg_get_function_result(p.oid) as result from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace and p.proname = 'revoke_closure_grants'`,
@@ -234,7 +239,7 @@ describe("migration 0011", () => {
         signature: "revoke_closure_grants(timestamp with time zone)",
         definer: true,
         volatility: "v",
-        config: ["search_path=pg_catalog, public", "app.policy_helper=on"],
+        config: ["search_path=pg_catalog, public, pg_temp", "app.policy_helper=on"],
         result: "boolean",
       },
     ]);
@@ -569,5 +574,217 @@ describe("with the function owned by a role that cannot bypass RLS", () => {
     const [annaToCara] = await grantRows([ANNA_TO_CARA_CHILD]);
     expect(annaToCara?.revokedAt?.toISOString()).toBe(CLOSING_AT.toISOString());
     expect(annaToCara?.version).toBe(2);
+  });
+});
+
+/**
+ * B8 and B14 wrote SET search_path = pg_catalog, public. With pg_temp left
+ * out of the path, Postgres searches the session's temporary schema first
+ * for tables and types, and the app role may create temporary tables, so it
+ * could hand any function its own copy of a table. Each attempt below
+ * worked with that path; the migration now ends every path with pg_temp.
+ * Every attempt discards the session's cached plans first, as an attacker
+ * on a fresh connection would have none, so no attempt leans on the order
+ * the tests run in. A database of its own: Anna guards Mo and has verified
+ * her address, Ben guards nobody, and they share one grant each way.
+ */
+describe("a temporary table named like a real one", () => {
+  const HARDENED = "search_path=pg_catalog, public, pg_temp";
+  const ANNA_TO_BEN_HERE = id(60);
+  const BEN_TO_ANNA_HERE = id(61);
+  const call = sql`select revoke_closure_grants(${CLOSING_AT.toISOString()}::timestamptz) as ok`;
+  let fresh: Harness;
+
+  /** Runs `fn` as `actor` on this block's database, with no cached plan. */
+  function attempt<T>(actor: string, fn: (tx: Transaction) => Promise<T>): Promise<T> {
+    return withActor(
+      actor,
+      async (tx) => {
+        await tx.execute(sql`discard plans`);
+        return fn(tx);
+      },
+      fresh.db,
+    );
+  }
+
+  async function liveGrants() {
+    return fresh.db
+      .select({ id: schema.grants.id, revokedAt: schema.grants.revokedAt })
+      .from(schema.grants)
+      .orderBy(schema.grants.id);
+  }
+
+  beforeAll(async () => {
+    fresh = await createTestDatabase();
+    for (const [userId, email] of [
+      [ANNA, "anna@example.test"],
+      [BEN, "ben@example.test"],
+      [CARA, "cara@example.test"],
+    ] as const) {
+      await insertUser(fresh, userId, email);
+    }
+    await fresh.db.update(schema.user).set({ emailVerified: true }).where(eq(schema.user.id, ANNA));
+    await fresh.db.insert(schema.households).values({ id: HOUSEHOLD });
+    await fresh.db
+      .insert(schema.children)
+      .values({ id: CHILD, householdId: HOUSEHOLD, displayName: "Mo", dateOfBirth: "2025-03-01" });
+    await fresh.db
+      .insert(schema.childGuardians)
+      .values({ id: id(62), childId: CHILD, userId: ANNA });
+    await fresh.db.insert(schema.grants).values([
+      {
+        id: ANNA_TO_BEN_HERE,
+        ownerId: ANNA,
+        granteeId: BEN,
+        category: "cycle.history",
+        level: "read",
+        ...VERSIONS,
+      },
+      {
+        id: BEN_TO_ANNA_HERE,
+        ownerId: BEN,
+        granteeId: ANNA,
+        category: "cycle.status",
+        level: "summary",
+        ...VERSIONS,
+      },
+    ]);
+  });
+
+  afterAll(async () => {
+    await fresh.close();
+  });
+
+  test("ends the search_path of every function in public with pg_temp", async () => {
+    const functions = rows(
+      await fresh.db.execute(
+        sql`select p.oid::regprocedure::text as signature, p.proconfig as config from pg_catalog.pg_proc p where p.pronamespace = 'public'::regnamespace order by signature`,
+      ),
+    );
+    expect(functions.map((row) => row.signature)).toEqual(
+      expect.arrayContaining([
+        "current_actor()",
+        "actor_email()",
+        "is_guardian(uuid)",
+        "can_use_key(uuid)",
+        "cycle_status_for(uuid)",
+        "revoke_closure_grants(timestamp with time zone)",
+      ]),
+    );
+    // A function added later fails here, by name, until its path does too.
+    expect(
+      functions
+        .filter((row) => !((row.config as string[] | null) ?? []).includes(HARDENED))
+        .map((row) => row.signature),
+    ).toEqual([]);
+  });
+
+  test("cannot make Ben a guardian of Mo", async () => {
+    const seen = await attempt(BEN, async (tx) => {
+      await tx.execute(
+        sql`create temp table child_guardians (child_id uuid, user_id uuid) on commit drop`,
+      );
+      await tx.execute(
+        sql`insert into pg_temp.child_guardians values (${CHILD}::uuid, current_actor())`,
+      );
+      const [guardian] = rows(await tx.execute(sql`select is_guardian(${CHILD}::uuid) as yes`));
+      const [children] = rows(
+        await tx.execute(sql`select count(*)::int as n from public.children`),
+      );
+      return { guardian: guardian?.yes, children: children?.n };
+    });
+    expect(seen).toEqual({ guardian: false, children: 0 });
+  });
+
+  test("cannot let in an audit row in Anna's name about Cara", async () => {
+    const message = await refusal(
+      attempt(ANNA, async (tx) => {
+        await tx.execute(
+          sql`create temp table grants (owner_id uuid, grantee_id uuid, category text, child_id uuid, revoked_at timestamptz) on commit drop`,
+        );
+        await tx.execute(
+          sql`insert into pg_temp.grants values (${CARA}::uuid, current_actor(), 'cycle.history', null, null)`,
+        );
+        await tx.execute(
+          sql`insert into public.audit_events (id, actor_id, action, subject_id, category) values (${id(63)}::uuid, current_actor(), 'grant.revoke', ${CARA}::uuid, 'cycle.history')`,
+        );
+      }),
+    );
+    expect(message).toMatch(/row-level security policy for table "audit_events"/);
+  });
+
+  test("cannot give actor_email() another person's address", async () => {
+    const email = await attempt(ANNA, async (tx) => {
+      await tx.execute(
+        sql`create temp table "user" (id uuid, email text, email_verified boolean) on commit drop`,
+      );
+      await tx.execute(
+        sql`insert into pg_temp."user" values (current_actor(), 'someone@example.test', true)`,
+      );
+      const [row] = rows(await tx.execute(sql`select actor_email() as email`));
+      return row?.email;
+    });
+    expect(email).toBe("anna@example.test");
+  });
+
+  test("cannot stand in for a closure Anna never filed", async () => {
+    const ok = await attempt(ANNA, async (tx) => {
+      await tx.execute(
+        sql`create temp table data_requests (user_id uuid, kind text, state text) on commit drop`,
+      );
+      await tx.execute(
+        sql`insert into pg_temp.data_requests values (current_actor(), 'closure', 'requested')`,
+      );
+      return rows(await tx.execute(call))[0]?.ok;
+    });
+    expect(ok).toBe(false);
+    expect(await liveGrants()).toEqual([
+      { id: ANNA_TO_BEN_HERE, revokedAt: null },
+      { id: BEN_TO_ANNA_HERE, revokedAt: null },
+    ]);
+    expect(rows(await fresh.db.execute(sql`select count(*)::int as n from audit_events`))).toEqual([
+      { n: 0 },
+    ]);
+  });
+
+  test("revokes and audits in the real tables when Ben closes beside copies of both", async () => {
+    await openClosureFor(BEN, id(64), fresh);
+    const inside = await attempt(BEN, async (tx) => {
+      await tx.execute(
+        sql`create temp table grants (owner_id uuid, grantee_id uuid, category text, child_id uuid, revoked_at timestamptz, deleted_at timestamptz, updated_at timestamptz, version int) on commit drop`,
+      );
+      await tx.execute(
+        sql`insert into pg_temp.grants values (${CARA}::uuid, current_actor(), 'cycle.history', null, null, null, now(), 1)`,
+      );
+      await tx.execute(
+        sql`create temp table audit_events (id uuid, actor_id uuid, action text, subject_id uuid, category text, child_id uuid, occurred_at timestamptz) on commit drop`,
+      );
+      const ok = rows(await tx.execute(call))[0]?.ok;
+      const [copies] = rows(
+        await tx.execute(
+          sql`select (select count(*)::int from pg_temp.grants where revoked_at is null) as live, (select count(*)::int from pg_temp.audit_events) as audited`,
+        ),
+      );
+      return { ok, copies };
+    });
+    expect(inside).toEqual({ ok: true, copies: { live: 1, audited: 0 } });
+    const at = CLOSING_AT.toISOString();
+    expect(
+      (await liveGrants()).map((grant) => [grant.id, grant.revokedAt?.toISOString() ?? null]),
+    ).toEqual([
+      [ANNA_TO_BEN_HERE, at],
+      [BEN_TO_ANNA_HERE, at],
+    ]);
+    // One row per real grant, in Ben's name, and none about Cara.
+    expect(
+      rows(
+        await fresh.db.execute(
+          sql`select subject_id, category::text as category from audit_events where actor_id = ${BEN}::uuid and action = 'grant.revoke' order by subject_id`,
+        ),
+      ),
+    ).toEqual([
+      { subject_id: ANNA, category: "cycle.history" },
+      { subject_id: BEN, category: "cycle.status" },
+    ]);
   });
 });

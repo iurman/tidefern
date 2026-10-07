@@ -32,6 +32,17 @@ then the SQL goes into the file it created. Commit the SQL together with
 `drizzle/meta/_journal.json` and the snapshot exactly as drizzle-kit wrote
 them; never edit the journal by hand and never run `drizzle-kit up`.
 
+When another migration reaches main first, generate yours again on top of
+it rather than renaming your files onto the next number: start from main's
+journal, delete your SQL file and snapshot, run the same command, paste the
+SQL back in, and run `pnpm --filter @tidefern/db exec drizzle-kit check`.
+A renamed migration keeps a snapshot whose parent is now another
+migration's parent (the next `drizzle-kit generate` reports a collision
+and writes nothing), and it can keep a `when` older than the entry above
+it, which the migrator then skips on every database that already has that
+entry while a fresh test database applies it anyway. `src/schema.test.ts`
+fails on both.
+
 The Vercel build command runs `pnpm -w db:migrate` before `next build`, so
 every environment migrates itself. Migrations are expand then contract: a
 migration must run correctly under the previous deployment's code. The
@@ -263,13 +274,13 @@ a child record is the child (architecture record 8.3). `journal.private`
 is never granted: both helpers return false for it unless the actor is the
 subject. A grant is active while `revoked_at` is null; there is no expiry
 column, as in `can()`. Every helper is `STABLE` with `SET search_path =
-pg_catalog, public`, except `accept_invitation()`, which is `VOLATILE`
-because it writes. `current_actor()`, `is_system()` and
+pg_catalog, public, pg_temp`, except `accept_invitation()`, which is
+`VOLATILE` because it writes. `current_actor()`, `is_system()` and
 `in_policy_helper()` carry `COST 1` so they stay the cheapest arm of every
 policy; Postgres keeps the written order only among terms of equal cost,
 and the lookup helpers keep the default cost of 100.
 
-Two rules the SQL has to keep that `can()` never faces:
+Three rules the SQL has to keep that `can()` never faces:
 
 - `is_system()` appears only in policy expressions, never inside a helper.
   Inside a `SECURITY DEFINER` body `current_user` is the function owner, so
@@ -295,6 +306,15 @@ Two rules the SQL has to keep that `can()` never faces:
   that from both roles, and its last block re-owns the helpers to a role
   that cannot bypass RLS (the shape of a Neon owner) and runs the scenarios
   again; task B10 repeats the check on a real Neon branch.
+- Every function's `search_path` ends with `pg_temp`. Left out of the
+  path, the session's temporary schema is searched first for tables and
+  types, and the app role may create temporary tables, so it could hand a
+  helper its own `child_guardians` or `grants` and be told it guards a
+  child or holds a grant. Migrations `0007` and `0010` wrote `pg_catalog,
+  public`; migration `0011` (task E10) moved `pg_temp` to the end of every
+  path, and `src/e10-closure-grants.test.ts` fails on any function in
+  `public` whose path does not end that way, and shows four such attempts
+  failing.
 
 #### The policies
 
