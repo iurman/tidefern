@@ -234,4 +234,45 @@ neither is repeated below.
 
 ### `/activity` (H8)
 
-(none yet)
+- `[OWNER]` approval of the activity wording below, written to the voice
+  table for task H8 (`apps/web/src/app/(app)/activity/copy.ts`): the row
+  sentences, the two fallbacks, the meta description, and the pending and
+  failure lines.
+
+A row says what happened, who did it and the day it happened in the
+profile's zone. It may name a category by its label from the sharing
+descriptions, in lower case, and never says what was viewed, written or
+logged. An action without a line here reads "Other activity on your
+account", never its code.
+
+| Action | What happened |
+| --- | --- |
+| `session.sign_in` | Signed in |
+| `session.revoke` | Signed out other devices |
+| `grant.create` | Started sharing [place] |
+| `grant.update` | Changed sharing for [place] |
+| `grant.revoke`, her own sharing | Stopped sharing [place] |
+| `grant.revoke`, a grantee's access ending | Ended access to [place] |
+| `partner.read` | Viewed [place] |
+| `partner.write` | Contributed to [place] |
+| `note.share` | Shared a note with people who can see [place] |
+| `invitation.create` | Sent an invitation |
+| `invitation.withdraw` | Withdrew an invitation |
+| `invitation.accept` | Accepted an invitation |
+| `export.create` | Requested a copy of your data |
+| `account.close` | Asked to close your account |
+| `account.close.undo` | Cancelled closing your account |
+
+[place] is "your symptoms" for her own records, "Noor's symptoms" for a
+person the page can name, and "the symptoms someone shared with you" for
+one it cannot. A child is "Sol's records" only for a guardian, and "a
+child's records" for anyone else. Who did it reads "by you", "by Theo",
+or "by someone you shared with" for a person no longer listed (a removed
+partner) or without a name.
+
+Meta description: "Sign-ins, devices and sharing changes on your Tidefern
+account." Load more: pending "Loading" (no wider than the button's own
+label), a failed page "We could not load more activity. Try again.", no
+answer at all "We could not reach Tidefern. Check your connection and try
+again.", and a failed first page "We could not load your activity just
+now. Reload the page to try again."

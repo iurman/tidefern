@@ -1,0 +1,484 @@
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import type { Theme } from "./axe";
+import { freshAccount, onboard, signInAs, type Persona } from "./session";
+
+/**
+ * /activity against the production build (task H8): the person's audit
+ * rows newest first, each the day in her zone, what happened and who did
+ * it, with no health content; "Load more" over the cursor through the
+ * browser client, with its pending and failure states; the shell marking
+ * Settings and the way back to it.
+ *
+ * Populated states come from the seeded cast (packages/db README, "The
+ * cast"), signed in once per persona for the worker through the shared
+ * helper; the dates the rows must show are read from the API at run time
+ * (the instants in GET /api/v1/me/activity, read in the profile's zone from
+ * GET /api/v1/me), and seeded rows are asserted by presence, never by count
+ * or position, because other specs sign the same people in. Load more needs
+ * more rows than a page holds, which no seeded person has, so a fresh
+ * account of this file's own makes them with exports; nothing here changes
+ * a seeded person beyond the sign-in every spec writes. Against a server
+ * without a database the helpers hand back null and the canned cookie, and
+ * each test asserts the honest failed-read state instead. Nothing here is
+ * tagged @smoke.
+ */
+
+const PAGE_SIZE = 25;
+
+/**
+ * Better Auth's sign-in limiter allows three in ten seconds and keeps its
+ * count for the whole run; this file sorts first, and the next one signs in
+ * once without waiting out a 429. When this file is done it waits out the
+ * window from its own last sign-in, so it never spends the next file's.
+ */
+const LIMITER_WINDOW_MS = 10_500;
+let lastSignIn = 0;
+
+test.afterAll(async () => {
+  const left = lastSignIn + LIMITER_WINDOW_MS - Date.now();
+  if (left > 0) await new Promise((resolve) => setTimeout(resolve, left));
+});
+
+async function as(page: Page, persona: Persona) {
+  const cookies = await signInAs(page, persona);
+  lastSignIn = Date.now();
+  return cookies;
+}
+
+/** The category labels a row may carry (CONTENT.md, sharing descriptions), longest first. */
+const LABELS = [
+  "pregnancy overview",
+  "pregnancy photos",
+  "cycle history",
+  "cycle status",
+  "shared records",
+  "private notes",
+  "symptoms",
+  "records",
+];
+
+const HEALTH =
+  /\b(period|flow|bleed|spotting|cramp|ovulat|fertil|contracept|pregnant|miscarr|loss|birth|symptom|mood|weight|length|feed|diaper|sleep|milestone|temperature|medical|diagnos|health|cycle|pregnancy)/i;
+
+interface ApiRow {
+  id: string;
+  action: string;
+  actorId: string;
+  subjectId: string;
+  category?: string;
+  childId?: string;
+  occurredAt: string;
+}
+
+/** The person's own reading of her activity through the API, which writes no row of its own. */
+async function apiActivity(page: Page): Promise<{ me: string; zone: string; items: ApiRow[] }> {
+  const me = (await (await page.request.get("/api/v1/me")).json()) as {
+    id: string;
+    profile: { timeZone: string };
+  };
+  const page1 = await page.request.get("/api/v1/me/activity?limit=200");
+  expect(page1.status()).toBe(200);
+  const { items } = (await page1.json()) as { items: ApiRow[] };
+  return { me: me.id, zone: me.profile.timeZone, items };
+}
+
+/** The calendar day an instant falls on in a zone, YYYY-MM-DD. */
+function dayIn(zone: string, instant: string): string {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: zone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(new Date(instant));
+}
+
+function list(page: Page): Locator {
+  return page.locator("main ol");
+}
+
+/** The rows that say exactly this, by this person, on this day when one is given. */
+function rows(page: Page, what: string, who: string, day?: string): Locator {
+  let found = list(page)
+    .locator("li")
+    .filter({ has: page.getByText(what, { exact: true }) })
+    .filter({ has: page.getByText(who, { exact: true }) });
+  if (day !== undefined) found = found.filter({ has: page.locator(`time[datetime="${day}"]`) });
+  return found;
+}
+
+/** No dotted action code and no health word outside a category's label, anywhere in the rows. */
+async function expectNoHealthContent(page: Page) {
+  const text = await list(page).innerText();
+  expect(text).not.toMatch(/\b[a-z]+\.[a-z_]+\b/);
+  const bare = LABELS.reduce((rest, label) => rest.split(label).join(" "), text.toLowerCase());
+  expect(bare).not.toMatch(HEALTH);
+}
+
+/** The days in the list, in the order drawn. */
+async function daysDrawn(page: Page): Promise<string[]> {
+  return list(page)
+    .locator("li time")
+    .evaluateAll((times) => times.map((time) => time.getAttribute("datetime") ?? ""));
+}
+
+/** The page's honest state when the session read failed: the layout says so, the page claims no rows. */
+async function expectFailedRead(page: Page) {
+  await expect(page).toHaveURL(/\/activity$/);
+  await expect(page.getByText(/could not load your profile just now/)).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Activity");
+  await expect(page.getByRole("link", { name: "Back to Settings" })).toHaveAttribute(
+    "href",
+    "/settings",
+  );
+  await expect(list(page)).toHaveCount(0);
+  await expect(page.getByText("No activity yet")).toHaveCount(0);
+}
+
+async function expectNoOverflow(page: Page) {
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow, `${page.url()} at ${width}`).toBeLessThanOrEqual(0);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+/** Axe on the page as it stands (no navigation), in both themes at 1440 and 390. */
+async function expectNoAxeViolationsHere(page: Page, state: string) {
+  for (const theme of ["light", "dark"] as Theme[]) {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: width === 390 ? 844 : 900 });
+      await page.evaluate((value) => {
+        document.documentElement.dataset.theme = value;
+      }, theme);
+      const results = await new AxeBuilder({ page })
+        .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
+        .analyze();
+      expect(results.violations, `${state} in ${theme} at ${width}`).toEqual([]);
+    }
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+/** The browser's own Load more call; the server's first page is in process and never routed. */
+const NEXT_PAGE = "**/api/v1/me/activity?**";
+
+test("a visitor without a session is sent to sign in before anything renders", async ({
+  request,
+}) => {
+  const response = await request.get("/activity", { maxRedirects: 0 });
+  expect(response.status()).toBe(307);
+  expect(response.headers()["location"]).toBe("/sign-in");
+});
+
+test("Noor reads her sign-in, the grants she gave and revoked, her invitations and Theo's reads, newest first in her zone, under Settings", async ({
+  page,
+}) => {
+  const cookies = await as(page, "noor");
+  await page.goto("/activity");
+  if (cookies === null) {
+    await expectFailedRead(page);
+    return;
+  }
+  await expect(page).toHaveTitle("Activity | Tidefern");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Activity");
+  await expect(page.getByRole("link", { name: "Back to Settings" })).toHaveAttribute(
+    "href",
+    "/settings",
+  );
+  const shell = page.locator("nav[aria-label='Main']");
+  await expect(shell.first().getByRole("link", { name: "Settings", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+
+  const { zone, items } = await apiActivity(page);
+  expect(zone).toBe("Europe/Berlin");
+  const expected: Array<{ action: string; category?: string; what: string; who: string }> = [
+    { action: "session.sign_in", what: "Signed in", who: "by you" },
+    {
+      action: "grant.create",
+      category: "cycle.status",
+      what: "Started sharing your cycle status",
+      who: "by you",
+    },
+    {
+      action: "grant.create",
+      category: "cycle.symptoms",
+      what: "Started sharing your symptoms",
+      who: "by you",
+    },
+    {
+      action: "grant.create",
+      category: "cycle.history",
+      what: "Started sharing your cycle history",
+      who: "by you",
+    },
+    {
+      action: "grant.revoke",
+      category: "cycle.history",
+      what: "Stopped sharing your cycle history",
+      who: "by you",
+    },
+    { action: "invitation.create", what: "Sent an invitation", who: "by you" },
+    { action: "invitation.withdraw", what: "Withdrew an invitation", who: "by you" },
+    {
+      action: "partner.read",
+      category: "cycle.symptoms",
+      what: "Viewed your symptoms",
+      who: "by Theo",
+    },
+  ];
+  for (const row of expected) {
+    const matching = items.filter(
+      (item) => item.action === row.action && item.category === row.category,
+    );
+    expect(matching.length, `${row.action} ${row.category ?? ""} in the API`).toBeGreaterThan(0);
+    for (const item of matching) {
+      await expect(
+        rows(page, row.what, row.who, dayIn(zone, item.occurredAt)).first(),
+      ).toBeVisible();
+    }
+  }
+  // Theo's two seeded reads sit on two days in Berlin, one row each.
+  const theoReads = items.filter((item) => item.action === "partner.read");
+  expect(
+    new Set(theoReads.map((item) => dayIn(zone, item.occurredAt))).size,
+  ).toBeGreaterThanOrEqual(2);
+
+  const days = await daysDrawn(page);
+  expect(days.length).toBeGreaterThanOrEqual(9);
+  expect(days, "newest first").toEqual([...days].sort().reverse());
+  await expectNoHealthContent(page);
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(shell.last().getByRole("link", { name: "Settings", exact: true })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(page.getByRole("link", { name: "Back to Settings" })).toBeVisible();
+  await expectNoOverflow(page);
+});
+
+test("Theo sees his own sign-in and his reads of Noor's symptoms by her name, and none of her rows", async ({
+  page,
+}) => {
+  const cookies = await as(page, "theo");
+  await page.goto("/activity");
+  if (cookies === null) {
+    await expectFailedRead(page);
+    return;
+  }
+  const { zone, items } = await apiActivity(page);
+  const reads = items.filter((item) => item.action === "partner.read");
+  expect(reads.length).toBeGreaterThan(0);
+  for (const read of reads) {
+    await expect(
+      rows(page, "Viewed Noor's symptoms", "by you", dayIn(zone, read.occurredAt)).first(),
+    ).toBeVisible();
+  }
+  await expect(rows(page, "Signed in", "by you").first()).toBeVisible();
+  for (const hers of [
+    "Sent an invitation",
+    "Withdrew an invitation",
+    "Viewed your symptoms",
+    "Started sharing your cycle status",
+    "Stopped sharing your cycle history",
+  ]) {
+    await expect(list(page).getByText(hers, { exact: true }), hers).toHaveCount(0);
+  }
+  await expectNoHealthContent(page);
+});
+
+test("Mira, a guardian, sees Sol by name, her contributions to Lena's pregnancy overview and last year's row with its year, and the page writes no activity", async ({
+  page,
+}) => {
+  const cookies = await as(page, "mira");
+  if (cookies === null) {
+    await page.goto("/activity");
+    await expectFailedRead(page);
+    return;
+  }
+  const before = await apiActivity(page);
+  await page.goto("/activity");
+  const { zone, items } = before;
+  const sol = items.find((item) => item.action === "grant.create" && item.category === "child");
+  expect(sol, "Mira's grant on Sol in the API").toBeDefined();
+  await expect(
+    rows(page, "Started sharing Sol's records", "by you", dayIn(zone, sol?.occurredAt ?? "")),
+  ).toHaveCount(1);
+  const writes = items.filter((item) => item.action === "partner.write");
+  expect(writes.length).toBeGreaterThan(0);
+  for (const write of writes) {
+    await expect(
+      rows(
+        page,
+        "Contributed to Lena's pregnancy overview",
+        "by you",
+        dayIn(zone, write.occurredAt),
+      ).first(),
+    ).toBeVisible();
+  }
+  const lastYear = items.find(
+    (item) => item.action === "grant.create" && item.category === "pregnancy.overview",
+  );
+  expect(lastYear, "Mira's pregnancy grant in the API").toBeDefined();
+  const day = dayIn(zone, lastYear?.occurredAt ?? "");
+  const today = (await (await page.request.get("/api/v1/me")).json()) as { today: string };
+  expect(day.slice(0, 4), "the seeded grant is from another year than today").not.toBe(
+    today.today.slice(0, 4),
+  );
+  const older = rows(page, "Started sharing your pregnancy overview", "by you", day);
+  await expect(older).toHaveCount(1);
+  await expect(older.locator("time")).toContainText(day.slice(0, 4));
+  await expectNoHealthContent(page);
+
+  // Names came from reads a guardian makes without an audit row: nothing new in her activity.
+  const after = await apiActivity(page);
+  expect(after.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
+});
+
+test("Pia, who reaches Sol through a grant, sees her read without his name, and the page writes no activity", async ({
+  page,
+}) => {
+  const cookies = await as(page, "pia");
+  if (cookies === null) {
+    await page.goto("/activity");
+    await expectFailedRead(page);
+    return;
+  }
+  const before = await apiActivity(page);
+  await page.goto("/activity");
+  const read = before.items.find((item) => item.action === "partner.read");
+  expect(read, "Pia's read of Sol in the API").toBeDefined();
+  await expect(
+    rows(page, "Viewed a child's records", "by you", dayIn(before.zone, read?.occurredAt ?? "")),
+  ).toHaveCount(1);
+  await expect(list(page)).not.toContainText("Sol");
+  await expectNoHealthContent(page);
+  // A grantee's GET /v1/children would have audited a read of Sol; the page never makes it.
+  const after = await apiActivity(page);
+  expect(after.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
+});
+
+test("Load more reads the next page through the browser, says it is loading, and says what to do when it fails", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const account = await freshAccount(page, { label: "activity-pages" });
+  lastSignIn = Date.now();
+  if (account === null) {
+    await page.goto("/activity");
+    await expectFailedRead(page);
+    return;
+  }
+  await onboard(page, { stage: "cycle", timeZone: "Europe/Berlin" });
+  // Each export writes one row; more of them than a page holds give the list a second page.
+  for (let made = 0; made < PAGE_SIZE + 5; made += 1) {
+    const exported = await page.request.get("/api/v1/me/export");
+    expect(exported.status(), "an export right after signing in").toBe(200);
+  }
+  const { items: all } = await apiActivity(page);
+  expect(all.length).toBeGreaterThan(PAGE_SIZE);
+
+  await page.goto("/activity");
+  const drawn = list(page).locator("li");
+  await expect(drawn).toHaveCount(PAGE_SIZE);
+  await expect(rows(page, "Requested a copy of your data", "by you").first()).toBeVisible();
+  const more = page.getByRole("button", { name: "Load more" });
+  const width = (await more.boundingBox())?.width ?? 0;
+
+  // Pending: the browser's call is held, the button keeps its width and says what is happening.
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  const queries: string[] = [];
+  await page.route(NEXT_PAGE, async (route: Route) => {
+    queries.push(new URL(route.request().url()).search);
+    await held;
+    await route.continue();
+  });
+  await more.click();
+  const busy = page.getByRole("button", { name: "Loading" });
+  await expect(busy).toHaveAttribute("aria-busy", "true");
+  expect(Math.abs(((await busy.boundingBox())?.width ?? 0) - width)).toBeLessThan(1);
+  release();
+  await expect(drawn).toHaveCount(all.length);
+  await expect(drawn.nth(PAGE_SIZE)).toBeFocused();
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+  expect(queries).toHaveLength(1);
+  expect(queries[0]).toMatch(new RegExp(`^\\?cursor=[A-Za-z0-9_-]+&limit=${PAGE_SIZE}$`));
+  await page.unroute(NEXT_PAGE);
+  const days = await daysDrawn(page);
+  expect(days, "newest first across the pages").toEqual([...days].sort().reverse());
+  await expectNoHealthContent(page);
+
+  // A failed page: the sentence says what to do next and the button stays for the retry.
+  await page.reload();
+  await expect(drawn).toHaveCount(PAGE_SIZE);
+  await page.route(NEXT_PAGE, (route) =>
+    route.fulfill({
+      status: 500,
+      contentType: "application/problem+json",
+      body: JSON.stringify({ type: "about:blank", title: "Internal error", status: 500 }),
+    }),
+  );
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(page.getByText("We could not load more activity. Try again.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Load more" })).toBeEnabled();
+  await expect(drawn).toHaveCount(PAGE_SIZE);
+  await expectNoAxeViolationsHere(page, "the failed Load more");
+  await expectNoOverflow(page);
+  await page.unroute(NEXT_PAGE);
+
+  // No answer at all: the connection.
+  await page.route(NEXT_PAGE, (route) => route.abort("internetdisconnected"));
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(
+    page.getByText("We could not reach Tidefern. Check your connection and try again."),
+  ).toBeVisible();
+  await page.unroute(NEXT_PAGE);
+
+  // The retry reads the real page.
+  await page.getByRole("button", { name: "Load more" }).click();
+  await expect(drawn).toHaveCount(all.length);
+  await expect(page.getByRole("status")).toHaveCount(0);
+});
+
+test("a fresh onboarded account has no activity yet: the empty state and no Load more", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const account = await freshAccount(page, { label: "activity-empty" });
+  lastSignIn = Date.now();
+  if (account === null) {
+    await page.goto("/activity");
+    await expectFailedRead(page);
+    return;
+  }
+  await onboard(page, { stage: "none", timeZone: "America/New_York" });
+  await page.goto("/activity");
+  await expect(page.getByRole("heading", { level: 2, name: "No activity yet" })).toBeVisible();
+  await expect(page.getByText("Sign-ins, devices and sharing changes appear here.")).toBeVisible();
+  await expect(list(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
+  await expectNoAxeViolationsHere(page, "the empty state");
+  await expectNoOverflow(page);
+});
+
+test("the populated page has no axe violations in either theme at 1440 and 390", async ({
+  page,
+}) => {
+  const cookies = await as(page, "noor");
+  await page.goto("/activity");
+  if (cookies === null) {
+    await expectFailedRead(page);
+  } else {
+    await expect(list(page).locator("li").first()).toBeVisible();
+  }
+  await expectNoAxeViolationsHere(page, cookies === null ? "the failed read" : "Noor's activity");
+  await expectNoOverflow(page);
+});
