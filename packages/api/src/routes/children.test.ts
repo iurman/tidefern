@@ -1,11 +1,14 @@
-import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { and, eq } from "drizzle-orm";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import { and, eq, sql } from "drizzle-orm";
 import { addDays, todayIn } from "@tidefern/core";
+import type { KeyProvider } from "@tidefern/crypto";
 import { schema } from "@tidefern/db";
+import { CHILD_CONSENT_DISCLOSURES } from "@tidefern/schemas";
 import type {
   Child,
   ChildEvent,
   ChildMeasurement,
+  Consent,
   MilestoneChecklist,
   Problem,
 } from "@tidefern/schemas";
@@ -16,7 +19,15 @@ import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
 import { CHILDREN_TOKENS, DANA, HOUSEHOLD, createChildrenFixture } from "../test/children";
 import type { ChildrenFixture } from "../test/children";
-import { ALREADY_GUARDIAN, ID_IN_USE, LAST_GUARDIAN, STALE_VERSION } from "./children";
+import {
+  ALREADY_GUARDIAN,
+  ID_IN_USE,
+  LAST_GUARDIAN,
+  STALE_VERSION,
+  configureChildren,
+  guardianConsentHash,
+} from "./children";
+import { CHILD_CONSENT_NOT_WITHDRAWN_HERE } from "./profile";
 
 const KEYS = {
   create: "018f5e7a-3000-7000-8000-00000000e001",
@@ -50,7 +61,41 @@ const KEYS = {
   bad5: "018f5e7a-3000-7000-8000-00000000e01d",
   bad6: "018f5e7a-3000-7000-8000-00000000e01e",
   caraFeed: "018f5e7a-3000-7000-8000-00000000e01f",
+  noConsent: "018f5e7a-3000-7000-8000-00000000e020",
+  unchecked: "018f5e7a-3000-7000-8000-00000000e021",
+  unknownText: "018f5e7a-3000-7000-8000-00000000e022",
+  rolledBack: "018f5e7a-3000-7000-8000-00000000e023",
+  withdrawChild: "018f5e7a-3000-7000-8000-00000000e024",
+  breast: "018f5e7a-3000-7000-8000-00000000e025",
+  bottle: "018f5e7a-3000-7000-8000-00000000e026",
+  solids: "018f5e7a-3000-7000-8000-00000000e027",
+  mixed: "018f5e7a-3000-7000-8000-00000000e028",
+  wrong1: "018f5e7a-3000-7000-8000-00000000e029",
+  wrong2: "018f5e7a-3000-7000-8000-00000000e02a",
+  wrong3: "018f5e7a-3000-7000-8000-00000000e02b",
+  wrong4: "018f5e7a-3000-7000-8000-00000000e02c",
+  wrong5: "018f5e7a-3000-7000-8000-00000000e02d",
+  wrong6: "018f5e7a-3000-7000-8000-00000000e02e",
+  wrong7: "018f5e7a-3000-7000-8000-00000000e02f",
+  annaBottle: "018f5e7a-3000-7000-8000-00000000e030",
+  wren: "018f5e7a-3000-7000-8000-00000000e031",
+  newest1: "018f5e7a-3000-7000-8000-00000000e032",
+  newest2: "018f5e7a-3000-7000-8000-00000000e033",
+  newest3: "018f5e7a-3000-7000-8000-00000000e034",
+  newest4: "018f5e7a-3000-7000-8000-00000000e035",
+  newest5: "018f5e7a-3000-7000-8000-00000000e036",
+  newest6: "018f5e7a-3000-7000-8000-00000000e037",
+  newest7: "018f5e7a-3000-7000-8000-00000000e038",
+  newest8: "018f5e7a-3000-7000-8000-00000000e039",
 };
+
+/**
+ * Task E12: a child is created only with the guardian's consent on the
+ * child's behalf, so every create body in this file carries it, the E5
+ * cases included; the cases about the consent itself are in their own
+ * describe block below.
+ */
+const CONSENT = { given: true, textVersion: "2026-10" } as const;
 
 const CHILD_GRANT = "018f5e7a-2000-7000-8000-00000000c001";
 
@@ -100,11 +145,17 @@ function call(method: string, path: string, options: Call = {}) {
   }
   if (options.key !== undefined) headers[IDEMPOTENCY_KEY_HEADER] = options.key;
   if (options.ifMatch !== undefined) headers["if-match"] = options.ifMatch;
-  return app.request(`/api/v1${path}`, {
-    method,
-    headers,
-    ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
-  });
+  // The test database is also bound as the routes' `db`, which the consent
+  // routes (E2) read from the environment; the children routes ignore it.
+  return app.request(
+    `/api/v1${path}`,
+    {
+      method,
+      headers,
+      ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
+    },
+    { db },
+  );
 }
 
 async function json<T>(response: Response): Promise<T> {
@@ -188,6 +239,8 @@ const GRANTEE_EVENT_KEYS = [
   "milestoneId",
   "quantityMl",
   "side",
+  "feedMethod",
+  "diaperContents",
   "note",
   "authorId",
   "createdAt",
@@ -217,7 +270,7 @@ describe("POST /v1/children", () => {
   it("creates the child in her household, as its guardian, with its own key, and replays the create", async () => {
     const response = await call("POST", "/children", {
       key: KEYS.create,
-      body: { displayName: "Mo", dateOfBirth: BORN, sex: "male" },
+      body: { displayName: "Mo", dateOfBirth: BORN, sex: "male", guardianConsent: CONSENT },
     });
     expect(response.status).toBe(201);
     const child = await json<Child>(response);
@@ -245,7 +298,7 @@ describe("POST /v1/children", () => {
 
     const replay = await call("POST", "/children", {
       key: KEYS.create,
-      body: { displayName: "Mo", dateOfBirth: BORN, sex: "male" },
+      body: { displayName: "Mo", dateOfBirth: BORN, sex: "male", guardianConsent: CONSENT },
     });
     expect(replay.status).toBe(201);
     expect(replay.headers.get(IDEMPOTENCY_REPLAYED_HEADER)).toBe("true");
@@ -258,7 +311,7 @@ describe("POST /v1/children", () => {
     const response = await call("POST", "/children", {
       token: CHILDREN_TOKENS.dana,
       key: KEYS.dana,
-      body: { displayName: "Pip", dateOfBirth: BORN },
+      body: { displayName: "Pip", dateOfBirth: BORN, guardianConsent: CONSENT },
     });
     expect(response.status).toBe(201);
     const child = await json<Child>(response);
@@ -275,14 +328,14 @@ describe("POST /v1/children", () => {
   it("answers 422 with field errors for a date that does not exist, and 409 for a used id", async () => {
     const invalid = await call("POST", "/children", {
       key: KEYS.invalid,
-      body: { displayName: "", dateOfBirth: "2026-02-31" },
+      body: { displayName: "", dateOfBirth: "2026-02-31", guardianConsent: CONSENT },
     });
     const body = await expectProblem(invalid, 422, "validation_failed");
     expect(body.errors?.map((error) => error.path).sort()).toEqual(["dateOfBirth", "displayName"]);
 
     const reused = await call("POST", "/children", {
       key: KEYS.reuse,
-      body: { id: childId, displayName: "Twin", dateOfBirth: BORN },
+      body: { id: childId, displayName: "Twin", dateOfBirth: BORN, guardianConsent: CONSENT },
     });
     const conflict = await expectProblem(reused, 409, "conflict");
     expect(conflict.detail).toBe(ID_IN_USE);
@@ -290,7 +343,12 @@ describe("POST /v1/children", () => {
     // Architecture 5.1: a client-minted id is a UUIDv7; a v4 is a field error.
     const v4 = await call("POST", "/children", {
       key: KEYS.v4Id,
-      body: { id: "9b2f6c1e-4d3a-4f8b-9c2d-1e5f7a3b6c8d", displayName: "Mo", dateOfBirth: BORN },
+      body: {
+        id: "9b2f6c1e-4d3a-4f8b-9c2d-1e5f7a3b6c8d",
+        displayName: "Mo",
+        dateOfBirth: BORN,
+        guardianConsent: CONSENT,
+      },
     });
     expect((await expectProblem(v4, 422, "validation_failed")).errors?.map((e) => e.path)).toEqual([
       "id",
@@ -301,7 +359,7 @@ describe("POST /v1/children", () => {
     const response = await call("POST", "/children", {
       token: null,
       key: KEYS.anonymous,
-      body: { displayName: "Nobody", dateOfBirth: BORN },
+      body: { displayName: "Nobody", dateOfBirth: BORN, guardianConsent: CONSENT },
     });
     await expectProblem(response, 401, "unauthenticated");
   });
@@ -1001,6 +1059,579 @@ describe("milestones", () => {
   });
 });
 
+/** Rows per table that a refused or rolled-back create must leave alone. */
+async function createFootprint() {
+  return {
+    households: await db.$count(schema.households),
+    householdMembers: await db.$count(schema.householdMembers),
+    children: await db.$count(schema.children),
+    childGuardians: await db.$count(schema.childGuardians),
+    consents: await db.$count(schema.consents),
+    subjectKeys: await db.$count(schema.subjectKeys),
+  };
+}
+
+describe("the guardian's consent on the child's behalf", () => {
+  it("is written with the child, in its transaction, in the catalog's words", async () => {
+    const disclosure = CHILD_CONSENT_DISCLOSURES["2026-10"];
+    for (const [subjectId, guardianId] of [
+      [childId, ANNA],
+      [danaChildId, DANA],
+    ] as const) {
+      // One row each: the idempotent replay of Mo's create wrote no second one.
+      const rows = await db
+        .select()
+        .from(schema.consents)
+        .where(eq(schema.consents.subjectId, subjectId));
+      expect(rows).toHaveLength(1);
+      const [consent] = rows;
+      expect(consent).toMatchObject({
+        subjectId,
+        consentingGuardianId: guardianId,
+        category: "child",
+        basis: disclosure.basis,
+        purpose: disclosure.purpose,
+        policyVersion: "2026-10",
+        textHash: guardianConsentHash("2026-10"),
+        withdrawnAt: null,
+        thirdPartySharing: null,
+        deletedAt: null,
+      });
+      // The transaction's now(): granted the instant the child row was created.
+      const [child] = await db
+        .select({ createdAt: schema.children.createdAt })
+        .from(schema.children)
+        .where(eq(schema.children.id, subjectId));
+      expect(consent?.grantedAt.getTime()).toBe(child?.createdAt.getTime());
+    }
+    expect(guardianConsentHash("2026-10")).toMatch(/^[0-9a-f]{64}$/);
+
+    // The guardian finds it among the consents she gave, for herself and the children she guards.
+    const listed = await json<{ items: Consent[] }>(await call("GET", "/me/consents"));
+    const mine = listed.items.filter((item) => item.subjectId === childId);
+    expect(mine).toEqual([
+      {
+        id: expect.any(String),
+        subjectId: childId,
+        consentingGuardianId: ANNA,
+        category: "child",
+        basis: disclosure.basis,
+        purpose: disclosure.purpose,
+        textVersion: "2026-10",
+        textHash: guardianConsentHash("2026-10"),
+        grantedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/),
+        withdrawnAt: null,
+      },
+    ]);
+    // A guardian sees only the consents of the children she guards.
+    const danas = await json<{ items: Consent[] }>(
+      await call("GET", "/me/consents", { token: CHILDREN_TOKENS.dana }),
+    );
+    expect(danas.items.map((item) => item.subjectId)).not.toContain(childId);
+  });
+
+  it("is required: without it, unchecked or on a text the catalog lacks, a create is a 422 that writes nothing", async () => {
+    const before = await createFootprint();
+    const child = { displayName: "Kit", dateOfBirth: BORN };
+    const cases: [string, Record<string, unknown>, string][] = [
+      [KEYS.noConsent, child, "guardianConsent"],
+      [
+        KEYS.unchecked,
+        { ...child, guardianConsent: { ...CONSENT, given: false } },
+        "guardianConsent.given",
+      ],
+      [
+        KEYS.unknownText,
+        { ...child, guardianConsent: { ...CONSENT, textVersion: "2027-01" } },
+        "guardianConsent.textVersion",
+      ],
+    ];
+    // Cara has no household: a create that went through would open one.
+    for (const [key, body, path] of cases) {
+      const response = await call("POST", "/children", { token: CHILDREN_TOKENS.cara, key, body });
+      const problem = await expectProblem(response, 422, "validation_failed");
+      expect(problem.errors?.map((error) => error.path)).toEqual([path]);
+    }
+    expect(await createFootprint()).toEqual(before);
+  });
+
+  it("commits with the child, its guardian and its key, or not at all", async () => {
+    const before = await createFootprint();
+    // A key provider that cannot wrap: the create fails at its last step, after the consent row.
+    const broken: KeyProvider = {
+      provider: "broken",
+      version: "test",
+      wrapDek: () => {
+        throw new Error("wrap refused");
+      },
+      unwrapDek: () => {
+        throw new Error("unwrap refused");
+      },
+    };
+    const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    configureChildren({ db, keys: broken });
+    try {
+      const response = await call("POST", "/children", {
+        token: CHILDREN_TOKENS.cara,
+        key: KEYS.rolledBack,
+        body: { displayName: "Kit", dateOfBirth: BORN, guardianConsent: CONSENT },
+      });
+      await expectProblem(response, 500, "internal");
+    } finally {
+      configureChildren({ db, keys: fixture.keys });
+      quiet.mockRestore();
+    }
+    expect(await createFootprint()).toEqual(before);
+  });
+
+  it("is withdrawn through the child's closure path, never the collection consent's route", async () => {
+    const [consent] = await db
+      .select({ id: schema.consents.id })
+      .from(schema.consents)
+      .where(eq(schema.consents.subjectId, childId));
+    const response = await call("POST", `/me/consents/${consent?.id}/withdraw`, {
+      key: KEYS.withdrawChild,
+    });
+    const problem = await expectProblem(response, 422, "validation_failed");
+    expect(problem.detail).toBe(CHILD_CONSENT_NOT_WITHDRAWN_HERE);
+    const [still] = await db
+      .select({ withdrawnAt: schema.consents.withdrawnAt })
+      .from(schema.consents)
+      .where(eq(schema.consents.subjectId, childId));
+    expect(still).toEqual({ withdrawnAt: null });
+  });
+});
+
+describe("a feed's method and a diaper's contents", () => {
+  const at = (time: string) => `${DAY_TEN}T${time}:00Z`;
+  const ids: Record<string, string> = {};
+
+  it("logs a breast feed with its side, a bottle with its volume, solids alone, and a diaper with its contents", async () => {
+    const cases: [string, string, Record<string, unknown>, Partial<ChildEvent>][] = [
+      [
+        "breast",
+        KEYS.breast,
+        {
+          kind: "feed",
+          date: DAY_TEN,
+          startedAt: at("06:00"),
+          endedAt: at("06:18"),
+          feedMethod: "breast",
+          side: "left",
+        },
+        { feedMethod: "breast", side: "left", quantityMl: null, diaperContents: null },
+      ],
+      [
+        "bottle",
+        KEYS.bottle,
+        {
+          kind: "feed",
+          date: DAY_TEN,
+          startedAt: at("09:00"),
+          feedMethod: "bottle",
+          quantityMl: 120,
+        },
+        { feedMethod: "bottle", side: null, quantityMl: 120, diaperContents: null },
+      ],
+      [
+        "solids",
+        KEYS.solids,
+        { kind: "feed", date: DAY_TEN, startedAt: at("12:00"), feedMethod: "solids", note: NOTE },
+        { feedMethod: "solids", side: null, quantityMl: null, diaperContents: null, note: NOTE },
+      ],
+      [
+        "mixed",
+        KEYS.mixed,
+        { kind: "diaper", date: DAY_TEN, startedAt: at("12:30"), diaperContents: "mixed" },
+        { feedMethod: null, side: null, quantityMl: null, diaperContents: "mixed" },
+      ],
+    ];
+    for (const [name, key, body, expected] of cases) {
+      const response = await call("POST", `/children/${danaChildId}/events`, {
+        token: CHILDREN_TOKENS.dana,
+        key,
+        body,
+      });
+      expect(response.status, name).toBe(201);
+      const event = await json<ChildEvent>(response);
+      expect(event, name).toMatchObject({ ...expected, kind: body["kind"], authorId: DANA });
+      ids[name] = event.id;
+    }
+
+    const stored = await db
+      .select({
+        id: schema.childEvents.id,
+        feedMethod: schema.childEvents.feedMethod,
+        diaperContents: schema.childEvents.diaperContents,
+      })
+      .from(schema.childEvents)
+      .where(eq(schema.childEvents.childId, danaChildId))
+      .orderBy(schema.childEvents.id);
+    expect(stored).toEqual([
+      { id: ids["breast"], feedMethod: "breast", diaperContents: null },
+      { id: ids["bottle"], feedMethod: "bottle", diaperContents: null },
+      { id: ids["solids"], feedMethod: "solids", diaperContents: null },
+      { id: ids["mixed"], feedMethod: null, diaperContents: "mixed" },
+    ]);
+
+    const listed = await json<{ items: ChildEvent[] }>(
+      await call("GET", `/children/${danaChildId}/events?from=${DAY_TEN}&to=${DAY_TEN}`, {
+        token: CHILDREN_TOKENS.dana,
+      }),
+    );
+    expect(listed.items.map((item) => [item.feedMethod, item.diaperContents])).toEqual([
+      ["breast", null],
+      ["bottle", null],
+      ["solids", null],
+      [null, "mixed"],
+    ]);
+  });
+
+  it("answers 422 naming the field for a method or contents on the wrong kind, and for what a method does not carry", async () => {
+    const cases: [string, Record<string, unknown>, string][] = [
+      [KEYS.wrong1, { kind: "diaper", date: DAY_TEN, feedMethod: "bottle" }, "feedMethod"],
+      [
+        KEYS.wrong2,
+        { kind: "sleep", date: DAY_TEN, startedAt: at("20:00"), diaperContents: "wet" },
+        "diaperContents",
+      ],
+      [KEYS.wrong3, { kind: "feed", date: DAY_TEN, diaperContents: "dirty" }, "diaperContents"],
+      [KEYS.wrong4, { kind: "feed", date: DAY_TEN, feedMethod: "bottle", side: "right" }, "side"],
+      [
+        KEYS.wrong5,
+        { kind: "feed", date: DAY_TEN, feedMethod: "breast", quantityMl: 60 },
+        "quantityMl",
+      ],
+      [
+        KEYS.wrong6,
+        { kind: "feed", date: DAY_TEN, feedMethod: "solids", quantityMl: 40 },
+        "quantityMl",
+      ],
+      [KEYS.wrong7, { kind: "feed", date: DAY_TEN, feedMethod: "formula" }, "feedMethod"],
+    ];
+    for (const [key, body, path] of cases) {
+      const response = await call("POST", `/children/${danaChildId}/events`, {
+        token: CHILDREN_TOKENS.dana,
+        key,
+        body,
+      });
+      const problem = await expectProblem(response, 422, "validation_failed");
+      expect(problem.errors?.map((error) => error.path)).toEqual([path]);
+    }
+  });
+
+  it("replaces a method and contents, and leaves neither on the deleted row", async () => {
+    const replaced = await call("PUT", `/children/${danaChildId}/events/${ids["bottle"]}`, {
+      token: CHILDREN_TOKENS.dana,
+      ifMatch: "1",
+      body: {
+        kind: "feed",
+        date: DAY_TEN,
+        startedAt: at("09:00"),
+        feedMethod: "breast",
+        side: "right",
+      },
+    });
+    expect(replaced.status).toBe(200);
+    expect(await json<ChildEvent>(replaced)).toMatchObject({
+      feedMethod: "breast",
+      side: "right",
+      quantityMl: null,
+      version: 2,
+    });
+    const refused = await call("PUT", `/children/${danaChildId}/events/${ids["mixed"]}`, {
+      token: CHILDREN_TOKENS.dana,
+      body: { kind: "diaper", date: DAY_TEN, feedMethod: "solids" },
+    });
+    expect((await expectProblem(refused, 422, "validation_failed")).errors?.[0]?.path).toBe(
+      "feedMethod",
+    );
+    const changed = await call("PUT", `/children/${danaChildId}/events/${ids["mixed"]}`, {
+      token: CHILDREN_TOKENS.dana,
+      body: { kind: "diaper", date: DAY_TEN, startedAt: at("12:30"), diaperContents: "wet" },
+    });
+    expect((await json<ChildEvent>(changed)).diaperContents).toBe("wet");
+
+    for (const name of ["bottle", "mixed"]) {
+      const removed = await call("DELETE", `/children/${danaChildId}/events/${ids[name]}`, {
+        token: CHILDREN_TOKENS.dana,
+      });
+      expect(removed.status).toBe(204);
+    }
+    const rows = await db
+      .select({
+        feedMethod: schema.childEvents.feedMethod,
+        diaperContents: schema.childEvents.diaperContents,
+        side: schema.childEvents.side,
+      })
+      .from(schema.childEvents)
+      .where(eq(schema.childEvents.childId, danaChildId))
+      .orderBy(schema.childEvents.id);
+    expect(rows).toEqual([
+      { feedMethod: "breast", diaperContents: null, side: "left" },
+      { feedMethod: null, diaperContents: null, side: null },
+      { feedMethod: "solids", diaperContents: null, side: null },
+      { feedMethod: null, diaperContents: null, side: null },
+    ]);
+  });
+
+  it("reaches a read grantee with the rest of the event, and nothing at summary", async () => {
+    const logged = await call("POST", `/children/${childId}/events`, {
+      key: KEYS.annaBottle,
+      body: {
+        kind: "feed",
+        date: BORN,
+        startedAt: `${BORN}T23:00:00Z`,
+        feedMethod: "bottle",
+        quantityMl: 60,
+      },
+    });
+    expect(logged.status).toBe(201);
+    const loggedId = (await json<ChildEvent>(logged)).id;
+
+    await setGrant("read");
+    const seen = await json<{ items: Record<string, unknown>[] }>(
+      await call("GET", `/children/${childId}/events?kind=feed`, { token: CHILDREN_TOKENS.cara }),
+    );
+    const bottle = seen.items.find((item) => item["id"] === loggedId);
+    expect(Object.keys(bottle ?? {}).sort()).toEqual(sorted(GRANTEE_EVENT_KEYS));
+    expect(bottle).toMatchObject({ feedMethod: "bottle", quantityMl: 60, diaperContents: null });
+
+    await setGrant("summary");
+    await expectProblem(
+      await call("GET", `/children/${childId}/events?kind=feed&order=desc&limit=1`, {
+        token: CHILDREN_TOKENS.cara,
+      }),
+      404,
+      "not_found",
+    );
+    await setGrant("revoked");
+  });
+});
+
+describe("events newest first", () => {
+  // Wren's own child, so every event on it is this block's. Two days, logged out of order.
+  const DAY_ONE = addDays(BORN, 20);
+  const DAY_TWO = addDays(BORN, 21);
+  let wrenId = "";
+  const ID = (n: number) => `018f5e7a-4000-7000-8000-0000000000${n.toString(16).padStart(2, "0")}`;
+  type Page = { items: ChildEvent[]; nextCursor: string | null };
+  const read = async (query: string) =>
+    call("GET", `/children/${wrenId}/events?${query}`, { token: CHILDREN_TOKENS.dana });
+
+  /** A cursor as the list writes one, for the cases the list never issues. */
+  const forged = (parts: Record<string, string>) =>
+    Buffer.from(JSON.stringify(parts), "utf8").toString("base64url");
+
+  it("orders by day, then by when each event happened, so an event logged later takes its place", async () => {
+    const created = await call("POST", "/children", {
+      token: CHILDREN_TOKENS.dana,
+      key: KEYS.wren,
+      body: { displayName: "Wren", dateOfBirth: BORN, guardianConsent: CONSENT },
+    });
+    expect(created.status).toBe(201);
+    wrenId = (await json<Child>(created)).id;
+
+    // In the order a tired parent logs them; ids rise with it.
+    const events: [string, Record<string, unknown>][] = [
+      [
+        KEYS.newest1,
+        {
+          id: ID(1),
+          kind: "feed",
+          date: DAY_TWO,
+          startedAt: `${DAY_TWO}T07:00:00Z`,
+          feedMethod: "bottle",
+        },
+      ],
+      [
+        KEYS.newest2,
+        {
+          id: ID(2),
+          kind: "diaper",
+          date: DAY_ONE,
+          startedAt: `${DAY_ONE}T09:00:00Z`,
+          diaperContents: "wet",
+        },
+      ],
+      // Logged after the 07:00 feed, given at 05:00: back-filled.
+      [
+        KEYS.newest3,
+        {
+          id: ID(3),
+          kind: "feed",
+          date: DAY_TWO,
+          startedAt: `${DAY_TWO}T05:00:00Z`,
+          feedMethod: "breast",
+        },
+      ],
+      [
+        KEYS.newest4,
+        {
+          id: ID(4),
+          kind: "sleep",
+          date: DAY_ONE,
+          startedAt: `${DAY_ONE}T20:00:00Z`,
+          endedAt: `${DAY_TWO}T04:00:00Z`,
+        },
+      ],
+      // Two diapers without a time: they sit where they were logged, which is now.
+      [KEYS.newest5, { id: ID(5), kind: "diaper", date: DAY_TWO, diaperContents: "dirty" }],
+      [KEYS.newest6, { id: ID(6), kind: "diaper", date: DAY_TWO }],
+      // The same moment twice: the id breaks the tie.
+      [
+        KEYS.newest7,
+        { id: ID(7), kind: "diaper", date: DAY_ONE, startedAt: `${DAY_ONE}T12:00:00Z` },
+      ],
+      [
+        KEYS.newest8,
+        { id: ID(8), kind: "diaper", date: DAY_ONE, startedAt: `${DAY_ONE}T12:00:00Z` },
+      ],
+    ];
+    for (const [key, body] of events) {
+      const response = await call("POST", `/children/${wrenId}/events`, {
+        token: CHILDREN_TOKENS.dana,
+        key,
+        body,
+      });
+      expect(response.status).toBe(201);
+    }
+
+    const newest = await json<Page>(await read("order=desc"));
+    expect(newest.items.map((item) => item.id)).toEqual([
+      ID(6),
+      ID(5),
+      ID(1),
+      ID(3),
+      ID(4),
+      ID(8),
+      ID(7),
+      ID(2),
+    ]);
+    expect(newest.nextCursor).toBeNull();
+
+    // The default stays the sync order: by day, then by id.
+    const oldest = await json<Page>(await read(""));
+    expect(oldest.items.map((item) => item.id)).toEqual([
+      ID(2),
+      ID(4),
+      ID(7),
+      ID(8),
+      ID(1),
+      ID(3),
+      ID(5),
+      ID(6),
+    ]);
+
+    const today = await json<Page>(await read(`order=desc&from=${DAY_TWO}&to=${DAY_TWO}`));
+    expect(today.items.map((item) => item.id)).toEqual([ID(6), ID(5), ID(1), ID(3)]);
+  });
+
+  it("finds the last event of a kind in one row, the back-filled feed included", async () => {
+    const lastFeed = await json<Page>(await read("kind=feed&order=desc&limit=1"));
+    expect(lastFeed.items.map((item) => [item.id, item.feedMethod])).toEqual([[ID(1), "bottle"]]);
+    const lastSleep = await json<Page>(await read("kind=sleep&order=desc&limit=1"));
+    expect(lastSleep.items.map((item) => item.id)).toEqual([ID(4)]);
+    const lastDiaper = await json<Page>(await read("kind=diaper&order=desc&limit=1"));
+    expect(lastDiaper.items.map((item) => item.id)).toEqual([ID(6)]);
+    expect(lastDiaper.nextCursor).not.toBeNull();
+  });
+
+  it("pages newest first with a cursor of its own, without skipping or repeating a row", async () => {
+    for (const limit of [1, 3]) {
+      const seen: string[] = [];
+      let cursor: string | null = null;
+      do {
+        const query: string = `order=desc&limit=${limit}${cursor === null ? "" : `&cursor=${cursor}`}`;
+        const page: Page = await json<Page>(await read(query));
+        seen.push(...page.items.map((item) => item.id));
+        cursor = page.nextCursor;
+      } while (cursor !== null);
+      expect(seen, `limit ${limit}`).toEqual([
+        ID(6),
+        ID(5),
+        ID(1),
+        ID(3),
+        ID(4),
+        ID(8),
+        ID(7),
+        ID(2),
+      ]);
+    }
+  });
+
+  it("refuses a cursor from the other order, and one it never issued, as a 422 on the cursor", async () => {
+    const desc = (await json<Page>(await read("order=desc&limit=2"))).nextCursor;
+    const asc = (await json<Page>(await read("limit=2"))).nextCursor;
+    expect(desc).not.toBeNull();
+    expect(asc).not.toBeNull();
+    const moment = "2026-10-01T05:00:00.000000Z";
+    for (const query of [
+      `limit=2&cursor=${desc}`,
+      `order=desc&limit=2&cursor=${asc}`,
+      `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: moment, i: "not-an-id" })}`,
+      `order=desc&cursor=${forged({ o: "desc", d: "2026-02-31", t: moment, i: ID(1) })}`,
+      `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: "2026-02-31T05:00:00.000000Z", i: ID(1) })}`,
+      // JavaScript reads year 0000 as 1 BC; Postgres has no year zero, so the cast would fail.
+      `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: "0000-01-01T00:00:00.000000Z", i: ID(1) })}`,
+      `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, t: "yesterday", i: ID(1) })}`,
+      `order=desc&cursor=${forged({ o: "desc", d: DAY_TWO, i: ID(1) })}`,
+      `cursor=${forged({ d: "2026-13-01", i: ID(1) })}`,
+      "order=desc&cursor=not-a-cursor",
+    ]) {
+      const problem = await expectProblem(await read(query), 422, "validation_failed");
+      expect(
+        problem.errors?.map((error) => error.path),
+        query,
+      ).toEqual(["cursor"]);
+    }
+    await expectProblem(await read("order=newest"), 422, "validation_failed");
+  });
+
+  it("keeps the cursor's moment to the microsecond, so two events logged in one millisecond both come back", async () => {
+    // Two diapers without a time on a day of their own, written straight to the table so
+    // their logged moments sit 100 microseconds apart inside one millisecond. The newer one
+    // has the lower id, so only the moment orders them. A cursor rounded to the millisecond,
+    // as a JavaScript Date would round it, skips the older one or repeats the newer one.
+    const DAY_THREE = addDays(BORN, 22);
+    const loggedAt = (micros: string) => sql`${`${DAY_THREE}T10:00:00.123${micros}Z`}::timestamptz`;
+    await db.insert(schema.childEvents).values([
+      {
+        id: ID(9),
+        childId: wrenId,
+        authorId: DANA,
+        kind: "diaper",
+        date: DAY_THREE,
+        createdAt: loggedAt("200"),
+        updatedAt: loggedAt("200"),
+      },
+      {
+        id: ID(10),
+        childId: wrenId,
+        authorId: DANA,
+        kind: "diaper",
+        date: DAY_THREE,
+        createdAt: loggedAt("100"),
+        updatedAt: loggedAt("100"),
+      },
+    ]);
+
+    const seen: ChildEvent[] = [];
+    let cursor: string | null = null;
+    // Two rows need two pages; the bound makes a cursor that repeats a row fail, not loop.
+    for (let pages = 0; pages < 4; pages += 1) {
+      const query: string = `order=desc&from=${DAY_THREE}&to=${DAY_THREE}&limit=1${cursor === null ? "" : `&cursor=${cursor}`}`;
+      const page: Page = await json<Page>(await read(query));
+      seen.push(...page.items);
+      cursor = page.nextCursor;
+      if (cursor === null) break;
+    }
+    expect(seen.map((item) => item.id)).toEqual([ID(9), ID(10)]);
+    // The API itself shows both at the same millisecond.
+    expect(new Set(seen.map((item) => item.createdAt)).size).toBe(1);
+  });
+});
+
 describe("the contract", () => {
   it("lists every children route with its components", async () => {
     const document = await json<{
@@ -1027,8 +1658,17 @@ describe("the contract", () => {
       "ChildMeasurement",
       "MilestoneChecklist",
       "Guardian",
+      "GuardianConsentInput",
     ]) {
       expect(document.components.schemas).toHaveProperty(name);
     }
+    // Task E12: the create body needs the guardian's consent; the events list reads either way.
+    const input = document.components.schemas["ChildInput"] as { required?: string[] };
+    expect(input.required).toContain("guardianConsent");
+    const list = document.paths["/api/v1/children/{id}/events"]?.["get"] as {
+      parameters: { name: string; in: string; schema: { enum?: string[]; default?: string } }[];
+    };
+    const order = list.parameters.find((parameter) => parameter.name === "order");
+    expect(order).toMatchObject({ in: "query", schema: { enum: ["asc", "desc"], default: "asc" } });
   });
 });

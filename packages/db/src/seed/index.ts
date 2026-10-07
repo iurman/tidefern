@@ -811,12 +811,15 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               "Keep your due date, appointments and milestones.",
               signedUp(MIRA),
             ),
+            // Mira's consent on each child's behalf, in the words of the guardian's
+            // consent text (`CHILD_CONSENT_DISCLOSURES` in packages/schemas, task E12),
+            // which the children route writes when a child is created.
             consent(
               10,
               ILO,
               "child",
               "necessary",
-              "Keep this child's feeds, sleep, growth and milestones.",
+              "Keep this child's feeds, sleep, diapers, growth and milestones.",
               daysBefore(now, 42),
               MIRA.id,
             ),
@@ -825,7 +828,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               SOL,
               "child",
               "necessary",
-              "Keep this child's feeds, sleep, growth and milestones.",
+              "Keep this child's feeds, sleep, diapers, growth and milestones.",
               daysBefore(now, 420),
               MIRA.id,
             ),
@@ -1003,8 +1006,9 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
         ).length,
       );
 
-      // Ilo's feeds, a night's sleep and a diaper; the checked milestones for
-      // both children; Sol's night. A feed with a note seals it under Ilo's key.
+      // Ilo's feeds (a 90 ml bottle and a breast feed), a night's sleep and a
+      // mixed diaper; the checked milestones for both children; Sol's night.
+      // The breast feed carries a note, sealed under Ilo's key.
       const childEventRows: (typeof schema.childEvents.$inferInsert)[] = [
         {
           id: seedId(BLOCK.childEvents, 1),
@@ -1013,6 +1017,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           kind: "feed",
           date: v(-1),
           startedAt: hoursBefore(now, 26),
+          feedMethod: "bottle",
           quantityMl: 90,
           ...stamp(hoursBefore(now, 26)),
         },
@@ -1023,6 +1028,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           kind: "feed",
           date: v(-1),
           startedAt: hoursBefore(now, 22),
+          feedMethod: "breast",
           note: encryptFieldFor(
             keys,
             { subjectId: ILO, table: "child_events", column: "note", rowId: ILO_FEED_NOTE.id },
@@ -1048,6 +1054,7 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
           kind: "diaper",
           date: v(0),
           startedAt: hoursBefore(now, 2),
+          diaperContents: "mixed",
           ...stamp(hoursBefore(now, 2)),
         },
         ...CHECKED_MILESTONES.map((item, index) => {

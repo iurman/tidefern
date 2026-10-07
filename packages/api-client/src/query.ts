@@ -1,12 +1,12 @@
 /**
  * Health data travels only in request and response bodies (architecture
  * 5.1 and 9.1): runtime logs record paths and query strings. The contract's
- * query parameters are ids, calendar dates, instants, page cursors, numbers
- * and one closed vocabulary filter, and this list names each one with the
- * shape its value must have. The client refuses any other key or any value
- * outside its shape before the request leaves, and a unit test fails when
- * openapi/v1.json gains a query parameter this list does not cover, so a
- * new one is reviewed here first.
+ * query parameters are ids, calendar dates, instants, page cursors, numbers,
+ * one closed vocabulary filter and a list direction (asc or desc), and this
+ * list names each one with the shape its value must have. The client
+ * refuses any other key or any value outside its shape before the request
+ * leaves, and a unit test fails when openapi/v1.json gains a query
+ * parameter this list does not cover, so a new one is reviewed here first.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
@@ -15,6 +15,8 @@ const CURSOR = /^[A-Za-z0-9_-]{1,200}={0,2}$/;
 const INTEGER = /^\d{1,4}$/;
 // Child event kinds. A vocabulary code, not a health word (lead ruling on E5).
 const CHILD_EVENT_KIND = /^(milestone|feed|sleep|diaper)$/;
+// A list's direction (task E12, the events list): says nothing about anyone.
+const ORDER = /^(asc|desc)$/;
 
 export const allowedQuery: Readonly<Record<string, RegExp>> = {
   subject: UUID,
@@ -26,6 +28,7 @@ export const allowedQuery: Readonly<Record<string, RegExp>> = {
   limit: INTEGER,
   age: INTEGER,
   kind: CHILD_EVENT_KIND,
+  order: ORDER,
 };
 
 /** Thrown, before any network call, for a query string the contract never carries. */

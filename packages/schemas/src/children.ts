@@ -1,8 +1,12 @@
 import { z } from "zod";
 
+import { GuardianConsentInput } from "./profile";
+
 // The index re-exports this module, so importing the index back from here
 // would be a cycle that ESM evaluates in the wrong order; the two primitives
 // are repeated with the same shape as the index's `Id` and `CalendarDate`.
+// ./profile imports nothing but zod, so the guardian's consent comes from
+// there directly.
 const Id = z.uuid().describe("Opaque resource identifier");
 /** Architecture 5.1: an id a client mints for a create is validated as UUIDv7. */
 const ClientId = z.uuidv7().describe("Optional client-minted UUIDv7 for offline-first clients");
@@ -29,6 +33,17 @@ export type ChildEventKind = z.infer<typeof ChildEventKind>;
 /** The breast a feed was given from; a bottle feed has none, and only a feed may carry one. */
 export const ChildEventSide = z.enum(["left", "right", "both"]);
 export type ChildEventSide = z.infer<typeof ChildEventSide>;
+
+/** How a feed was given; only a feed may carry one. Mirrors `child_event_feed_method`. */
+export const ChildEventFeedMethod = z.enum(["breast", "bottle", "solids"]);
+export type ChildEventFeedMethod = z.infer<typeof ChildEventFeedMethod>;
+
+/**
+ * What a diaper held, `mixed` being wet and dirty at once; only a diaper may
+ * carry it. Mirrors `child_event_diaper_contents`.
+ */
+export const ChildEventDiaperContents = z.enum(["wet", "dirty", "mixed"]);
+export type ChildEventDiaperContents = z.infer<typeof ChildEventDiaperContents>;
 
 const DATE_PARTS = /^(\d{4})-(\d{2})-(\d{2})$/;
 
@@ -60,15 +75,23 @@ const DisplayName = z
   .max(80)
   .describe("How the family calls the child; shown to every guardian and child grantee");
 
-/** The create body: an offline client may mint the id (architecture record 5.1). */
+/**
+ * The create body: an offline client may mint the id (architecture record
+ * 5.1), and the guardian's consent on the child's behalf comes with it
+ * (architecture record 8.4), because the child is never created without it.
+ */
 export const ChildInput = z
   .object({
     id: ClientId.optional(),
     displayName: DisplayName,
     dateOfBirth: RealCalendarDate,
     sex: Sex.optional(),
+    guardianConsent: GuardianConsentInput,
   })
-  .meta({ id: "ChildInput", description: "Creates a child in the actor's household" });
+  .meta({
+    id: "ChildInput",
+    description: "Creates a child in the actor's household with the guardian's consent",
+  });
 export type ChildInput = z.infer<typeof ChildInput>;
 
 /** The update body replaces the three editable facts; `sex: null` clears it. */
@@ -133,6 +156,12 @@ const EventFields = z.object({
     .optional()
     .describe("A feed's volume in millilitres; imperial is a display choice"),
   side: ChildEventSide.optional().describe("A breast feed's side; absent for a bottle feed"),
+  feedMethod: ChildEventFeedMethod.optional().describe(
+    "How a feed was given; a breast feed may carry a side, a bottle feed a volume, solids neither",
+  ),
+  diaperContents: ChildEventDiaperContents.optional().describe(
+    "What a diaper held; absent on any other kind",
+  ),
   note: z
     .string()
     .trim()
@@ -164,6 +193,31 @@ function checkEvent(value: EventFields, ctx: z.RefinementCtx): void {
   }
   if (value.kind !== "feed" && value.side !== undefined) {
     ctx.addIssue({ code: "custom", path: ["side"], message: "Only a feed has a side." });
+  }
+  if (value.kind !== "feed" && value.feedMethod !== undefined) {
+    ctx.addIssue({ code: "custom", path: ["feedMethod"], message: "Only a feed has a method." });
+  }
+  if (value.kind !== "diaper" && value.diaperContents !== undefined) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["diaperContents"],
+      message: "Only a diaper has contents.",
+    });
+  }
+  // A feed's method decides what else it carries: a side for the breast, a
+  // volume for a bottle, neither for solids. A feed logged without a method
+  // keeps the rules above, as feeds did before the method existed.
+  if (value.kind === "feed" && value.feedMethod !== undefined) {
+    if (value.feedMethod !== "breast" && value.side !== undefined) {
+      ctx.addIssue({ code: "custom", path: ["side"], message: "Only a breast feed has a side." });
+    }
+    if (value.feedMethod !== "bottle" && value.quantityMl !== undefined) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["quantityMl"],
+        message: "Only a bottle feed has a volume.",
+      });
+    }
   }
   if ((value.kind === "milestone" || value.kind === "diaper") && value.endedAt !== undefined) {
     ctx.addIssue({
@@ -207,6 +261,12 @@ export const ChildEvent = z
     milestoneId: MilestoneItemId.nullable(),
     quantityMl: z.int().nullable(),
     side: ChildEventSide.nullable().describe("The breast a feed was given from; null otherwise"),
+    feedMethod: ChildEventFeedMethod.nullable().describe(
+      "How a feed was given; null on any other kind and on a feed logged without one",
+    ),
+    diaperContents: ChildEventDiaperContents.nullable().describe(
+      "What a diaper held; null on any other kind and on a diaper logged without it",
+    ),
     note: z.string().nullable().describe("Decrypted for the actor after access is decided"),
     authorId: Id.nullable(),
     createdAt: Instant,
@@ -365,8 +425,22 @@ export const DatedListQuery = ListQuery.extend({
 });
 export type DatedListQuery = z.infer<typeof DatedListQuery>;
 
-/** The events list also narrows by kind: a vocabulary value, never free text. */
+/**
+ * The events list also narrows by kind (a vocabulary value, never free text)
+ * and reads in either direction. `asc`, the default, is the order a sync
+ * pages in: by day, then by id. `desc` reads newest first for a timeline or
+ * the last event of a kind (`kind=feed&order=desc&limit=1`): by day, then by
+ * when each event happened within the day (its start, or when it was logged
+ * when it has none), so an event logged after the fact still takes its
+ * place. A cursor continues only the order that issued it.
+ */
 export const ChildEventListQuery = DatedListQuery.extend({
   kind: ChildEventKind.optional(),
+  order: z
+    .enum(["asc", "desc"])
+    .default("asc")
+    .describe(
+      "asc pages by day then id, as a sync reads; desc reads newest first, by day then by when each event happened",
+    ),
 });
 export type ChildEventListQuery = z.infer<typeof ChildEventListQuery>;

@@ -2,16 +2,19 @@ import { describe, expect, it } from "vitest";
 
 import { ShareCategory, Stage } from "./index";
 import {
+  CHILD_CONSENT_DISCLOSURES,
   CONSENT_DISCLOSURES,
   ConsentInput,
   ConsentRecord,
   ConsentWithdrawal,
   DataCategory,
   DataSummary,
+  GuardianConsentInput,
   IdempotentReplay,
   Profile,
   ProfileInput,
   TimeZone,
+  childConsentTextVersions,
   consentTextVersions,
   isSupportedTimeZone,
 } from "./profile";
@@ -132,6 +135,36 @@ describe("CONSENT_DISCLOSURES", () => {
       }
       expect(catalog.processors.length).toBeGreaterThan(0);
     }
+  });
+});
+
+describe("the guardian's consent on a child's behalf", () => {
+  it("has a child-category purpose, a basis and the full text for every version", () => {
+    expect(Object.keys(CHILD_CONSENT_DISCLOSURES)).toEqual([...childConsentTextVersions]);
+    for (const version of childConsentTextVersions) {
+      const disclosure = CHILD_CONSENT_DISCLOSURES[version];
+      expect(disclosure.category).toBe("child");
+      expect(DataCategory.options).toContain(disclosure.category);
+      expect(["necessary", "consent"]).toContain(disclosure.basis);
+      expect(disclosure.purpose.trim().length).toBeGreaterThan(0);
+      expect(disclosure.purpose.length).toBeLessThanOrEqual(500);
+      // The form shows the text in full before the box; it names who consents for whom.
+      expect(disclosure.text).toContain("On the child's behalf");
+      expect(disclosure.text.length).toBeGreaterThan(disclosure.purpose.length);
+    }
+  });
+
+  it("is collected as a box the guardian checked and the version of the text shown, no sentence", () => {
+    const given = { given: true, textVersion: "2026-10" };
+    expect(GuardianConsentInput.parse(given)).toEqual(given);
+    expect(GuardianConsentInput.safeParse({ ...given, given: false }).success).toBe(false);
+    expect(GuardianConsentInput.safeParse({ textVersion: "2026-10" }).success).toBe(false);
+    expect(GuardianConsentInput.safeParse({ ...given, textVersion: "2026-11" }).success).toBe(
+      false,
+    );
+    expect(GuardianConsentInput.safeParse({ given: true }).success).toBe(false);
+    // An unknown key such as a purpose sentence is dropped, never carried to a row.
+    expect(GuardianConsentInput.parse({ ...given, purpose: "Anything at all." })).toEqual(given);
   });
 });
 

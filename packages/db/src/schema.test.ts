@@ -130,6 +130,7 @@ describe("the journal", () => {
       "0009_child_event_side_and_open_closure",
       "0010_cycle_status_functions",
       "0011_cycle_status_calendar_clock",
+      "0012_child_event_feed_method_and_diaper_contents",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

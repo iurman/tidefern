@@ -190,8 +190,15 @@ revoked_at IS NULL`, so two active grants on one tuple cannot exist,
   for milestones and a span for sleep, and a feed may carry a `side`
   (`left`, `right` or `both`, the closed nullable `child_event_side` enum
   from migration `0009`, task B13) that the `child_events_side_is_for_feed`
-  check refuses on any other kind; `child_measurements` need at least
-  one positive value.
+  check refuses on any other kind; a feed may also carry a `feed_method`
+  (`breast`, `bottle` or `solids`, the `child_event_feed_method` enum) and a
+  diaper its `diaper_contents` (`wet`, `dirty` or `mixed`, the
+  `child_event_diaper_contents` enum), both closed and nullable from
+  migration `0012` (task E12) and refused on any other kind by
+  `child_events_feed_method_is_for_feed` and
+  `child_events_diaper_contents_is_for_diaper`; which side or volume a
+  method allows is the API's validation rule, not a check;
+  `child_measurements` need at least one positive value.
 - Platform: `photos` hold the object key, status, content type, size,
   dimensions, an encrypted caption and the day taken, never a filename or
   EXIF; `audit_events` have no content columns and a partial unique
@@ -494,7 +501,7 @@ else; never reuse one anywhere real.
 | --- | --- | --- | --- | --- | --- |
 | Noor | `noor@example.test` | `tidefern-seed-noor` | Europe/Berlin, `cycle` | A, owner | Her own day sheet (17 days, 14 symptoms, 3 period starts 28 days apart), the live prediction, a private note and a shared one, 4 consents, the invitations she sent, the grants she made |
 | Theo | `theo@example.test` | `tidefern-seed-theo` | Europe/Berlin, `none` | A, partner | Noor's day sheet through a `read` grant on `cycle.symptoms` and a status card through a `summary` grant on `cycle.status` (notify on); his `read` grant on `cycle.history` was revoked 20 days ago, so no prediction; the shared note, never the private journal |
-| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events, 5 measurements, 5 checked milestones, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there) |
+| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events (Ilo's 90 ml `bottle` feed, a `breast` feed with a note, a night's sleep and a `mixed` diaper; Sol's night; 5 checked milestones), 5 measurements, the consent she gave on each child's behalf in the guardian's consent wording, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there) |
 | Lena | `lena@example.test` | `tidefern-seed-lena` | America/Vancouver, `pregnancy` | B, partner | Her open pregnancy (22 weeks, redated by 8 days at the 14 week scan; the `due_date_changes` row is hers alone), 4 events, 2 notes under `pregnancy.overview`, both children as a guardian; nothing of Mira's history |
 | Pia | `pia@example.test` | `tidefern-seed-pia` | America/New_York, `none`, imperial | none | Sol alone, through a `read` grant on `child` for that child: Sol's events and measurements, Sol's key, never Ilo and never the guardians |
 
