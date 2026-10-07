@@ -125,6 +125,97 @@ describe("MeasurementChart", () => {
     expect(screen.getByRole("list", { name: "Readings" })).toHaveTextContent("11.9 lb");
   });
 
+  it("follows the API's pointToCare when the answer carries it, and never computes it then", () => {
+    const flagged = lowWeights.map((weight, index) => ({
+      ...weight,
+      id: `m-${index}`,
+      pointToCare: index === 2,
+    }));
+    const first = render(
+      <MeasurementChart
+        sex="female"
+        indicator="weightForAge"
+        birthDate={birthDate}
+        today={today}
+        measurements={flagged.map((weight, index) => ({ ...weight, pointToCare: index === 0 }))}
+        initialRange="lastThreeMonths"
+      />,
+    );
+    // A flagged reading outside the chosen range is not on the chart, so neither is the sentence.
+    expect(screen.queryByText(/worth mentioning/)).toBeNull();
+    first.unmount();
+    const { rerender } = render(
+      <MeasurementChart
+        sex="female"
+        indicator="weightForAge"
+        birthDate={birthDate}
+        today={today}
+        measurements={flagged}
+      />,
+    );
+    expect(
+      screen.getByText("This is worth mentioning to your doctor or midwife."),
+    ).toBeInTheDocument();
+    // Core would place these readings beyond 2 SD, but the answer says no: the answer wins.
+    rerender(
+      <MeasurementChart
+        sex="female"
+        indicator="weightForAge"
+        birthDate={birthDate}
+        today={today}
+        measurements={flagged.map((weight) => ({ ...weight, pointToCare: false }))}
+      />,
+    );
+    expect(screen.queryByText(/worth mentioning/)).toBeNull();
+    // And a partner's view never carries it, whatever the flags say.
+    rerender(
+      <MeasurementChart
+        sex="female"
+        indicator="weightForAge"
+        birthDate={birthDate}
+        today={today}
+        measurements={flagged}
+        viewer="partner"
+      />,
+    );
+    expect(screen.queryByText(/worth mentioning/)).toBeNull();
+  });
+
+  it("takes the profile's imperial units and lists two readings of one day under their own keys", () => {
+    render(
+      <MeasurementChart
+        sex="female"
+        indicator="lengthForAge"
+        birthDate={birthDate}
+        today={today}
+        units="imperial"
+        measurements={[
+          { id: "first", date: "2026-09-29", value: 685 },
+          { id: "second", date: "2026-09-29", value: 690 },
+        ]}
+      />,
+    );
+    const readings = screen.getByRole("list", { name: "Readings" });
+    expect(readings.querySelectorAll("li")).toHaveLength(2);
+    expect(readings).toHaveTextContent("Sep 29: 27.0 in");
+    expect(readings).toHaveTextContent("Sep 29: 27.2 in");
+  });
+
+  it("leaves the empty state's action out for a viewer who cannot add a measurement", () => {
+    render(
+      <MeasurementChart
+        sex="female"
+        indicator="weightForAge"
+        birthDate={birthDate}
+        today={today}
+        measurements={[]}
+        addHref={null}
+      />,
+    );
+    expect(screen.getByText("No measurements yet")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "Add a measurement" })).toBeNull();
+  });
+
   it("follows the empty state formula and the loading and error voice", () => {
     const { rerender } = render(
       <MeasurementChart
