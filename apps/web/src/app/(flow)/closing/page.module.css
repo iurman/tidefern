@@ -1,0 +1,24 @@
+/* The placeholder's one statement; task H7 replaces the page and this module with it. */
+.page {
+  display: grid;
+  justify-items: start;
+}
+
+.heading {
+  font-size: var(--type-heading);
+  line-height: 1.15;
+  margin-bottom: var(--space-4);
+  text-wrap: balance;
+}
+
+.lede {
+  font-size: var(--type-intro);
+  line-height: 1.5;
+  color: var(--muted);
+  max-width: 40ch;
+  margin-bottom: var(--space-8);
+}
+
+.tide {
+  max-width: 160px;
+}
