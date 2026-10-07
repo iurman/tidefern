@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { and, eq, sql } from "drizzle-orm";
 import { checklistFor, diffDays, gestationalAge, todayIn } from "@tidefern/core";
@@ -10,10 +10,12 @@ import {
   MilestoneCheck,
   MilestoneChecklist,
   Pregnancy,
+  PregnancyView,
 } from "@tidefern/schemas";
 
 import { createApp } from "../app";
 import { calendarClock, pinCalendar, realCalendarClock } from "../clock";
+import { IDEMPOTENCY_KEY_HEADER } from "../middleware/index";
 import { ANNA, BEN, CARA, OWN_ORIGIN, TOKENS, createActorFixture } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
 import type { ApiTestDatabase } from "../test/database";
@@ -31,8 +33,10 @@ import { Me } from "./me";
  *
  * The cast: Anna cycles in Europe/Berlin and is the guardian of a child born
  * on 2025-12-05; her periods started on 2026-02-14 and 2026-03-14 and she
- * bled on 2026-03-15 too. Ben holds her status card and has no profile yet.
- * Cara is pregnant in America/Vancouver, ten weeks on 2026-03-14.
+ * bled on 2026-03-15 too. Ben holds her status card and Cara's pregnancy
+ * overview, and has no profile yet. Cara is pregnant in America/Vancouver,
+ * ten weeks on 2026-03-14, with one appointment logged. Dana lives in
+ * Asia/Tokyo and has no pregnancy until a test starts one.
  */
 const FROZEN = "2026-03-14T23:30:00.000Z";
 /** FROZEN is 00:30 on 15 March in Berlin (UTC+1 until 29 March)... */
@@ -42,6 +46,19 @@ const CARA_FROZEN_TODAY = "2026-03-14";
 const ANNA_ZONE = "Europe/Berlin";
 const CARA_ZONE = "America/Vancouver";
 const CARA_DUE = "2026-10-10";
+const CARA_PREGNANCY = "018f5e7a-2000-7000-8000-00000000e131";
+const CARA_EVENT = "018f5e7a-2000-7000-8000-00000000e132";
+/** Ten weeks to the day: Cara on her frozen today, and Dana when she starts. */
+const TEN_WEEKS = { weeks: 10, days: 0, totalDays: 70, trimester: 1, label: "10w0d" };
+const DANA = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f40";
+const DANA_TOKEN = "dana";
+const DANA_ZONE = "Asia/Tokyo";
+/**
+ * FROZEN is 08:30 on 15 March in Tokyo (UTC+9), 30 weeks before the due
+ * date Dana starts with and 29 before the one she re-dates to.
+ */
+const DANA_DUE = "2026-10-11";
+const DANA_REDATED = "2026-10-04";
 const CHILD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f11";
 const HOUSEHOLD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9fa0";
 const BORN = "2025-12-05";
@@ -59,14 +76,37 @@ async function json(response: Response): Promise<unknown> {
   return response.json();
 }
 
+const writeHeaders = (token: string, extra: Record<string, string>): Record<string, string> => ({
+  ...(sessionHeaders(token) as Record<string, string>),
+  origin: OWN_ORIGIN,
+  "content-type": "application/json",
+  ...extra,
+});
+
+/** The dedupe keys of the reads `actorId` has been audited for about `subjectId`. */
+async function readsFiled(actorId: string, subjectId: string): Promise<(string | null)[]> {
+  const rows = await harness.db
+    .select({ dedupeKey: schema.auditEvents.dedupeKey })
+    .from(schema.auditEvents)
+    .where(
+      and(eq(schema.auditEvents.actorId, actorId), eq(schema.auditEvents.subjectId, subjectId)),
+    );
+  return rows.map((row) => row.dedupeKey);
+}
+
 beforeAll(async () => {
   const fixture = await createActorFixture();
   harness = fixture.harness;
   const { db } = harness;
   const attested = new Date("2026-01-01T00:00:00.000Z");
+  await db
+    .insert(schema.user)
+    .values({ id: DANA, name: "Dana", email: "dana@example.com", emailVerified: true });
+  fixture.auth.signIn(DANA_TOKEN, DANA, "dana@example.com", 60);
   await db.insert(schema.profiles).values([
     { userId: ANNA, timeZone: ANNA_ZONE, stage: "cycle", ageAttestedAt: attested },
     { userId: CARA, timeZone: CARA_ZONE, stage: "pregnancy", ageAttestedAt: attested },
+    { userId: DANA, timeZone: DANA_ZONE, stage: "cycle", ageAttestedAt: attested },
   ]);
   await db.insert(schema.grants).values({
     id: "018f5e7a-2000-7000-8000-00000000e111",
@@ -104,10 +144,27 @@ beforeAll(async () => {
     },
   ]);
   await db.insert(schema.pregnancies).values({
-    id: "018f5e7a-2000-7000-8000-00000000e131",
+    id: CARA_PREGNANCY,
     subjectId: CARA,
     dueDate: CARA_DUE,
     datingMethod: "lmp",
+  });
+  await db.insert(schema.pregnancyEvents).values({
+    id: CARA_EVENT,
+    pregnancyId: CARA_PREGNANCY,
+    subjectId: CARA,
+    authorId: CARA,
+    kind: "appointment",
+    date: "2026-03-20",
+  });
+  await db.insert(schema.grants).values({
+    id: "018f5e7a-2000-7000-8000-00000000e112",
+    ownerId: CARA,
+    granteeId: BEN,
+    category: "pregnancy.overview",
+    level: "summary",
+    policyVersion: "2026-10",
+    descriptionVersion: "2026-10",
   });
   await db.insert(schema.households).values({ id: HOUSEHOLD });
   await db.insert(schema.householdMembers).values({
@@ -243,6 +300,63 @@ describe("GET /v1/pregnancies/current", () => {
     const expected = gestationalAge(CARA_DUE, todayIn(CARA_ZONE, new Date()));
     const body = Pregnancy.parse(await json(await get(real, "/pregnancies/current", TOKENS.cara)));
     expect(body.gestation).toEqual(expected);
+  });
+});
+
+describe("GET /v1/pregnancies/{id}", () => {
+  it("counts the gestation to the frozen today in her zone", async () => {
+    const path = `/pregnancies/${CARA_PREGNANCY}`;
+    const body = Pregnancy.parse(await json(await get(frozen, path, TOKENS.cara)));
+    expect(body.gestation).toEqual(TEN_WEEKS);
+  });
+
+  it("counts it to the real today on the real clock", async () => {
+    const expected = gestationalAge(CARA_DUE, todayIn(CARA_ZONE, new Date()));
+    const path = `/pregnancies/${CARA_PREGNANCY}`;
+    const body = Pregnancy.parse(await json(await get(real, path, TOKENS.cara)));
+    expect(body.gestation).toEqual(expected);
+  });
+});
+
+describe("a pregnancy overview grantee's reads", () => {
+  it("count her week to the frozen today, and each one is audited on the real day", async () => {
+    // One row per actor, subject, category and day: a read filed under the
+    // frozen day would add a second key, so the list is checked after each.
+    const filed = [`${BEN}/${CARA}/pregnancy.overview/${todayIn(CARA_ZONE, new Date())}`];
+    for (const path of [`/pregnancies/current?subject=${CARA}`, `/pregnancies/${CARA_PREGNANCY}`]) {
+      const view = PregnancyView.parse(await json(await get(frozen, path, TOKENS.ben)));
+      expect(view).toMatchObject({ status: "active", gestation: TEN_WEEKS });
+      expect(await readsFiled(BEN, CARA)).toEqual(filed);
+    }
+    for (const path of [
+      `/pregnancies/${CARA_PREGNANCY}/events`,
+      `/pregnancies/${CARA_PREGNANCY}/events/${CARA_EVENT}`,
+    ]) {
+      await json(await get(frozen, path, TOKENS.ben));
+      expect(await readsFiled(BEN, CARA)).toEqual(filed);
+    }
+  });
+});
+
+describe("starting and re-dating a pregnancy", () => {
+  it("counts the week each answer shows to the frozen today in her zone", async () => {
+    const started = await frozen.request("/api/v1/pregnancies", {
+      method: "POST",
+      headers: writeHeaders(DANA_TOKEN, { [IDEMPOTENCY_KEY_HEADER]: randomUUID() }),
+      body: JSON.stringify({ dating: { method: "manual", dueDate: DANA_DUE } }),
+    });
+    expect(started.status).toBe(201);
+    const view = Pregnancy.parse(await started.json());
+    expect(view.gestation).toEqual(TEN_WEEKS);
+    const redated = await frozen.request(`/api/v1/pregnancies/${view.id}/dating`, {
+      method: "PUT",
+      headers: writeHeaders(DANA_TOKEN, { "if-match": String(view.version) }),
+      body: JSON.stringify({ method: "manual", dueDate: DANA_REDATED }),
+    });
+    expect(Pregnancy.parse(await json(redated))).toMatchObject({
+      dueDate: DANA_REDATED,
+      gestation: { weeks: 11, days: 0, totalDays: 77, trimester: 1, label: "11w0d" },
+    });
   });
 });
 
