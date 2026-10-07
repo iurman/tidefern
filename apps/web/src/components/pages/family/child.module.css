@@ -72,6 +72,11 @@
   gap: var(--space-3);
 }
 
+/* Starts wide enough for its pending words ("Saving"), so it keeps its width while it runs. */
+.steady {
+  min-width: 8.5rem;
+}
+
 .controls {
   display: flex;
   flex-wrap: wrap;

@@ -325,6 +325,7 @@ export function QuickLog({
             <Button
               variant="quiet"
               icon="undo"
+              className={styles.steady}
               loading={undoing}
               loadingText={copy.undoing}
               onClick={() => void undo(notice.undo as string)}
@@ -402,7 +403,12 @@ export function QuickLog({
             ) : null}
             {failure}
             <div className={styles.sheetActions}>
-              <Button type="submit" loading={pending} loadingText={copy.saving}>
+              <Button
+                type="submit"
+                className={styles.steady}
+                loading={pending}
+                loadingText={copy.saving}
+              >
                 {timing ? copy.stopTimer : copy.save}
               </Button>
             </div>
@@ -419,7 +425,12 @@ export function QuickLog({
             <p className={styles.help}>{copy.contentsHelp}</p>
             {failure}
             <div className={styles.sheetActions}>
-              <Button type="submit" loading={pending} loadingText={copy.saving}>
+              <Button
+                type="submit"
+                className={styles.steady}
+                loading={pending}
+                loadingText={copy.saving}
+              >
                 {copy.save}
               </Button>
             </div>
@@ -436,6 +447,7 @@ export function QuickLog({
             <div className={styles.sheetActions}>
               <Button
                 type="submit"
+                className={styles.steady}
                 loading={pending}
                 loadingText={ongoingSleep !== null ? copy.ending : copy.starting}
               >

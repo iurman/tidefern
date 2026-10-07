@@ -377,7 +377,12 @@ export function GrowthPanel({
               </InlineFeedback>
             ) : null}
             <div className={styles.actions}>
-              <Button type="submit" loading={pending} loadingText={copy.saving}>
+              <Button
+                type="submit"
+                className={styles.steady}
+                loading={pending}
+                loadingText={copy.saving}
+              >
                 {copy.save}
               </Button>
             </div>

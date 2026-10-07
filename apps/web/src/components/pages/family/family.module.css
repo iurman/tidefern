@@ -212,6 +212,14 @@
   gap: var(--space-3);
 }
 
+/*
+ * A control whose pending words are longer than its label ("Save" and "Saving", "Undo" and
+ * "Undoing") starts wide enough for both, so it keeps its width while the request runs.
+ */
+.steady {
+  min-width: 8.5rem;
+}
+
 .field {
   display: grid;
   gap: var(--space-2);

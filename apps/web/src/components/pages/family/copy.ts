@@ -110,7 +110,8 @@ export const familyCopy = {
     consentLabel: "I agree to this on the child's behalf.",
     consentVersion: (version: string) => `Consent text version ${version}.`,
     submit: "Add the child",
-    pending: "Adding the child",
+    // No longer than the label, so the control keeps its width while it runs.
+    pending: "Adding",
     nameMissing: "Enter the child's name.",
     nameTooLong: "Use 80 characters or fewer.",
     dateMissing: "Enter the date of birth.",
@@ -137,7 +138,8 @@ export const familyCopy = {
     }),
     emptyAction: "Log on the Family page",
     more: "Show older entries",
-    loadingMore: "Loading older entries",
+    // No longer than the label, so the control keeps its width while it runs.
+    loadingMore: "Loading",
     moreFailed: "We could not load older entries. Try again.",
   },
   growth: {

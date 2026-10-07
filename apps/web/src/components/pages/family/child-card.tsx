@@ -41,7 +41,10 @@ export function ChildCard({ card, today, units, warm, context = {} }: ChildCardP
   } else {
     const { feed, sleep, diaper } = day.summary;
     summary = (
-      <dl className={warm ? `${styles.summary} ${styles.warm}` : styles.summary}>
+      <dl
+        className={warm ? `${styles.summary} ${styles.warm}` : styles.summary}
+        data-warmth={warm ? "true" : undefined}
+      >
         <div className={styles.summaryRow}>
           <dt className={styles.summaryLabel}>{copy.lastFeed}</dt>
           {feed.lastSince === null ? (
