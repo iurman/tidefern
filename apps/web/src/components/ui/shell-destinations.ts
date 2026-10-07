@@ -4,8 +4,10 @@ import type { IconName } from "@/components/icons";
 /**
  * The authenticated shell's destinations (DESIGN.md section 2): Today,
  * Calendar, Sharing and Settings always; Journey while a pregnancy or the
- * postpartum stage is current; Family once a child exists; both when both.
- * The tab bar and the rail read the same list so they can never disagree.
+ * postpartum stage is current, or while someone shares a pregnancy with
+ * this person; Family once a child exists for them as a guardian or through
+ * a child grant; both when both. The tab bar and the rail read the same
+ * list so they can never disagree.
  */
 
 export type DestinationKey = "today" | "calendar" | "journey" | "family" | "sharing" | "settings";
@@ -19,7 +21,10 @@ export interface Destination {
 
 export interface ShellProfile {
   stage: Stage;
+  /** A child this person guards or holds a grant for. */
   hasChild: boolean;
+  /** Someone shares a pregnancy with this person (a held `pregnancy.overview` grant). */
+  sharedPregnancy?: boolean;
 }
 
 const all: Destination[] = [
@@ -31,8 +36,12 @@ const all: Destination[] = [
   { key: "settings", label: "Settings", href: "/settings", icon: "settings" },
 ];
 
-export function shellDestinations({ stage, hasChild }: ShellProfile): Destination[] {
-  const journey = stage === "pregnancy" || stage === "postpartum";
+export function shellDestinations({
+  stage,
+  hasChild,
+  sharedPregnancy = false,
+}: ShellProfile): Destination[] {
+  const journey = stage === "pregnancy" || stage === "postpartum" || sharedPregnancy;
   return all.filter((destination) => {
     if (destination.key === "journey") return journey;
     if (destination.key === "family") return hasChild;

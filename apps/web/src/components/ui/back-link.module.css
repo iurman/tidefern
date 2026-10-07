@@ -1,0 +1,39 @@
+.back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  justify-self: start;
+  min-height: var(--size-control);
+  padding: 0 var(--space-2) 0 var(--space-1);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  text-decoration: none;
+  transition:
+    color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+.back:hover,
+[data-specimen-state="hover"] > .back {
+  color: var(--text);
+  background: var(--panel);
+}
+
+[data-specimen-state="focus-visible"] > .back {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.back:active,
+[data-specimen-state="active"] > .back {
+  color: var(--accent);
+  background: var(--panel);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .back {
+    transition-duration: 0ms;
+  }
+}

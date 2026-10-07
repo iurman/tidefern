@@ -5,7 +5,12 @@ import { configureSharing, createApp } from "@tidefern/api";
 // in the app talks to the API over HTTP or the in-process client and never
 // imports either package; the ESLint rule stays on for them.
 /* eslint-disable no-restricted-imports -- host wiring for the API, see above */
-import { hostFactsFromEnvironment, resolveHosts } from "@tidefern/auth";
+import {
+  capturedMail,
+  clearCapturedMail,
+  hostFactsFromEnvironment,
+  resolveHosts,
+} from "@tidefern/auth";
 import { auth, mailer } from "@tidefern/auth/server";
 import { db } from "@tidefern/db/client";
 /* eslint-enable no-restricted-imports */
@@ -19,6 +24,15 @@ import { db } from "@tidefern/db/client";
 // Route handlers are dynamic by default. Keep API work well under the 300 s Hobby ceiling.
 export const maxDuration = 60;
 
+// The browser suite reads verification links from the capture mailer
+// (architecture 17.1): only when E2E_MAIL_CAPTURE is exactly "true" and the
+// server is not a Vercel deployment of any kind, so no preview or production
+// ever mounts the endpoint.
+const mailCapture =
+  process.env.E2E_MAIL_CAPTURE === "true" && !process.env.VERCEL_ENV
+    ? { read: capturedMail, clear: clearCapturedMail }
+    : undefined;
+
 // The origins a mutation may come from besides the request's own (the
 // production origin and this team's preview pattern), and the secret that
 // keys the actor hash in the log lines; without it a line carries no actor.
@@ -28,6 +42,7 @@ const app = createApp({
   db,
   crossSite: { trustedOrigins: resolveHosts(hostFactsFromEnvironment(process.env)).trustedOrigins },
   log: { secret: process.env.LOG_HMAC_SECRET },
+  mailCapture,
 });
 // The invitation mail goes out through the same transport as Better Auth's
 // (Resend on production, capture under E2E_MAIL_CAPTURE, the console

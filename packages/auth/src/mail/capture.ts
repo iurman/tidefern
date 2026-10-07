@@ -14,16 +14,30 @@ export interface CapturedMail {
 }
 
 // The one capture mailer `chooseMailer()` activates when E2E_MAIL_CAPTURE is
-// on. Module scope is the point: the endpoint in packages/api and the Better
-// Auth callbacks live in different modules and must see the same messages.
-let active: CaptureMailer | undefined;
+// on, kept on globalThis rather than in module scope: a Next.js production
+// build loads this module once per runtime (the route handler's and the
+// server render's each have their own module cache), and the endpoint, the
+// Better Auth callbacks and the sharing routes in every copy must see the
+// same messages. `Symbol.for` gives each copy the same key.
+const STORE = Symbol.for("tidefern.captureMailer");
+
+type CaptureHolder = { [STORE]?: CaptureMailer | undefined };
+
+function holder(): CaptureHolder {
+  return globalThis as CaptureHolder;
+}
+
+/** The capture mailer that is active in this process, if any. */
+export function activeCaptureMailer(): CaptureMailer | undefined {
+  return holder()[STORE];
+}
 
 /**
  * Makes `mailer` the instance `capturedMail()` reads, or turns capture off
  * with `undefined`. Called by `chooseMailer()`; tests call it directly.
  */
 export function setCaptureMailer(mailer: CaptureMailer | undefined): void {
-  active = mailer;
+  holder()[STORE] = mailer;
 }
 
 /** The first absolute http or https URL in a body, or undefined. */
@@ -36,7 +50,7 @@ export function linkIn(text: string): string | undefined {
  * endpoint answers the same shape in every environment it exists in.
  */
 export function capturedMail(): CapturedMail[] {
-  return (active?.messages ?? []).map((message) => ({
+  return (activeCaptureMailer()?.messages ?? []).map((message) => ({
     to: message.to,
     subject: message.subject,
     link: linkIn(message.text),
@@ -45,5 +59,5 @@ export function capturedMail(): CapturedMail[] {
 
 /** Forgets every captured message; a test calls it before each sign-up. */
 export function clearCapturedMail(): void {
-  active?.clear();
+  activeCaptureMailer()?.clear();
 }

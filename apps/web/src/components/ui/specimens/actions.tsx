@@ -1,3 +1,4 @@
+import { BackLink } from "../back-link";
 import { Button, type ButtonVariant } from "../button";
 import { CopyCode } from "../copy-code";
 import { Disclosure } from "../disclosure";
@@ -83,6 +84,16 @@ export const specimens: SpecimenGroup = {
       states: { disabled: "none", loading: "none", error: "none", empty: "none" },
       // The link is the root so the frame's forced states reach it; the sentence around it is the page's.
       render: () => <TextLink href="/privacy">how Tidefern stores your account</TextLink>,
+    },
+    {
+      name: "Back link",
+      source: `${ui}back-link.tsx`,
+      usage: '<BackLink href="/settings">Settings</BackLink>',
+      keyboard:
+        "Tab reaches it, Enter follows it to the parent screen's address, so a deep link and a reload go back the same way. Screen readers hear Back to Settings.",
+      // A link to a parent has no disabled, loading, error or empty form.
+      states: { disabled: "none", loading: "none", error: "none", empty: "none" },
+      render: () => <BackLink href="/settings">Settings</BackLink>,
     },
     {
       name: "Inline feedback",

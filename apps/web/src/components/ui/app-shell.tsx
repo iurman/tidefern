@@ -7,7 +7,7 @@ import styles from "./app-shell.module.css";
 export interface AppShellProps extends ShellProfile {
   /** The destination the person is on; it carries `aria-current="page"`. */
   current: DestinationKey;
-  /** The quick-log button opens nothing yet; the Today route passes the sheet opener here. */
+  /** The quick-log action: what the page on screen registered with `useQuickLog` (quick-log.tsx). */
   onQuickLog?: () => void;
   /**
    * `viewport` (the app) fills the viewport so the tab bar sits at the
@@ -28,21 +28,34 @@ export interface AppShellProps extends ShellProfile {
 export function AppShell({
   stage,
   hasChild,
+  sharedPregnancy = false,
   current,
   onQuickLog,
   fit = "viewport",
   children,
 }: AppShellProps) {
-  const destinations = shellDestinations({ stage, hasChild });
+  const destinations = shellDestinations({ stage, hasChild, sharedPregnancy });
+  // The quick log opens the day sheet, a body question the none stage is never asked (DESIGN.md 3.3).
+  const quickLog = current === "today" && stage !== "none";
   const className = fit === "content" ? `${styles.shell} ${styles.content}` : styles.shell;
   // The root is the size container and the frame is the grid, because a
   // container query never matches the container element itself.
   return (
     <div className={className}>
       <div className={styles.frame}>
-        <Rail destinations={destinations} current={current} onQuickLog={onQuickLog} />
+        <Rail
+          destinations={destinations}
+          current={current}
+          onQuickLog={onQuickLog}
+          quickLog={quickLog}
+        />
         <div className={styles.page}>{children}</div>
-        <TabBar destinations={destinations} current={current} onQuickLog={onQuickLog} />
+        <TabBar
+          destinations={destinations}
+          current={current}
+          onQuickLog={onQuickLog}
+          quickLog={quickLog}
+        />
       </div>
     </div>
   );

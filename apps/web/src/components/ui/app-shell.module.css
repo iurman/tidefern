@@ -38,13 +38,19 @@
     grid-template-columns: 240px minmax(0, 1fr);
   }
 
+  /* The rail panel runs the full height of the viewport and stays put while the page scrolls. */
   .frame > nav:first-child {
     display: flex;
     position: sticky;
     top: 0;
-    align-self: start;
-    max-height: 100dvh;
+    height: 100dvh;
     overflow-y: auto;
+  }
+
+  /* In a documentation preview the frame sizes to its children, so the rail stretches to it instead. */
+  .content .frame > nav:first-child {
+    position: static;
+    height: auto;
   }
 
   .frame > nav:last-child {

@@ -138,6 +138,12 @@ export const specimenGroups: readonly CatalogGroup[] = [
         description: "A link inside running text.",
       },
       {
+        name: "Back link",
+        source: `${ui}back-link.tsx`,
+        description:
+          "The way back to a parent screen by its address, read as Back to and its name.",
+      },
+      {
         name: "Inline feedback",
         source: `${ui}inline-feedback.tsx`,
         description: "A status sentence beside the control it is about, with an optional cue.",
