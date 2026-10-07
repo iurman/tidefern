@@ -167,8 +167,12 @@ export type ConsentTextVersion = (typeof consentTextVersions)[number];
  * plaintext `purpose` column only ever holds the product's own words and
  * never anything a client typed (AGENTS.md: free text only in encrypted
  * fields). A changed sentence is a new version; a version, once shipped, is
- * never edited. The 2026-10 wording is the seed's (packages/db seed); the
- * owner confirms it with the attorney before launch [OWNER].
+ * never edited. The 2026-10 wording is the seed's (packages/db seed) for
+ * every category but `child`. The seed's child rows are guardian consents in
+ * the words of `CHILD_CONSENT_DISCLOSURES` below; this catalog's `child`
+ * sentence leaves out diapers, and changing it is a new version that waits
+ * on the owner and the attorney. The owner confirms all of it with the
+ * attorney before launch [OWNER].
  */
 export const CONSENT_DISCLOSURES: Readonly<Record<ConsentTextVersion, ConsentDisclosure>> = {
   "2026-10": {

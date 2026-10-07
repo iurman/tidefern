@@ -1,12 +1,12 @@
 /**
  * Health data travels only in request and response bodies (architecture
  * 5.1 and 9.1): runtime logs record paths and query strings. The contract's
- * query parameters are ids, calendar dates, instants, page cursors, numbers
- * and one closed vocabulary filter, and this list names each one with the
- * shape its value must have. The client refuses any other key or any value
- * outside its shape before the request leaves, and a unit test fails when
- * openapi/v1.json gains a query parameter this list does not cover, so a
- * new one is reviewed here first.
+ * query parameters are ids, calendar dates, instants, page cursors, numbers,
+ * one closed vocabulary filter and a list direction (asc or desc), and this
+ * list names each one with the shape its value must have. The client
+ * refuses any other key or any value outside its shape before the request
+ * leaves, and a unit test fails when openapi/v1.json gains a query
+ * parameter this list does not cover, so a new one is reviewed here first.
  */
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
