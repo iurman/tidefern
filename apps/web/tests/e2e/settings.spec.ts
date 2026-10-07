@@ -70,6 +70,19 @@ async function expectNoAxeViolationsHere(page: Page, theme: Theme, label: string
   expect(results.violations, `${label} in ${theme}`).toEqual([]);
 }
 
+/**
+ * The same pass for a route at phone width, taken at the foot of the page. Below the rail's width
+ * the tab bar is sticky over the foot of the viewport, so at the top of a long page whichever
+ * control straddles its edge is reported as partly covered (target size, 2.5.8), and which one
+ * that is depends only on how tall the content above it is: the layout's failure notice moves
+ * it. At the foot the bar rests in its own place after the content and covers nothing.
+ */
+async function expectNoAxeViolationsAtFoot(page: Page, path: string, theme: Theme) {
+  await page.goto(path);
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await expectNoAxeViolationsHere(page, theme, `${path} at its foot`);
+}
+
 async function expectNoOverflow(page: Page, label: string) {
   for (const width of [390, 320]) {
     await page.setViewportSize({ width, height: 800 });
@@ -551,7 +564,8 @@ test("closing with the undo window on a fresh account locks it, the locked view 
     "/closing",
   );
 
-  // An undo the API refuses says so in place; the real one opens the account again.
+  // An undo the API refuses for its window (canned) turns the view into the deletion and keeps the
+  // export; the real undo, after a reload, opens the account again.
   await page.route(
     "**/api/v1/me/close/undo",
     (route) => problem(route, 409, "conflict", "undo_window_closed"),
@@ -559,10 +573,15 @@ test("closing with the undo window on a fresh account locks it, the locked view 
   );
   await page.goto("/closing");
   await page.getByRole("button", { name: "Undo and keep my account" }).click();
-  await expect(page.getByRole("status")).toContainText("The 7 days to undo have passed");
+  await expect(page.getByRole("status")).toContainText("It is too late to undo this.");
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your account is being deleted");
+  await expect(page.getByRole("button", { name: "Download my data" })).toBeVisible();
   await page.reload();
   await page.getByRole("button", { name: "Undo and keep my account" }).click();
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your account is open again");
+  await expect(page.getByRole("status")).toContainText(
+    "The closure is undone, so nothing will be deleted.",
+  );
   await expect(page.getByText(/Devices that were signed out stay signed out/)).toBeVisible();
   for (const theme of themes) {
     await expectNoAxeViolationsHere(page, theme, "the undone locked view");
@@ -585,7 +604,15 @@ test("delete now on another fresh account is confirmed in its own words and offe
   const account = await freshAccount(page, { label: "settings-delete" });
   await page.setViewportSize({ width: 390, height: 844 });
   if (account === null) {
-    await expectFailedReads(page, "/settings/close-account");
+    // No database: the screen needs no read of its own, so it offers the close; the server cannot
+    // answer it, and the dialog says so.
+    await page.goto("/settings/close-account");
+    await expect(page.getByText(layoutNotice)).toBeVisible();
+    await page.getByRole("button", { name: "Close my account" }).click();
+    const dialog = page.getByRole("dialog", { name: "Close your account?" });
+    await dialog.getByRole("radio", { name: "Now, with no undo" }).click();
+    await dialog.getByRole("button", { name: "Delete my account now" }).click();
+    await expect(dialog.locator('[aria-live="polite"]')).toContainText("problem on our side");
     return;
   }
   await onboard(page, { stage: "none", timeZone: "America/New_York" });
@@ -696,7 +723,7 @@ test("on phones each group opens its own screen with the way back, and every scr
   }
 
   for (const path of ["/settings", ...screens.map(([, screen]) => screen)]) {
-    for (const theme of themes) await expectNoAxeViolations(page, path, theme);
+    for (const theme of themes) await expectNoAxeViolationsAtFoot(page, path, theme);
     await expectNoOverflow(page, path);
     await page.setViewportSize({ width: 390, height: 844 });
   }

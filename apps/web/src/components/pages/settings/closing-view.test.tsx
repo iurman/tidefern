@@ -40,6 +40,9 @@ describe("the locked view", () => {
     expect(
       await screen.findByRole("heading", { level: 1, name: "Your account is open again" }),
     ).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "The closure is undone, so nothing will be deleted.",
+    );
     expect(screen.getByText(/Devices that were signed out stay signed out/)).toBeVisible();
     expect(screen.getByRole("link", { name: "Back to Settings" })).toHaveAttribute(
       "href",
@@ -48,13 +51,33 @@ describe("the locked view", () => {
     expect(api.POST).toHaveBeenCalledWith("/api/v1/me/close/undo");
   });
 
-  it("says the window has passed when the API refuses the undo for it", async () => {
+  it("turns into the deletion it now is when the API refuses the undo for its window", async () => {
     const user = userEvent.setup();
     api.POST.mockResolvedValue(answered(409, { code: "conflict", detail: "undo_window_closed" }));
     render(<ClosingView view={{ kind: "undo", daysLeft: 1 }} />);
     await user.click(screen.getByRole("button", { name: "Undo and keep my account" }));
-    expect(await screen.findByText(/The 7 days to undo have passed/)).toBeVisible();
-    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("Your account is closing");
+    expect(await screen.findByRole("status")).toHaveTextContent(
+      "It is too late to undo this. You can still download your data below.",
+    );
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Your account is being deleted",
+    );
+    expect(
+      screen.getByText("The 7 days to undo have passed, so the deletion goes ahead."),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: /Undo/ })).toBeNull();
+    expect(screen.getByRole("button", { name: "Download my data" })).toBeVisible();
+  });
+
+  it("names the next step when the undo fails for any other reason", async () => {
+    const user = userEvent.setup();
+    api.POST.mockResolvedValueOnce(answered(500, { code: "internal" }));
+    api.POST.mockResolvedValueOnce(answered(404, { code: "not_found" }));
+    render(<ClosingView view={{ kind: "undo", daysLeft: 3 }} />);
+    await user.click(screen.getByRole("button", { name: "Undo and keep my account" }));
+    expect(await screen.findByText(/problem on our side/)).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Undo and keep my account" }));
+    expect(await screen.findByText(/Nothing is closing now/)).toBeVisible();
   });
 
   it("offers no undo once the deletion is under way, and keeps the export", () => {

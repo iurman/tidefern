@@ -8,6 +8,13 @@
   max-width: 64rem;
 }
 
+/* Below the rail's width the tab bar is sticky over the foot of the viewport: a control that takes
+   focus scrolls clear of it instead of resting beneath it (WCAG 2.4.11). */
+.page :is(a, button, input, select, textarea),
+.screen :is(a, button, input, select, textarea) {
+  scroll-margin-bottom: calc(var(--size-action) + var(--space-8));
+}
+
 .title {
   margin-bottom: var(--space-6);
   font-size: var(--type-heading);

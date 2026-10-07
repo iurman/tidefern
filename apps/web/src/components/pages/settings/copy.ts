@@ -276,11 +276,11 @@ export const settingsCopy = {
     undo: {
       action: "Undo and keep my account",
       pending: "Undoing",
-      done: "Your account is open again.",
+      done: "The closure is undone, so nothing will be deleted.",
       after:
         "Devices that were signed out stay signed out, and sharing stays off until you share again.",
       back: "Back to Settings",
-      windowClosed: "The 7 days to undo have passed, so the deletion goes ahead.",
+      tooLate: "It is too late to undo this. You can still download your data below.",
       nothing: "Nothing is closing now. Reload the page to see where your account stands.",
       failed: "We could not undo this just now. Try again.",
     },

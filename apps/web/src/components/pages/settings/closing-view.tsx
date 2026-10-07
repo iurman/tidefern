@@ -15,7 +15,11 @@ import styles from "./closing.module.css";
 const copy = settingsCopy.closing;
 
 type Undo =
-  { kind: "idle" } | { kind: "pending" } | { kind: "done" } | { kind: "failed"; text: string };
+  | { kind: "idle" }
+  | { kind: "pending" }
+  | { kind: "done" }
+  | { kind: "too-late" }
+  | { kind: "failed"; text: string };
 
 /**
  * The locked view's body (task H7 on G10's /closing): where the closure
@@ -24,10 +28,13 @@ type Undo =
  * Only days are shown, never a clock time, because the profile and its time
  * zone are refused while the account is closing. The undo answers which
  * revoked things stay revoked, and the page says so before sending her back
- * to Settings. Sign out is the flow frame's.
+ * to Settings. An undo the API refuses because the window has passed turns
+ * the view into the deletion it now is. Sign out is the flow frame's.
  */
-export function ClosingView({ view }: { view: ClosureView }) {
+export function ClosingView({ view: read }: { view: ClosureView }) {
   const [undo, setUndo] = useState<Undo>({ kind: "idle" });
+  const view: ClosureView =
+    undo.kind === "too-late" ? { kind: "deleting", reason: "window-ended" } : read;
 
   async function undoClosure() {
     if (undo.kind === "pending") return;
@@ -48,9 +55,12 @@ export function ClosingView({ view }: { view: ClosureView }) {
       goTo(SIGN_IN_PATH);
       return;
     }
+    if (response.status === 409) {
+      setUndo({ kind: "too-late" });
+      return;
+    }
     let text: string = copy.undo.failed;
-    if (response.status === 409) text = copy.undo.windowClosed;
-    else if (response.status === 404) text = copy.undo.nothing;
+    if (response.status === 404) text = copy.undo.nothing;
     else if (response.status === 429) text = settingsCopy.failure.rateLimited;
     else if (response.status >= 500) text = settingsCopy.failure.server;
     setUndo({ kind: "failed", text });
@@ -111,7 +121,14 @@ export function ClosingView({ view }: { view: ClosureView }) {
         </>
       ) : null}
       {view.kind === "deleting" ? (
-        <p className={styles.lede}>{copy.deleting[deletingKey(view.reason)]}</p>
+        <>
+          <p className={styles.lede}>{copy.deleting[deletingKey(view.reason)]}</p>
+          {undo.kind === "too-late" ? (
+            <InlineFeedback tone="error" cue>
+              {copy.undo.tooLate}
+            </InlineFeedback>
+          ) : null}
+        </>
       ) : null}
       {view.kind === "none" ? <p className={styles.lede}>{copy.notClosing}</p> : null}
       {view.kind !== "none" ? (

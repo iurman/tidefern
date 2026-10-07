@@ -53,6 +53,10 @@ export function ConsentSection({
           agreedOn={record.agreedOn}
         />
       ))}
+      {/* Right under her own record, so it never reads as being about a child's consent below. */}
+      {view.withdrawId !== null ? (
+        <WithdrawConsent consentId={view.withdrawId} returnTo={returnTo} freshForMs={freshForMs} />
+      ) : null}
       {view.withdrawn.length > 0 ? (
         <section className={styles.part} aria-labelledby="settings-consent-withdrawn">
           <Heading id="settings-consent-withdrawn" className={styles.subheading}>
@@ -90,9 +94,6 @@ export function ConsentSection({
             })}
           </ul>
         </section>
-      ) : null}
-      {view.withdrawId !== null ? (
-        <WithdrawConsent consentId={view.withdrawId} returnTo={returnTo} freshForMs={freshForMs} />
       ) : null}
     </div>
   );
