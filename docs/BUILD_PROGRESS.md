@@ -21,15 +21,33 @@ findings and the next concrete action. Resume from the last entry and
 4. Dependabot alerts are disabled on the repository (the API answers 404 for
    vulnerability alerts); enable them under Settings, Code security, so the
    lockfile pins get advisories. The lead cannot change this setting.
-5. Neon (A3, A4, B10): the Neon project on Postgres 18 with its three
-   branches, the Vercel integration, and then the real-branch role and RLS
-   checks with the lead, per `docs/LAUNCH_RUNBOOK.md` (Neon). Until then
-   every database test runs on PGlite or the CI service container.
+5. Neon (A3, A4, B10): a `tidefern` project exists (Postgres 18,
+   `production` as the default branch and the Vercel production branch,
+   `vercel-dev`, the Vercel integration installed, history retention 6
+   hours). Still to do per `docs/LAUNCH_RUNBOOK.md` (Neon): `staging` and
+   `dev` branches with `staging` as the integration's default, the 7-day
+   retention the plan asks for production, a consumption notification,
+   `DATABASE_URL` as the `tidefern_app` role after the first production
+   migration, then the real-branch role and RLS checks with the lead.
 6. F5: answer the WHO permission question in architecture section 21
    before the daily WHO tables are vendored.
 7. J7: the restore rehearsal with the lead, once A3 is done
    (`docs/LAUNCH_RUNBOOK.md`, Restore).
 8. The `[OWNER]` inputs in `docs/design/CONTENT.md` and `docs/INCIDENT.md`.
+9. Neon branch limit: the integration's blocking check fails with "Branch
+   limit exceeded", so every Vercel preview after a branch's first push is
+   built but never aliased. Delete the eight stale preview branches in the
+   `tidefern` project (`preview/claude/friendly-johnson-lrt79s`,
+   `preview/claude/G1-research`, `F2-stages`, `B1-db-skeleton`,
+   `D1-crypto`, `F3-policy-filters`, `F4-milestones`, `F1-growth`), or turn
+   off per-preview branching. Until then the lead smokes each head
+   commit's own deployment URL.
+10. Set `OWNER_EMAIL` in Vercel production and confirm `CRON_SECRET` is set
+    there; without the secret the daily cron still answers 404 (I3).
+11. Approve or change the infant range lines and their source lines in
+    `docs/design/CONTENT.md` ("Context ranges on /family", F6), and have
+    the attorney answer the question at the end of `docs/CLAIMS.md`
+    section 2 (quoting the AAP and AASM under their terms).
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -1326,3 +1344,73 @@ future, moving the processor list into `packages/schemas`, and
 
 Review and merge Phase A as each task passes its review, recording the
 production smoke for `e421439`, then launch H1 to H8.
+
+### Phase A reviewed and merging (2026-10-06, lead session dfc54107)
+
+Two lead pull requests merged while Phase A built. #69 (`1cfd635`): the
+home page's closing design line is gone (the footer carries "Design
+system" on every public page, and the `@smoke` home test follows the
+footer's link) and the brand chapter spells color the en-US way, two open
+follow-ups. #74 (`5cba052`): `openapi/BREAKING.md` lists approved
+breaking changes to the v1 contract, one dated line each, and the
+`oasdiff` step reads it as its `err-ignore` input, so every other
+error-level change still fails. Architecture 5.1 records the narrow
+exception (until the first installed client ships, the web app deploys
+with the API from one commit, so a change no deployed code calls breaks
+nobody). Its first line approves E12's required guardian consent on child
+creation, which oasdiff correctly flagged and the builder refused to work
+around; the same `tufin/oasdiff:v1.33.0` image exited 1 without the file
+and 0 with it.
+
+Phase A ran as one workflow: a builder per task in its own worktree, a
+fresh-context reviewer per pull request, an independent skeptic per
+finding, and a fix pass. Every task reported `pnpm check` green and the
+seeded browser suite and the database-free smoke subset green before its
+push. The lead reviewed G9's and G10's captures before their merges: the
+day sheet, its failure and share states and the ring on API answers read
+as DESIGN.md 3.4 and 6.1 ask in both themes; at phone width the five flow
+values wrap inside the pill and the Period help line runs to seven lines,
+which G9b fixes before H2 and H3 build on the sheet. G10's shell-less
+flow frame, the in-shell not-found page and the checkbox field read
+correctly.
+
+Owner actions added: set `OWNER_EMAIL` in Vercel production and confirm
+`CRON_SECRET` is set there; without the secret the daily cron still
+answers 404 after I3.
+
+Follow-ups recorded: the children and measurements lists send a forged
+cursor to the database and answer 500 (E5, found by E12's builder); the
+public header has no "Sign in" link (needs DESIGN.md 4's phone disclosure
+menu; J3); the day sheet cannot clear a chosen mood (G9b decides).
+
+Merged by the merge queue (one agent per pull request, strictly in order:
+rebase, regenerate generated files, renumber a migration by regenerating
+it, regate, push, wait for CI and the preview smoke, squash merge): E11
+(`b31bad1`, production smoke 37569111335), E12 (`03c0251`, its migration
+regenerated as 0012, production smoke 37571260392), I3 (`cbbdc1f`,
+production smoke 37573337266), G10 (`259f187`, production smoke
+37575526259) and G9 (`4dc6b5a`). Every merge agent reran `pnpm check`,
+the seeded browser suite and the smoke subset on the rebased head before
+pushing, and confirmed CI verify and CodeQL green before merging.
+
+Two findings from the merge agents. Vercel previews after a branch's
+first push are built but never aliased: a blocking deployment check from
+the Neon integration fails with "Branch limit exceeded" (owner action 9),
+so a smoke against a branch alias tested that branch's first push; the
+agents smoked each head commit's own deployment URL instead, and the
+merge prompt now requires it. Earlier hand smokes in this session used
+aliases; they covered pushes whose later commits changed tests or docs
+only, and production smokes after every merge are green.
+
+The remaining Phase A pull requests (E10, C7, F6) are in the queue.
+Phase B launched once G10 and G9 merged: H1 to H8 and G9b (the day sheet
+at phone width) build in parallel, each with a fresh-context review and a
+fix pass, and the briefs tell builders whose dependency is still merging
+(E12 for H1 and H5, F6 for H5, E10 for H7, C7 for H8, G9b for H2 and H3)
+to rebase onto it before their final gates. The plan closes E11, E12,
+I3, G9 and G10 and marks A3 blocked with what exists in Neon.
+
+### Next action
+
+Merge E10, C7 and F6, then review Phase B's captures and merge H1 to H8
+and G9b through the queue.
