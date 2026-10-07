@@ -5,7 +5,10 @@ test("home renders the brand and links to the design system @smoke", async ({ pa
   await page.goto("/");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Life flows together.");
   await expect(page.getByRole("link", { name: "Tidefern home" })).toBeVisible();
-  await page.getByRole("link", { name: "Explore the design system" }).click();
+  await page
+    .getByRole("contentinfo")
+    .getByRole("link", { name: "Design system", exact: true })
+    .click();
   await expect(page).toHaveURL(/\/design$/);
   await expect(page.getByRole("heading", { level: 1 })).toContainText("Tokens first");
 });
@@ -122,7 +125,10 @@ test("no audio context exists before a gesture and one shared context runs after
     () => (window as unknown as { __audioContexts: AudioContext[] }).__audioContexts.length,
   );
   expect(before, "hovering must not create an audio context").toBe(0);
-  await page.getByRole("link", { name: "Explore the design system" }).hover();
+  await page
+    .getByRole("contentinfo")
+    .getByRole("link", { name: "Design system", exact: true })
+    .hover();
   await page.getByRole("button", { name: "Switch to dark mode" }).click();
   await page.getByRole("button", { name: "Switch to light mode" }).click();
   const after = await page.evaluate(() => {

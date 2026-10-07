@@ -1,4 +1,3 @@
-import { TextLink } from "@/components/ui/text-link";
 import { homeCopy } from "./home-copy";
 import styles from "./promises.module.css";
 
@@ -6,8 +5,8 @@ const copy = homeCopy.promises;
 
 /**
  * The four promises as a definition list in two columns (DESIGN.md 1.1).
- * Each sentence traces to a row in architecture 9 to 11; the closing line
- * points at the design reference, which is how the product shows its work.
+ * Each sentence traces to a row in architecture 9 to 11. The design
+ * reference is reached from the footer on every public page.
  */
 export function Promises() {
   return (
@@ -23,9 +22,6 @@ export function Promises() {
           </div>
         ))}
       </dl>
-      <p className={styles.closing}>
-        {copy.designLead} <TextLink href="/design">{copy.designLink}</TextLink>
-      </p>
     </section>
   );
 }
