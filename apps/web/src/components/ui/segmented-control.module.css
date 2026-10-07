@@ -1,6 +1,9 @@
+/* A wrapping row: the options, then the group's own action (a Clear) beside them while they fit, then the error on a line of its own. */
 .group {
-  display: grid;
-  gap: var(--space-2);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-3);
   margin: 0;
   padding: 0;
   border: 0;
@@ -22,7 +25,7 @@
   border: 1px solid var(--soft-border);
   border-radius: var(--radius-round);
   background: var(--surface);
-  justify-self: start;
+  flex: 0 1 auto;
   max-width: 100%;
 }
 
@@ -128,7 +131,53 @@
   border-color: var(--danger);
 }
 
+.action {
+  display: flex;
+  min-width: 0;
+}
+
+/*
+ * layout="columns" (DESIGN.md 3.4: the flow and mood scales on a phone). The
+ * group is its own size container. From 26rem, where the round pill of five
+ * short values fits, it is that pill. Narrower, the options become equal
+ * columns with the control radius and the caption size that shrink together,
+ * so five fit in about 300 px. Below --segment-count columns of
+ * --segment-column (the switcher pattern: a flex basis of zero above that
+ * width and of the whole row below it), one option per row, so a label is
+ * never cut and the pill never folds into two uneven rows.
+ */
+.columns {
+  container: segmented / inline-size;
+  /* The narrowest column: the longest label a scale uses ("Spotting" in the caption size), its 1 px border and 2 px either side. */
+  --segment-column: 3.625rem;
+}
+
+@container segmented (width < 26rem) {
+  /* The whole row, so an action drops under the columns. */
+  .columns .segments {
+    flex: 1 1 100%;
+    gap: 0;
+    border-radius: var(--radius-control);
+  }
+
+  .columns .segment {
+    flex: 1 1 clamp(0px, (var(--segment-count) * var(--segment-column) - 100%) * 9999, 100%);
+  }
+
+  /* One radius inside the track's 1 px border, so a chosen column sits concentric in its corner. */
+  .columns .radio,
+  .columns .text {
+    border-radius: calc(var(--radius-control) - 1px);
+  }
+
+  .columns .text {
+    padding-inline: 0;
+    font-size: var(--type-caption);
+  }
+}
+
 .error {
+  flex: 1 1 100%;
   margin: 0;
   font-size: var(--type-small);
   font-weight: var(--weight-sans-strong);

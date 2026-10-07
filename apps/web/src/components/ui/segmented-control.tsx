@@ -1,5 +1,5 @@
 "use client";
-import { useId } from "react";
+import { useId, type CSSProperties, type ReactNode } from "react";
 import styles from "./segmented-control.module.css";
 
 export interface SegmentedOption<T extends string = string> {
@@ -12,8 +12,11 @@ export interface SegmentedControlProps<T extends string = string> {
   label: string;
   hideLabel?: boolean;
   options: readonly SegmentedOption<T>[];
-  /** Controlled value; pair it with `onChange`. */
-  value?: T;
+  /**
+   * Controlled value; pair it with `onChange`. `null` is controlled with
+   * nothing chosen yet: no radio is checked until she picks one.
+   */
+  value?: T | null;
   /** Starting value when uncontrolled. */
   defaultValue?: T;
   onChange?: (value: T) => void;
@@ -22,6 +25,22 @@ export interface SegmentedControlProps<T extends string = string> {
   disabled?: boolean;
   /** Selected fill: the action color, or the period data color for the flow scale. */
   tone?: "action" | "period";
+  /**
+   * How the segments share the width. `pill` (the default) is the round
+   * pill at the options' own widths. `columns` is that pill wherever the
+   * group is at least 26rem wide; narrower, the options become equal columns
+   * with the control radius and the caption size that shrink together; and
+   * once a column would be too narrow for the longest label, one option per
+   * row, so a label is never cut and the pill never folds into uneven rows.
+   * The group measures its own width for this, so it fills the width it is
+   * given and never sizes itself to its content.
+   */
+  layout?: "pill" | "columns";
+  /**
+   * A quiet control that belongs to the group, such as a Clear: beside the
+   * pill when they fit on one row, under the options otherwise.
+   */
+  action?: ReactNode;
   /** The form name the radios share; generated and neutral when absent. */
   name?: string;
   className?: string;
@@ -43,6 +62,8 @@ export function SegmentedControl<T extends string = string>({
   error,
   disabled,
   tone = "action",
+  layout = "pill",
+  action,
   name,
   className,
 }: SegmentedControlProps<T>) {
@@ -50,12 +71,20 @@ export function SegmentedControl<T extends string = string>({
   const groupName = name ?? `${id}-segment`;
   const errorId = `${id}-error`;
   const controlled = value !== undefined;
+  const columns = layout === "columns";
 
   return (
     <fieldset
-      className={[styles.group, tone === "period" ? styles.periodTone : null, className]
+      className={[
+        styles.group,
+        columns ? styles.columns : null,
+        tone === "period" ? styles.periodTone : null,
+        className,
+      ]
         .filter(Boolean)
         .join(" ")}
+      // The number of options sets the width below which the columns stack.
+      style={columns ? ({ "--segment-count": options.length } as CSSProperties) : undefined}
       disabled={disabled}
       aria-describedby={error ? errorId : undefined}
       data-invalid={error ? true : undefined}
@@ -84,6 +113,8 @@ export function SegmentedControl<T extends string = string>({
           );
         })}
       </div>
+      {/* After the options, never around them, so the radios keep their focus when it comes and goes. */}
+      {action ? <div className={styles.action}>{action}</div> : null}
       {error ? (
         <p className={styles.error} id={errorId}>
           {error}
