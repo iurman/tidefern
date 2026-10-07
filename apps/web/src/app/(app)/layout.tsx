@@ -17,15 +17,24 @@ const fallbackProfile: ShellProfile = { stage: "none", hasChild: false };
  * The authenticated frame for every route in the group (DESIGN.md section
  * 2). The session is read once per request through GET /api/v1/me on the
  * in-process client (`sessionMe` in lib/api-server.ts, which pages call too
- * and get the same answer), and before anything renders a visitor without
- * a session is sent to sign in, a person whose account is closing to the
- * locked view at /closing, and a person without a profile to /welcome; the
- * last two live in the (flow) group, outside the shell. So a page here can
- * rely on a profile whenever the lookup is `ok`. None of these redirects
- * names a fragment, and a browser keeps the one it had across a redirect
- * like that: an invitee without a profile who opens `/sharing#invitation=`
- * reaches /welcome with the fragment still on it, and onboarding (task H1)
- * forwards it to /sharing at the end.
+ * and get the same answer). A visitor without a session is sent to sign
+ * in, a person whose account is closing to the locked view at /closing,
+ * and a person without a profile to /welcome; the last two live in the
+ * (flow) group, outside the shell.
+ *
+ * The redirect decides where the visitor lands, not what runs: Next renders
+ * a layout and its page in parallel, so a page here still runs in the
+ * request this layout redirects. It gets the same `ok` lookup with
+ * `profile: null` and must narrow it itself (render nothing, or redirect
+ * the same way). Never assert a profile with `!` or throw for a missing
+ * one: the visitor still reaches /welcome, but Next logs that render as a
+ * server error, on every new account's first sign-in among others.
+ *
+ * None of these redirects names a fragment, and a browser keeps the one it
+ * had across a redirect like that: an invitee without a profile who opens
+ * `/sharing#invitation=` reaches /welcome with the fragment still on it,
+ * and onboarding (task H1) forwards it to /sharing at the end; a closing
+ * account reaches /closing with it, which drops it.
  *
  * The destinations follow the profile's stage, its children and the grants
  * it holds. A read that failed rather than answered keeps the person here
