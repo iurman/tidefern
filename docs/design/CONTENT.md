@@ -87,6 +87,51 @@ estimate from your logged dates. Not a form of contraception.", so no new
 wording enters; the compositions in `DESIGN.md` show it. The full footer
 still closes the page.
 
+## Context ranges on `/family` (proposed, `[OWNER]`)
+
+Task F6. `infantContext(kind, dateOfBirth, today)` in `packages/core`
+returns the published range for a child's age, its band and its sources;
+`packages/core/data/SOURCES.md` quotes the sentence behind each figure. A
+line that states a range names a health norm, so every line below is a
+proposal: `[OWNER]` approves it, then it becomes a row in the architecture
+13.10 table before it ships (`docs/CLAIMS.md` sections 1.4 and 4). Until
+then the UI shows a plain placeholder marked `[OWNER]` where the line goes.
+The wording follows the sources: AAP's "should have" becomes "expected",
+AASM's recommendations become "recommended", and each source's "at least",
+its 24-hour basis and whether naps count are kept as the source has them.
+
+| Range id | Proposed line `[OWNER]` | Source line `[OWNER]`, linking to the source's `url` |
+| --- | --- | --- |
+| `feed-newborn` | "Expected for a newborn: at least 8 to 12 feeds every 24 hours." | "Source: American Academy of Pediatrics" |
+| `wet-diaper-first-days` | "Expected in the first few days after birth: 2 to 3 wet diapers a day." | "Source: American Academy of Pediatrics" |
+| `wet-diaper-after-first-days` | "Expected after the first 4 to 5 days: at least 5 to 6 wet diapers a day." | "Source: American Academy of Pediatrics" |
+| `sleep-4-to-12-months` | "Recommended at 4 to 12 months: 12 to 16 hours of sleep every 24 hours, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-1-to-2-years` | "Recommended at 1 to 2 years: 11 to 14 hours of sleep every 24 hours, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-3-to-5-years` | "Recommended at 3 to 5 years: 10 to 13 hours of sleep every 24 hours, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-6-to-12-years` | "Recommended at 6 to 12 years: 9 to 12 hours of sleep every 24 hours." | "Source: American Academy of Sleep Medicine" |
+| `sleep-13-to-18-years` | "Recommended at 13 to 18 years: 8 to 10 hours of sleep every 24 hours." | "Source: American Academy of Sleep Medicine" |
+
+Once on the page, under the cards `[OWNER]`: "These ranges come from the
+American Academy of Pediatrics and the American Academy of Sleep Medicine.
+Tidefern is not affiliated with either, and neither has reviewed Tidefern."
+
+Rules for every range line (the first two from architecture 8.4, the rest
+from the sources and the decisions `SOURCES.md` records):
+
+- It sits beside today's count as context. Nothing about the card changes
+  with where the count falls: no color, icon, badge, sound or haptic, and
+  no "too few", "too many", "low", "high", "normal", "on track" or
+  "behind". A count outside a range never brings up the pointing-to-care
+  sentence.
+- No line where the function returns nothing: no sleep line before 4
+  months, no feed or wet diaper line after the first month.
+- The figures are per 24 hours and today's count is the day so far, so the
+  line states the range and never compares the two.
+- Feeds count breast and bottle feeds; solids are not part of the figure.
+  Wet diapers count diapers logged as wet or mixed.
+- The source line names the publisher and links to its page, never with a
+  logo.
+
 ## Owner inputs still missing
 
 - `[OWNER]` the inbox for privacy and health data requests (every policy
@@ -135,6 +180,9 @@ lines without touching another's.
   (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
   `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
   gate).
+- `[OWNER]` approval of the range lines, source lines and attribution in
+  "Context ranges on `/family`", and the attorney's answer on quoting the
+  AAP and AASM (`docs/CLAIMS.md` section 2).
 
 ### `/sharing` (H6)
 

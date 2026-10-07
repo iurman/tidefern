@@ -52,6 +52,23 @@ Two sentences point a person toward care, and they are the only two:
 Nothing else in the product tells a person what a symptom, a cycle length,
 a measurement or a milestone means for her health or a child's.
 
+### 1.4 Published ranges, proposed
+
+Architecture 8.4 shows a child's feeding, diaper and sleep counts "against
+the published AAP and AASM ranges as context, never as alarms, and no sleep
+target is shown before four months". A sentence that states such a range
+names a health norm, so it is a health claim under section 4, step 1: the
+lines proposed in `docs/design/CONTENT.md` ("Context ranges on `/family`")
+wait for `[OWNER]` approval and then a row in the 13.10 table, and until
+then the UI shows a plain `[OWNER]` placeholder. A range line is context; it
+never points to care and never says what a count means for the child.
+
+| Proposed claim | Range ids | Backed by | Enforced by |
+| --- | --- | --- | --- |
+| "Expected for a newborn: at least 8 to 12 feeds every 24 hours." | `feed-newborn` | 8.4; AAP, "How to Tell if Your Breastfed Baby is Getting Enough Milk" ("Nurse at least 8 to 12 times every 24 hours.") and "How Often and How Much Should Your Baby Eat?" (bottle-fed newborns every 2 to 3 hours, at least 8 times); both quoted in `packages/core/data/SOURCES.md` | `packages/core/src/infant-context.test.ts` "gives the newborn feed range from the day of birth to the day before 1 month", "never gives a feed or wet diaper range after the first month" and "quote each range's figures under its first source, word for word" |
+| "Expected in the first few days after birth: 2 to 3 wet diapers a day." and "Expected after the first 4 to 5 days: at least 5 to 6 wet diapers a day." | `wet-diaper-first-days`, `wet-diaper-after-first-days` | 8.4; AAP, "How Often and How Much Should Your Baby Eat?", quoted in `SOURCES.md` | The same file: "switches wet diapers from 2 to 3 to at least 5 to 6 on day 5, the later edge of 4 to 5 days" and the quote test |
+| "Recommended at 4 to 12 months: 12 to 16 hours of sleep every 24 hours, naps included." and the four later bands to 18 years | `sleep-4-to-12-months` through `sleep-13-to-18-years` | 8.4; AASM consensus statement (Paruthi et al., J Clin Sleep Med 2016;12(6):785-786) with the age groups of its methodology paper, quoted in `SOURCES.md` | The same file: "gives no sleep range at 3 months 30 days and the 4 to 12 month range at 4 months", "never gives a sleep range on any day before 4 months", "moves to the next band on the birthday that starts it" and the quote test |
+
 ## 2. What the product may not say
 
 Each line names the section that forbids it.
@@ -72,6 +89,9 @@ Each line names the section that forbids it.
 | A privacy promise with no row in sections 9 to 11                                                                                       | 9.6 FTC Act row: it is removed, not softened                                                                                                                                                        |
 | A legal fact, a contact, a date or an entity that the owner has not supplied                                                            | `docs/design/CONTENT.md`: `[OWNER]` marks, never invented                                                                                                                                           |
 | A number for a retention period, a window or a deadline that differs from section 11 or 9.6                                             | The policies are written from the retention schedule and the vendor table, not aspirationally (9.6)                                                                                                 |
+| That a child's feeds, wet diapers or sleep are too few, too many, low, high, normal, abnormal, on track or behind, or that a parent should feed, change or settle the child more or less | 8.4: counts are shown against the published ranges as context, never as alarms; section 1.4 above                                                                                  |
+| Any amount, target or range of sleep for a child under four months                                                                      | 8.4: no sleep target before four months; the AASM statement makes no recommendation under 4 months (`packages/core/data/SOURCES.md`)                                                               |
+| A figure its named source does not state, or a source's name or logo used to suggest that it endorses Tidefern                          | 8.4: every clinical quote the product relies on is vendored in `SOURCES.md` with its date; the AAP and AASM terms quoted there                                                                     |
 
 Questions for `[OWNER]` attorney that the record does not settle: whether
 "private notes" and "a key made for you" may stay on the home page as
@@ -79,6 +99,22 @@ worded once the KEK moves to a cloud KMS at the Phase 2 gate; whether the
 status line "used daily by its first household" is a claim about anything;
 whether California's CMIA (9.6, other states row) changes any sentence on
 `/health-privacy`.
+
+A question for `[OWNER]` attorney from task F6: the AAP's terms of use
+(last updated 09/24/2026) forbid copying or distributing its content without
+written permission, using it with any artificial intelligence tool, and
+automated access; the AASM's website terms (effective 2/6/2026) forbid
+using its content with generative AI tools and automated access. Tidefern
+encodes their published figures as facts in
+`packages/core/src/infant-context.ts`, quotes one sentence per figure in
+`packages/core/data/SOURCES.md` so each can be checked, and links to their
+pages. For F6 an AI agent read those pages with automated tools, as the
+build brief asked, and `docs/research/RESEARCH.md` already quotes the same
+AAP page and the AASM statement. Should Tidefern keep the quotes, ask both
+publishers for written permission, or cite CDC's public domain pages
+instead? CDC states the newborn feed count and the sleep figures from 4
+months to 12 years but gives a different table of wet diapers
+(`SOURCES.md`, "Read and left out").
 
 ## 3. Every public privacy claim, traced
 
