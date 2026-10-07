@@ -349,6 +349,32 @@ test("Mira, a guardian, sees Sol by name, her contributions to Lena's pregnancy 
   expect(after.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
 });
 
+test("Lena sees Mira's contributions to her pregnancy overview, by Mira's name", async ({
+  page,
+}) => {
+  const cookies = await as(page, "lena");
+  await page.goto("/activity");
+  if (cookies === null) {
+    await expectFailedRead(page);
+    return;
+  }
+  const { zone, items } = await apiActivity(page);
+  const writes = items.filter((item) => item.action === "partner.write");
+  expect(writes.length, "Mira's writes for Lena in the API").toBeGreaterThan(0);
+  for (const write of writes) {
+    await expect(
+      rows(
+        page,
+        "Contributed to your pregnancy overview",
+        "by Mira",
+        dayIn(zone, write.occurredAt),
+      ).first(),
+    ).toBeVisible();
+  }
+  await expect(rows(page, "Started sharing your pregnancy overview", "by you")).toHaveCount(1);
+  await expectNoHealthContent(page);
+});
+
 test("Pia, who reaches Sol through a grant, sees her read without his name, and the page writes no activity", async ({
   page,
 }) => {
