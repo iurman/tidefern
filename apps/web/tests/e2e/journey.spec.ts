@@ -405,6 +405,7 @@ test.describe("Mira, after a birth and with Lena's pregnancy shared", () => {
     const dialog = page.getByRole("dialog", { name: "Edit the appointment" });
     await expect(dialog.getByRole("textbox", { name: "Details" })).toHaveValue("Glucose screening");
     await expect(dialog.getByRole("button", { name: /Delete/ })).toHaveCount(0);
+    await audit(page, "a contributor's edit form");
     await dialog.getByRole("button", { name: "Cancel" }).click();
 
     await audit(page, "Mira's journey");
@@ -432,6 +433,7 @@ test.describe("Mira, after a birth and with Lena's pregnancy shared", () => {
       dialog.getByText("Updates to this pregnancy are paused, so this was not saved."),
     ).toBeVisible();
     await expect(dialog).not.toContainText(/ended/);
+    await audit(page, "a paused refusal");
   });
 });
 
@@ -471,6 +473,7 @@ test.describe("on a fresh account", () => {
       "The due date has not changed since it was set.",
     );
     await expect(page.getByText(/^Nothing is added for the weeks ahead yet\./)).toBeVisible();
+    await audit(page, "a pregnancy with nothing added yet");
 
     await page.getByRole("button", { name: "Add an appointment" }).click();
     let dialog = page.getByRole("dialog", { name: "Add an appointment" });
@@ -497,8 +500,10 @@ test.describe("on a fresh account", () => {
 
     await list.getByRole("button", { name: /^Edit Midwife visit/ }).click();
     dialog = page.getByRole("dialog", { name: "Edit the appointment" });
+    await audit(page, "her edit form");
     await dialog.getByRole("button", { name: "Delete this appointment" }).click();
     const confirm = page.getByRole("dialog", { name: "Delete this appointment?" });
+    await audit(page, "the delete confirmation");
     await confirm.getByRole("button", { name: "Delete" }).click();
     await expect(page.getByText("Deleted.")).toBeVisible();
     await expect(list).toHaveCount(0);
