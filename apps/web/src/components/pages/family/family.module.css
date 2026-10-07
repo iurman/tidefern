@@ -87,9 +87,10 @@
   }
 }
 
+/* A step under the page's heading, and still the largest word on the card. */
 .childName {
   margin: 0;
-  font-size: var(--type-subheading);
+  font-size: calc(var(--type-heading) * 0.82);
   line-height: var(--leading-heading);
   overflow-wrap: anywhere;
 }
