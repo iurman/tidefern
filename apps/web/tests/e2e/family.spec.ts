@@ -1,7 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Cookie, type Locator, type Page } from "@playwright/test";
 import type { Theme } from "./axe";
-import { freshAccount, onboard, signInAs, type Persona } from "./session";
+import {
+  SESSION_COOKIE,
+  baseOrigin,
+  cannedSessionCookieValue,
+  freshAccount,
+  onboard,
+  signInAs,
+  type Persona,
+} from "./session";
 
 /**
  * /family and /family/[childId] (task H5) against the production build and
@@ -457,7 +465,15 @@ let shared: Shared | null | undefined;
 /** The fresh account the write tests share: verified, onboarded, signed in; null without a database. */
 async function freshFamily(page: Page): Promise<Shared | null> {
   if (shared !== undefined) {
-    if (shared !== null) await page.context().addCookies(shared.cookies);
+    // Without a database every later test gets the canned cookie too, as the helper gave the
+    // first, so it lands on the failed read rather than on sign in.
+    await page
+      .context()
+      .addCookies(
+        shared === null
+          ? [{ name: SESSION_COOKIE, value: cannedSessionCookieValue(), url: baseOrigin() }]
+          : shared.cookies,
+      );
     return shared;
   }
   const made = await freshAccount(page, { label: "family", name: "Sam" });
