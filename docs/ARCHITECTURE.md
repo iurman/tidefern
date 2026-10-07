@@ -1613,7 +1613,8 @@ what, why, checks run, evidence, build-plan task ids.
 | `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions: the seed and the API's calendar clock (`packages/api/src/clock.ts`, task E11) honor it outside production for every decision the API makes about which calendar day it is, never for a stored instant; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
 | `BETTER_AUTH_TELEMETRY` | all, value `0` | Keeps Better Auth's opt-in telemetry off explicitly |
 | `MIGRATE_DESTRUCTIVE` | the owner-triggered migration workflow only | Lets the runner apply a contract migration (section 3.4) |
-| `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset |
+| `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset, and the web host mounts the job runner only where `DATABASE_URL_UNPOOLED` is set |
+| `OWNER_EMAIL` | production | The owner's inbox for the job runner's dead-queue notice and the account closure processor notice; while unset the first is skipped and a closure past its window waits, deleting nothing |
 | `R2_*`                                  | Phase 2                | Private bucket credentials scoped to one bucket                                                                   |
 | `VERCEL_AUTOMATION_BYPASS_SECRET`       | GitHub only            | Lets the smoke workflow reach protected previews                                                                  |
 

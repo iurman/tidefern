@@ -9,7 +9,7 @@ database access goes through. Imported by `packages/api` (and later
 | Variable                | Used by                                      | Value                                                   |
 | ----------------------- | -------------------------------------------- | ------------------------------------------------------- |
 | `DATABASE_URL`          | `src/client.ts` (the app)                    | The pooled Neon string (host contains `-pooler`)        |
-| `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run` | The owner role's direct string; migrations and the job runner |
+| `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run`, the web host's job runner (`ownerDatabase` in `src/owner.ts`) | The owner role's direct string; migrations and the job runner |
 | `MIGRATE_DESTRUCTIVE`   | the owner-triggered migration workflow (B12) | `1` lets the runner apply a contract migration (DROP, RENAME, ALTER COLUMN ... TYPE, TRUNCATE) |
 | `TIDEFERN_KEK_V1`       | `scripts/seed.ts`                            | The KEK the seed seals its free text under; base64 of 32 bytes, the environment's own value |
 | `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`, and the API's calendar clock (`packages/api/src/clock.ts`) | An ISO 8601 instant that freezes "today" for the seed and for every calendar decision the API makes outside production (task E11), handed to `cycle_status_for` as `app.calendar_now`; refused when `VERCEL_ENV` is `production` |
@@ -603,6 +603,24 @@ a connection the sweep would refuse is refused before any job is claimed.
 with its single connection two claimers run back to back there, and B10
 covers the pooled endpoint.
 
+The web host (`apps/web/src/app/api/[[...route]]/route.ts`, task I3)
+passes the runner to `createApp` only when `DATABASE_URL_UNPOOLED` is set.
+Its connection comes from `ownerDatabase(url)` in `src/owner.ts`, reached
+through `@tidefern/db/client`: one `pg` client (`max` 1) on that URL, the
+app pool's 5 second idle timeout, registered with `attachDatabasePool`, and
+an `error` listener that logs only the error's name and driver code.
+Nothing connects until the first query. One connection is enough because
+the runner's work is serial and the direct endpoint has no pooler in front
+of it. The host also passes the handler registry, `CRON_SECRET`, Better
+Auth's mailer, `OWNER_EMAIL` for the dead-queue notice and a drain budget
+of half the route's 60 second `maxDuration` (the API's default budget
+assumes Hobby's 300 seconds). It configures reminders and closure with the
+same mailer. Without the variable the endpoint is not mounted (404) and
+the inline drain is a no-op.
+`pnpm jobs:run` configures neither reminders nor closure, because their
+transport and template live in `@tidefern/auth`; the comment in `run.ts`
+says what happens to those jobs there.
+
 ## Account closure
 
 Architecture record 11, task I2. Closing an account is a state machine on
@@ -681,10 +699,12 @@ the job cleanup, and both sweep duties; the API's
   constants and the `Job`, `JobType`, `JobPayload` and `SweepCounts` types).
   The api package imports it at runtime without pulling the migration runner
   into a bundle.
-- `@tidefern/db/client`: the raw `db` and `pool`. Only `withActor` and
-  `withSystem` inside this package and the Better Auth adapter (task C1) may
-  import it. The `jobs:run` entry in `packages/api/src/jobs/run.ts` opens its
-  own one-connection pool on the owner role's URL instead.
+- `@tidefern/db/client`: the raw `db` and `pool`, and `ownerDatabase(url)`,
+  the job runner's owner-role connection (see Jobs). Only `withActor` and
+  `withSystem` inside this package, the Better Auth adapter (task C1) and
+  the web host's API entry may import it. The `jobs:run` entry in
+  `packages/api/src/jobs/run.ts` opens its own one-connection pool on the
+  owner role's URL instead.
 - `@tidefern/db/schema`: the tables, for drizzle-kit and the auth adapter.
 
 ### Keeping route code out of the raw client

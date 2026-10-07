@@ -9,6 +9,23 @@
 // The handlers decide each person's day on the calendar clock, resolved from
 // the environment first, so TIDEFERN_FAKE_NOW set on production stops the
 // run before it connects.
+//
+// Unlike the web host it configures neither reminders nor closure, so this
+// runner sends no reminder and finishes no closure. Both need a mail
+// transport (`chooseMailer`), and reminders need the template
+// (`reminderEmail`); both live only in @tidefern/auth, which this package
+// lists as a devDependency for its tests, and the API never depends on it at
+// runtime (the rule `configureReminders` and ./notice follow). So here a due
+// `reminder.send` job fails with ReminderMailUnavailableError, and an
+// `account.delete` job past its window fails with ClosureConfigurationError
+// before it deletes a session or a row; inside the window it only waits.
+// Both go back on the backoff like any failed job, for the next run with a
+// mailer (the web host's scheduled run), or to `dead` after the fifth
+// attempt: the sweep then gives the closure a fresh job, and a dead reminder
+// is counted in the owner notice. The reminder step (`enqueueReminders`) is
+// not run here either.
+// Closing the gap needs an entry in a package that may depend on both, as
+// apps/web's route does.
 import { drizzle } from "drizzle-orm/node-postgres";
 import * as schema from "@tidefern/db/schema";
 import { assertSweepRole, sweep } from "@tidefern/db/jobs";

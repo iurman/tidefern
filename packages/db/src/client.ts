@@ -18,3 +18,7 @@ export const pool = new Pool({
 attachDatabasePool(pool);
 
 export const db = drizzle({ client: pool, schema });
+
+// The job runner's owner-role pool, which the web host builds only when
+// DATABASE_URL_UNPOOLED is set; it lives here so route code never reaches it.
+export { ownerDatabase } from "./owner";
