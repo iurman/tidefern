@@ -671,9 +671,10 @@
           },
           "descriptionVersion": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 32,
-            "description": "The version of the plain-words category descriptions she saw"
+            "enum": [
+              "2026-10"
+            ],
+            "description": "The version of the plain-words category descriptions she saw, a key of the sharing descriptions catalog"
           }
         },
         "required": [
