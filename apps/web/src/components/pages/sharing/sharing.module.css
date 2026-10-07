@@ -1,0 +1,162 @@
+/*
+ * /sharing (DESIGN.md 3.7): one column at the reading width, every card a
+ * surface and none of them warmth, so no person reads as highlighted.
+ * Tokens only; both themes come through them.
+ */
+
+.page {
+  display: grid;
+  gap: var(--space-8);
+  max-width: var(--size-reading);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+}
+
+.section {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.sectionHeading {
+  margin: 0;
+  font-size: var(--type-subheading);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+}
+
+.people {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.empty {
+  max-width: none;
+}
+
+/* The acceptance panel and the invite form: surfaces like the cards around them. */
+.accept,
+.invite,
+.sharedCard {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  padding: var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.lede {
+  margin: 0;
+  max-width: 60ch;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+.invitations {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.subheading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body);
+  font-weight: var(--weight-sans-strong);
+  letter-spacing: normal;
+}
+
+.form {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.freshAuth {
+  display: grid;
+  gap: var(--space-3);
+}
+
+/* What a person shares with the actor, read-only inside that person's card. */
+.received {
+  display: grid;
+  gap: var(--space-2);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--soft-border);
+}
+
+.receivedHeading {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+}
+
+.receivedList {
+  display: grid;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.receivedList > li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-1) var(--space-3);
+  min-width: 0;
+}
+
+.receivedLabel {
+  min-width: 0;
+  font-weight: var(--weight-sans-strong);
+  overflow-wrap: anywhere;
+}
+
+.receivedLevel {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.note,
+.privateNotes {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+/* The confirm step quotes the plain words before the level they come with. */
+.quoted {
+  margin: 0 0 var(--space-3);
+  padding-left: var(--space-3);
+  border-left: 2px solid var(--soft-border);
+}
+
+.levelLine {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+}
+
+@media (max-width: 600px) {
+  .accept,
+  .invite,
+  .sharedCard {
+    padding: var(--space-4);
+  }
+}
