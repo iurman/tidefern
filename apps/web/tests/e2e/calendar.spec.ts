@@ -9,8 +9,9 @@ import { baseOrigin, freshAccount, onboard, signInAs, type FreshAccount } from "
  * The calendar and the day page against the production build (task H3):
  * Noor's seeded October drawn and said as the API predicts it, the list
  * view, the day sheet over the calendar and its keyboard path, a real save
- * and its Undo on a fresh account, the first guess and not enough regular
- * cycles on that account, the pending and failure states through
+ * and its Undo on a fresh account, a note saved as its own row and shared
+ * only after a confirm, the first guess and not enough regular cycles on
+ * that account, the pending and failure states through
  * `page.route`, the stages that log nothing or predict nothing, /log/<date>
  * with and without JavaScript, and the not-found page inside the shell.
  *
@@ -47,6 +48,10 @@ interface Prediction {
 
 interface EntryList {
   items: { date?: string; flow?: string | null; mood?: string | null; deletedAt: string | null }[];
+}
+
+interface NoteList {
+  items: { id: string; category: string; body?: string; deletedAt?: string }[];
 }
 
 /* ------------------------------------------------------------------------ */
@@ -137,6 +142,11 @@ async function deleteDay(page: Page, date: string): Promise<void> {
 async function liveEntries(page: Page, date: string) {
   const list = await apiGet<EntryList>(page, `/api/v1/cycle/entries?from=${date}&to=${date}`);
   return list.items.filter((item) => item.deletedAt === null);
+}
+
+async function liveNotes(page: Page, date: string) {
+  const list = await apiGet<NoteList>(page, `/api/v1/notes?from=${date}&to=${date}`);
+  return list.items.filter((item) => item.deletedAt === undefined);
 }
 
 /* ------------------------------------------------------------------------ */
@@ -635,6 +645,74 @@ test("Save keeps its width while it reads Saving", async ({ page }) => {
   await page.unroute(write);
   expect(await liveEntries(page, day)).toEqual([]);
   expect(Math.abs(pending - idle), `Save ${idle}px, Saving ${pending}px`).toBeLessThanOrEqual(1);
+});
+
+test("a note saves as its own private row, and Share moves it to the shared notes only after a confirm", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const session = await freshSession(page);
+  await page.goto("/calendar");
+  if (session === null) {
+    await expectCalendarFailure(page);
+    return;
+  }
+  const day = addDays(session.today, -3);
+  const text = "A line for the test's own partner.";
+  try {
+    await dayButton(page, day).click();
+    const sheet = page.getByRole("dialog", { name: sheetDate(day) });
+    const field = sheet.getByRole("textbox", { name: "Private note" });
+    await expect(field).toBeVisible();
+    await field.fill(text);
+    await sheet.getByRole("button", { name: "Save" }).click();
+    await expect(sheet.getByText(`Saved for ${sheetDate(day)}.`)).toBeVisible();
+    // A row of its own in the private journal; the day's entry is not written.
+    expect(await liveNotes(page, day)).toEqual([
+      expect.objectContaining({ category: "journal.private", body: text }),
+    ]);
+    expect(await liveEntries(page, day)).toEqual([]);
+    // The calendar beneath now names the day by its note, and only by that.
+    await expect(dayButton(page, day)).toHaveAccessibleName(`${longDate(day)}, note`);
+
+    // A share that fails says so and moves nothing.
+    await page.route("**/api/v1/notes/*/share", (route) => route.fulfill(problem(500)));
+    await sheet.getByRole("button", { name: "Share this note with..." }).click();
+    const confirm = sheet.getByRole("group", { name: "Share this note?" });
+    await expect(confirm).toContainText(
+      "A shared note cannot be made private again, only deleted.",
+    );
+    await confirm.getByRole("button", { name: "Share note" }).click();
+    await expect(sheet.getByText("We could not share this note. Try again.")).toBeVisible();
+    expect(await liveNotes(page, day)).toEqual([
+      expect.objectContaining({ category: "journal.private" }),
+    ]);
+    await page.unroute("**/api/v1/notes/*/share");
+
+    // The real share: the note moves to the read-only list, labelled by who can read it.
+    await confirm.getByRole("button", { name: "Share note" }).click();
+    await expect(sheet.getByText("Note shared.")).toBeVisible();
+    const shared = sheet.getByRole("list", { name: "Notes on this day" }).getByRole("listitem");
+    await expect(shared).toContainText("Shared with people who can see your symptoms");
+    await expect(shared).toContainText(text);
+    await expect(field).toHaveValue("");
+    expect(await liveNotes(page, day)).toEqual([
+      expect.objectContaining({ category: "cycle.symptoms", body: text }),
+    ]);
+
+    // A shared note can only be deleted, after a confirm of its own.
+    await shared.getByRole("button", { name: "Delete this note" }).click();
+    await shared.getByRole("button", { name: "Delete note" }).click();
+    await expect(sheet.getByText("Note deleted.")).toBeVisible();
+    expect(await liveNotes(page, day)).toEqual([]);
+    await page.keyboard.press("Escape");
+  } finally {
+    // Nothing stays on the day, whichever step stopped the test.
+    const origin = baseOrigin();
+    for (const leftover of await liveNotes(page, day)) {
+      await page.request.delete(`${origin}/api/v1/notes/${leftover.id}`, { headers: { origin } });
+    }
+  }
 });
 
 test("a first guess and then not enough regular cycles, each said honestly with the footer", async ({
