@@ -83,8 +83,10 @@ export interface ApiOptions {
    * `TIDEFERN_FAKE_NOW` freezes it outside production, and on production
    * the variable makes this call throw `ClockConfigurationError`, so the
    * host's route module, which calls this at module scope, fails to load
-   * and no request is ever answered on a frozen calendar. Tests pass
-   * `calendarClock(facts)` and never depend on the runner's environment.
+   * and no request is ever answered on a frozen calendar. A bare
+   * `createApp()` reads the runner's environment too, and CI exports
+   * `TIDEFERN_FAKE_NOW` to the unit tests, so a test whose answer depends on
+   * the day passes `realCalendarClock` or `calendarClock(facts)`.
    */
   clock?: CalendarClock | undefined;
 }

@@ -31,7 +31,7 @@ describe("frozenInstant", () => {
     );
   });
 
-  it("is honoured anywhere but production, previews and development included", () => {
+  it("is honored anywhere but production, previews and development included", () => {
     for (const vercelEnv of ["preview", "development", undefined]) {
       expect(frozenInstant({ TIDEFERN_FAKE_NOW: INSTANT, VERCEL_ENV: vercelEnv })).toEqual(
         new Date(INSTANT),

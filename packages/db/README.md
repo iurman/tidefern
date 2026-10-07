@@ -12,7 +12,7 @@ database access goes through. Imported by `packages/api` (and later
 | `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run` | The owner role's direct string; migrations and the job runner |
 | `MIGRATE_DESTRUCTIVE`   | the owner-triggered migration workflow (B12) | `1` lets the runner apply a contract migration (DROP, RENAME, ALTER COLUMN ... TYPE, TRUNCATE) |
 | `TIDEFERN_KEK_V1`       | `scripts/seed.ts`                            | The KEK the seed seals its free text under; base64 of 32 bytes, the environment's own value |
-| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`, and the server's calendar clock (`packages/api/src/clock.ts`) | An ISO 8601 instant that freezes "today" for the seed and for every calendar decision the server makes outside production (task E11), handed to `cycle_status_for` as `app.calendar_now`; refused when `VERCEL_ENV` is `production` |
+| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`, and the API's calendar clock (`packages/api/src/clock.ts`) | An ISO 8601 instant that freezes "today" for the seed and for every calendar decision the API makes outside production (task E11), handed to `cycle_status_for` as `app.calendar_now`; refused when `VERCEL_ENV` is `production` |
 | `DATABASE_URL` and `DATABASE_URL_UNPOOLED` together | `scripts/grant-login.ts` (CI only) | The owner URL runs `ALTER ROLE tidefern_app WITH LOGIN PASSWORD`, with the role and password taken from `DATABASE_URL`; refused when `VERCEL_ENV` is `production` |
 
 ## Commands
