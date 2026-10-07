@@ -84,6 +84,18 @@
   color: var(--muted);
 }
 
+/* A refused or failed removal: its own line above the action it is about. */
+.removeError {
+  flex: 1 1 100%;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  color: var(--danger);
+}
+
+.removeError:empty {
+  display: none;
+}
+
 .remove {
   display: inline-flex;
   align-items: center;
@@ -128,6 +140,13 @@
 
 .hiddenLabel {
   visibility: hidden;
+}
+
+/* On a phone the switches keep their width, so the card's own padding gives the words more room. */
+@media (max-width: 600px) {
+  .card {
+    padding: var(--space-4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -1,7 +1,12 @@
-import { render, screen } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeAll, describe, expect, it, vi } from "vitest";
-import { GrantRow, grantCopy } from "./grant-row";
+import {
+  CURRENT_SHARING_DESCRIPTION_VERSION,
+  SHARING_DESCRIPTIONS,
+  ShareCategory,
+} from "@tidefern/schemas";
+import { GrantRow, grantCopy, grantLevelText } from "./grant-row";
 import { PersonCard } from "./person-card";
 
 const status = grantCopy["cycle.status"];
@@ -74,6 +79,58 @@ describe("GrantRow", () => {
       "polite",
     );
   });
+
+  it("reads every category's words from the catalog version the screen shows", () => {
+    const catalog = SHARING_DESCRIPTIONS[CURRENT_SHARING_DESCRIPTION_VERSION].categories;
+    for (const category of ShareCategory.options) {
+      expect(grantCopy[category]).toEqual(catalog[category]);
+    }
+  });
+
+  it("shows the level of an on grant with its description, and none while it is off", () => {
+    const { rerender } = render(
+      <GrantRow
+        label={status.label}
+        description={status.description}
+        checked
+        level={grantLevelText("summary")}
+      />,
+    );
+    const control = screen.getByRole("switch", { name: "Cycle status" });
+    expect(screen.getByText("Level: summary")).toBeVisible();
+    expect(control).toHaveAccessibleDescription(`${status.description} Level: summary`);
+    rerender(
+      <GrantRow
+        label={status.label}
+        description={status.description}
+        checked={false}
+        level={grantLevelText("summary")}
+      />,
+    );
+    expect(screen.queryByText("Level: summary")).not.toBeInTheDocument();
+    expect(control).toHaveAccessibleDescription(status.description);
+  });
+
+  it("reads a note with the switch and shows the outcome of a saved change", () => {
+    render(
+      <GrantRow
+        label={status.label}
+        description={status.description}
+        checked={false}
+        disabled
+        note="Turn on cycle status first."
+        done="Alex can no longer see your cycle status."
+      />,
+    );
+    const control = screen.getByRole("switch", { name: "Cycle status" });
+    expect(control).toBeDisabled();
+    expect(control).toHaveAccessibleDescription(
+      `${status.description} Turn on cycle status first.`,
+    );
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Alex can no longer see your cycle status.",
+    );
+  });
 });
 
 describe("PersonCard", () => {
@@ -116,5 +173,118 @@ describe("PersonCard", () => {
     expect(dialog).toHaveTextContent("Alex loses access to everything you share, right now.");
     await user.click(screen.getByRole("button", { name: "Keep sharing" }));
     expect(onRemove).not.toHaveBeenCalled();
+  });
+
+  it("leaves out the since line before anything is shared, and names the year of an older one", () => {
+    const { rerender } = render(
+      <PersonCard name="Alex" relation="partner" grants={[]} notify={false} />,
+    );
+    expect(screen.getByRole("article", { name: "Alex" })).toHaveTextContent(/partner/);
+    expect(screen.getByRole("article", { name: "Alex" })).not.toHaveTextContent("since");
+    rerender(
+      <PersonCard
+        name="Alex"
+        relation="partner"
+        since="2025-12-29"
+        today="2026-10-04"
+        grants={[]}
+        notify={false}
+      />,
+    );
+    expect(screen.getByRole("article", { name: "Alex" })).toHaveTextContent(
+      "partner, since Dec 29, 2025",
+    );
+  });
+
+  it("hides the notify row, or keeps it and says why it cannot be pressed, with its own error", () => {
+    const { rerender } = render(
+      <PersonCard
+        name="Alex"
+        relation="partner"
+        grants={[{ category: "cycle.status", checked: false }]}
+        notify={false}
+        notifyHidden
+      />,
+    );
+    expect(
+      screen.queryByRole("switch", { name: "Tell Alex when my period starts" }),
+    ).not.toBeInTheDocument();
+    rerender(
+      <PersonCard
+        name="Alex"
+        relation="partner"
+        grants={[{ category: "cycle.status", checked: false }]}
+        notify={false}
+        notifyDisabled
+        notifyNote="Share your cycle status or cycle history with Alex first."
+        notifyError="We could not save this change. Try again."
+      />,
+    );
+    const notify = screen.getByRole("switch", { name: "Tell Alex when my period starts" });
+    expect(notify).toBeDisabled();
+    expect(notify).toHaveAccessibleDescription(
+      "The message says only that there is something new in Tidefern. Share your cycle status or cycle history with Alex first.",
+    );
+    expect(screen.getByText("We could not save this change. Try again.")).toBeVisible();
+    // The category switches stay usable: only the notify row is held back.
+    expect(screen.getByRole("switch", { name: "Cycle status" })).toBeEnabled();
+  });
+
+  it("names the removal's own consequence, can leave the private-notes line to the page, and shows a refusal", async () => {
+    const user = userEvent.setup();
+    render(
+      <PersonCard
+        name="Noor"
+        relation="household owner"
+        grants={[]}
+        notify={false}
+        notifyHidden
+        showPrivateNotes={false}
+        removeConsequence={<p>You leave the household you share with Noor.</p>}
+        removeError="Noor cannot be removed right now. Try again."
+      >
+        <p>Noor shares nothing with you yet.</p>
+      </PersonCard>,
+    );
+    const card = screen.getByRole("article", { name: "Noor" });
+    expect(within(card).queryByRole("list")).not.toBeInTheDocument();
+    expect(within(card).queryByText("Private notes are never shared.")).not.toBeInTheDocument();
+    expect(within(card).getByText("Noor shares nothing with you yet.")).toBeVisible();
+    expect(within(card).getByText("Noor cannot be removed right now. Try again.")).toHaveAttribute(
+      "aria-live",
+      "polite",
+    );
+    await user.click(screen.getByRole("button", { name: "Remove Noor" }));
+    const dialog = screen.getByRole("dialog", { name: "Remove Noor?" });
+    expect(dialog).toHaveTextContent("You leave the household you share with Noor.");
+    expect(dialog).not.toHaveTextContent("loses access");
+  });
+
+  it("shows the level and the outcome on an on grant, keyed by its own id", () => {
+    render(
+      <PersonCard
+        name="Pia"
+        relation="outside your household"
+        grants={[
+          { category: "child", id: "child-a", childName: "Sol", checked: false },
+          {
+            category: "child",
+            id: "child-b",
+            childName: "Sol",
+            checked: true,
+            level: grantLevelText("read"),
+            done: "Pia can now see everything logged for Sol.",
+          },
+        ]}
+        notify={false}
+        notifyHidden
+      />,
+    );
+    // Two children with one name still get two rows.
+    expect(screen.getAllByRole("switch", { name: "Sol" })).toHaveLength(2);
+    expect(screen.getByText("Level: read")).toBeVisible();
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Pia can now see everything logged for Sol.",
+    );
   });
 });

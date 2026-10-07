@@ -5,7 +5,7 @@ import { BottomSheet } from "../bottom-sheet";
 import { ConsentRecord, type ConsentRecordProps } from "../consent-record";
 import { DeviceRow } from "../device-row";
 import { Dialog } from "../dialog";
-import { GrantRow, grantCopy, type GrantRowProps } from "../grant-row";
+import { GrantRow, grantCopy, grantLevelText, type GrantRowProps } from "../grant-row";
 import { InvitationCard } from "../invitation-card";
 import { PersonCard, type PersonGrant } from "../person-card";
 import { Rail } from "../rail";
@@ -60,7 +60,7 @@ export const consentFacts = {
 };
 
 const alexGrants: PersonGrant[] = [
-  { category: "cycle.status", checked: true },
+  { category: "cycle.status", checked: true, level: grantLevelText("summary") },
   { category: "cycle.history", checked: false },
   { category: "cycle.symptoms", checked: false },
   { category: "pregnancy.overview", checked: false },
@@ -218,14 +218,15 @@ export const specimens: SpecimenGroup = {
       name: "Grant row",
       source: "apps/web/src/components/ui/grant-row.tsx",
       usage:
-        '<GrantRow label={grantCopy["cycle.status"].label} description={grantCopy["cycle.status"].description} checked={on} onChange={setOn} />',
+        '<GrantRow label={grantCopy["cycle.status"].label} description={grantCopy["cycle.status"].description} level={grantLevelText("summary")} checked={on} onChange={setOn} />',
       keyboard:
-        "Tab reaches the switch; Space or Enter flips it. Off revokes in that one press. The description is read with the switch. Empty is none: a row always has its category.",
+        "Tab reaches the switch; Space or Enter flips it. Off revokes in that one press. The description, and the level while the grant is on, are read with the switch. Empty is none: a row always has its category.",
       states: { empty: "none" },
       render: (state) => (
         <LiveGrantRow
           label={grantCopy["cycle.status"].label}
           description={grantCopy["cycle.status"].description}
+          level={grantLevelText("summary")}
           checked
           error={state === "error" ? "We could not save this change. Try again." : undefined}
           {...flags(state)}
@@ -238,7 +239,7 @@ export const specimens: SpecimenGroup = {
       usage:
         '<PersonCard name="Alex" relation="partner" since="2026-03-02" grants={grants} notify={false} onGrantChange={save} onNotifyChange={saveNotify} onRemove={remove} />',
       keyboard:
-        "Tab moves down the switches to the remove action; Space flips a switch; Enter on Remove opens the destructive dialog. Hover, focus and press on the card mean the remove action. Loading is the removal in flight. Empty is none: a person always lists every category, and the route's own empty state covers having nobody to share with.",
+        "Tab moves down the switches to the remove action; Space flips a switch; Enter on Remove opens the destructive dialog. Hover, focus and press on the card mean the remove action. Loading is the removal in flight. Optional: since (left out before anything is shared), the notify row hidden or held back with its reason and its own error, the removal's consequence by role, and the private-notes line left to the page. Empty is none: a person always lists every category, and the route's own empty state covers having nobody to share with.",
       states: { empty: "none" },
       render: (state) => (
         <PersonCard
