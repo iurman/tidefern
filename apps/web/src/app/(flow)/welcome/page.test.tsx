@@ -27,6 +27,7 @@ const { default: WelcomePage, metadata } = await import("./page");
 const me: Me = {
   id: "018f5e7a-5eed-7000-8000-000000000009",
   profile: null,
+  today: null,
   guardianOf: [],
   grants: [],
   session: {
@@ -61,6 +62,7 @@ describe("the /welcome placeholder", () => {
           units: "metric",
           notificationDetail: "generic",
         },
+        today: "2026-10-05",
       },
     });
     await expect(WelcomePage()).rejects.toMatchObject({ path: "/today" });

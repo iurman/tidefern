@@ -29,6 +29,7 @@ const withoutProfile: MeLookup = {
   me: {
     id: "018f5e7a-5eed-7000-8000-000000000009",
     profile: null,
+    today: null,
     guardianOf: [],
     grants: [],
     session: {

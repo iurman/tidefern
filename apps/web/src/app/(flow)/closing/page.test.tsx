@@ -48,6 +48,7 @@ describe("the /closing placeholder", () => {
       me: {
         id: "018f5e7a-5eed-7000-8000-000000000001",
         profile: null,
+        today: null,
         guardianOf: [],
         grants: [],
         session: {

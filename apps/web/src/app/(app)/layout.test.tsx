@@ -35,6 +35,7 @@ const me: Me = {
     units: "metric",
     notificationDetail: "generic",
   },
+  today: "2026-10-05",
   guardianOf: [],
   grants: [],
   session: {
@@ -72,7 +73,7 @@ describe("the (app) layout", () => {
   });
 
   it("sends a signed-in person without a profile to onboarding, outside the shell", async () => {
-    given({ kind: "ok", me: { ...me, profile: null } });
+    given({ kind: "ok", me: { ...me, profile: null, today: null } });
     expect(await redirectOf()).toBe("/welcome");
   });
 
