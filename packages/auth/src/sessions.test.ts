@@ -1,6 +1,7 @@
 import { createHmac } from "node:crypto";
+import { inspect } from "node:util";
 import { and, eq, gt, or, sql } from "drizzle-orm";
-import { afterAll, beforeAll, describe, expect, test } from "vitest";
+import { afterAll, beforeAll, describe, expect, test, vi } from "vitest";
 
 import { FixedKeyProvider, readSubjectKey } from "@tidefern/crypto";
 import { withActor } from "@tidefern/db";
@@ -441,39 +442,59 @@ describe("who sees the rows", () => {
 });
 
 describe("when the row cannot be written", () => {
-  test("a sign-in fails and hands out no session cookie", async () => {
-    const jo = await signUp("jo@example.com");
-    const device = new Device();
+  /**
+   * Runs `request` while the app role may not insert audit rows, and returns
+   * its response with everything handed to the console, formatted as Node
+   * prints it, so a test can see what a log line would carry.
+   */
+  async function whileAuditRefused(request: () => Promise<Response>) {
+    const printed: string[] = [];
+    const spies = (["error", "warn", "log"] as const).map((method) =>
+      vi.spyOn(console, method).mockImplementation((...args: unknown[]) => {
+        printed.push(
+          args.map((arg) => (typeof arg === "string" ? arg : inspect(arg, { depth: 8 }))).join(" "),
+        );
+      }),
+    );
     await harness.db.execute(sql`revoke insert on audit_events from tidefern_app`);
-    let response: Response;
     try {
-      response = await call(device, "/sign-in/email", {
-        email: "jo@example.com",
-        password: PASSWORD,
-      });
+      const response = await request();
+      return { response, printed: printed.join("\n") };
     } finally {
       await harness.db.execute(sql`grant insert on audit_events to tidefern_app`);
+      for (const spy of spies) spy.mockRestore();
     }
+  }
+
+  test("a sign-in fails, hands out no session cookie, and the log names no one", async () => {
+    const jo = await signUp("jo@example.com");
+    const device = new Device();
+    const { response, printed } = await whileAuditRefused(() =>
+      call(device, "/sign-in/email", { email: "jo@example.com", password: PASSWORD }),
+    );
     expect(response.status).toBe(500);
     expect(device.holdsSession()).toBe(false);
     expect(await actionsOf(jo)).toEqual([]);
+    // Better Auth logs what the hook threw: the action and the error name, never the id.
+    expect(printed).toContain("SessionAuditError");
+    expect(printed).not.toContain(jo);
+    expect(printed).not.toContain("jo@example.com");
   });
 
-  test("a device sign-out answers an error, although the device was signed out", async () => {
+  test("a device sign-out answers an error although the device was signed out, and the log names no one", async () => {
     const kai = await signUp("kai@example.com");
     const laptop = new Device();
     await signIn(laptop, "kai@example.com");
     const { token } = await signIn(new Device(), "kai@example.com");
-    await harness.db.execute(sql`revoke insert on audit_events from tidefern_app`);
-    let response: Response;
-    try {
-      response = await call(laptop, "/revoke-session", { token });
-    } finally {
-      await harness.db.execute(sql`grant insert on audit_events to tidefern_app`);
-    }
+    const { response, printed } = await whileAuditRefused(() =>
+      call(laptop, "/revoke-session", { token }),
+    );
     expect(response.status).toBe(500);
     expect(await sessionExists(token)).toBe(false);
     expect(await actionsOf(kai)).toEqual(["session.sign_in", "session.sign_in"]);
+    expect(printed).toContain("SessionAuditError");
+    expect(printed).not.toContain(kai);
+    expect(printed).not.toContain("kai@example.com");
   });
 });
 

@@ -3,7 +3,7 @@ import { createAuthMiddleware } from "better-auth/api";
 
 import { auditActions, schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, AuditAction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import { describeError, jobId as uuidv7 } from "@tidefern/db/jobs";
 
 /** The id `auth.options.plugins` lists this plugin under. */
 export const SESSION_AUDIT_PLUGIN_ID = "session-audit";
@@ -28,6 +28,21 @@ export interface SessionAuditOptions {
 }
 
 /**
+ * What a failed audit write throws in place of the database's own error,
+ * whose message and parameters quote the person's id. Better Auth logs
+ * whatever a hook throws, and architecture 9.1 allows no user id in a log
+ * line, so this keeps the action and the underlying error's name and code
+ * only, as `describeError()` does for the outbox.
+ */
+export class SessionAuditError extends Error {
+  override readonly name = "SessionAuditError";
+
+  constructor(action: AuditAction, underlying: unknown) {
+    super(`The ${action} audit row was not written: ${describeError(underlying)}.`);
+  }
+}
+
+/**
  * One row in the person's own name, actor and subject both, with no
  * category, no child and nothing about the device: the vocabulary has no
  * column for an address or a browser, and Better Auth's session row already
@@ -40,15 +55,19 @@ async function record(
   userId: string,
   action: AuditAction,
 ): Promise<void> {
-  await withActor(
-    userId,
-    async (tx) => {
-      await tx
-        .insert(schema.auditEvents)
-        .values({ id: uuidv7(), actorId: userId, action, subjectId: userId });
-    },
-    database,
-  );
+  try {
+    await withActor(
+      userId,
+      async (tx) => {
+        await tx
+          .insert(schema.auditEvents)
+          .values({ id: uuidv7(), actorId: userId, action, subjectId: userId });
+      },
+      database,
+    );
+  } catch (error) {
+    throw new SessionAuditError(action, error);
+  }
 }
 
 /**
@@ -84,10 +103,10 @@ async function record(
  * picture.
  *
  * Each row is written after the fact it records and in a transaction of
- * its own. If the write fails the request fails: a sign-in answers an error
- * without its session cookie, so no usable session goes unrecorded; a
- * revocation answers an error although the device was signed out, which
- * the devices list then shows.
+ * its own. If the write fails the request fails with a `SessionAuditError`:
+ * a sign-in answers an error without its session cookie, so no usable
+ * session goes unrecorded; a revocation answers an error although the
+ * device was signed out, which the devices list then shows.
  */
 export function sessionAudit(options: SessionAuditOptions = {}) {
   const { database } = options;

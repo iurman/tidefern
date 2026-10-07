@@ -163,5 +163,5 @@ export const auth: Auth = createAuth({
 
 export { createUserKeyHook, userKeyDatabaseHooks } from "./keys";
 export type { DatabaseHooks, UserCreatedHook, UserKeyHookOptions } from "./keys";
-export { REVOKE_PATHS, SESSION_AUDIT_PLUGIN_ID, sessionAudit } from "./sessions";
+export { REVOKE_PATHS, SESSION_AUDIT_PLUGIN_ID, SessionAuditError, sessionAudit } from "./sessions";
 export type { SessionAuditOptions } from "./sessions";
