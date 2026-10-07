@@ -1,0 +1,377 @@
+/* Settings (DESIGN.md 3.8): one column of groups from the rail's width, a list of rows that each
+   open their own screen below it. Tokens only, so both themes come from the semantic roles. The
+   switch follows the shell's own width (the `shell` size container in app-shell.module.css), the
+   same container query that swaps the tab bar for the rail; 1024px mirrors --breakpoint-rail. */
+
+.page {
+  display: grid;
+  max-width: 64rem;
+}
+
+.title {
+  margin-bottom: var(--space-6);
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+}
+
+/* Below the rail: the rows. From it: the stacked groups. */
+.stack {
+  display: none;
+}
+
+@container shell (min-width: 1024px) {
+  .sections {
+    display: none;
+  }
+
+  .stack {
+    display: block;
+  }
+}
+
+/* The phone index: one card of rows, each a link to its screen with a chevron. */
+.rows {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+.rows li + li {
+  border-top: 1px solid var(--soft-border);
+}
+
+.row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  min-height: 56px;
+  padding: 0 var(--space-3) 0 var(--space-4);
+  color: var(--text);
+  font-weight: var(--weight-sans-strong);
+  text-decoration: none;
+  transition: background var(--duration-feedback) var(--ease-interface);
+}
+
+.row:hover {
+  background: var(--panel);
+}
+
+.row:active {
+  background: var(--panel);
+  color: var(--accent);
+}
+
+/* The global focus ring sits inside the card, where the card's own clipping cannot cut it. */
+.row:focus-visible {
+  outline-offset: -4px;
+}
+
+.rowIcon {
+  flex: none;
+  color: var(--muted);
+}
+
+.phoneSignOut {
+  margin-top: var(--space-6);
+}
+
+/* The desktop stack: each group a label beside its controls, divided by a hairline. */
+.group {
+  display: grid;
+  gap: var(--space-4);
+  padding-block: var(--space-8);
+  border-top: 1px solid var(--soft-border);
+}
+
+.group:first-child {
+  padding-top: var(--space-2);
+  border-top: 0;
+}
+
+@container shell (min-width: 1024px) {
+  .group {
+    grid-template-columns: 13rem minmax(0, 42rem);
+    column-gap: var(--space-8);
+  }
+}
+
+.groupLabel {
+  margin: 0;
+  font-size: var(--type-subheading);
+  line-height: var(--leading-heading);
+}
+
+.groupBody,
+.screenBody {
+  display: grid;
+  align-content: start;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+/* A group's own screen on phones (or at any width, by its address): back link, heading, body. */
+.screen {
+  display: grid;
+  max-width: 42rem;
+}
+
+.screen > a:first-child {
+  margin-bottom: var(--space-4);
+}
+
+.screenTitle {
+  margin-bottom: var(--space-6);
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+}
+
+.help {
+  max-width: 60ch;
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.control,
+.form {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.form {
+  gap: var(--space-6);
+}
+
+.field {
+  width: 100%;
+  max-width: 28rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.pending {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.feedback {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+/* A list of choices on native radios, for the stage and the closing mode. */
+.choices {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.choicesLegend {
+  margin-bottom: var(--space-2);
+  padding: 0;
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.choice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--size-control);
+  max-width: 28rem;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  line-height: 1.4;
+  cursor: pointer;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    border-color var(--duration-feedback) var(--ease-interface);
+}
+
+.choice:hover {
+  background: var(--panel);
+}
+
+.choice:has(input:checked) {
+  border-color: var(--action);
+  background: var(--panel);
+}
+
+.choice input {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  accent-color: var(--action);
+  cursor: pointer;
+}
+
+.choices:disabled .choice {
+  color: var(--muted);
+  cursor: not-allowed;
+}
+
+/* The lock-screen preview: a phone's lock screen drawn from tokens, with sample text only. */
+.preview {
+  display: grid;
+  gap: var(--space-2);
+  width: 100%;
+  max-width: 22rem;
+  margin: 0;
+}
+
+.lockScreen {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+  padding: var(--space-6) var(--space-4) var(--space-8);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-sheet);
+  background: var(--panel);
+}
+
+.clock {
+  margin: 0;
+  color: var(--text);
+  font-size: 3rem;
+  font-weight: 300;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.notice {
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.noticeHead {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-caption);
+  line-height: 1.3;
+}
+
+.noticeApp {
+  color: var(--text);
+  font-weight: var(--weight-sans-strong);
+}
+
+.noticeWhen {
+  margin-left: auto;
+}
+
+.noticeBody {
+  margin: 0;
+  font-size: var(--type-small);
+  line-height: 1.45;
+}
+
+.caption {
+  color: var(--muted);
+  font-size: var(--type-caption);
+  line-height: 1.4;
+}
+
+.email {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+}
+
+/* The consent record group. */
+.consent {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.part {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.subheading {
+  margin: 0;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  letter-spacing: var(--tracking-heading);
+}
+
+.plainList {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.plainList li {
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.childName {
+  font-weight: var(--weight-sans-strong);
+}
+
+.by {
+  display: block;
+  color: var(--muted);
+}
+
+.withdraw {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+/* The dialog body's paragraphs keep the dialog's own rhythm. */
+.dialogText {
+  margin: 0 0 var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .row,
+  .choice {
+    transition-duration: 0ms;
+  }
+}
+
+@media (forced-colors: active) {
+  .choice:has(input:checked) {
+    border: 2px solid Highlight;
+  }
+}
