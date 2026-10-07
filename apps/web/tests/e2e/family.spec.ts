@@ -560,6 +560,30 @@ test("adding a child: the consent in full, the checks, a failure, then the child
   await expectNoOverflow(page, "/family with a new child");
 });
 
+test("a new child's card and empty tabs have no axe violations in both themes at 1440 and 390", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const family = await freshFamily(page);
+  if (family === null) return expectFailedRead(page, "/family");
+  expect(family.childId, "the add-a-child test runs first").toBeDefined();
+  // Before anything is logged, so the timeline, growth and milestones are each empty.
+  await everyWidthAndTheme(page, "/family with a new child", () => open(page, "/family"));
+  for (const tab of ["Timeline", "Growth", "Milestones"] as const) {
+    await everyWidthAndTheme(page, `a new child's ${tab}`, async () => {
+      await open(page, `/family/${family.childId}`);
+      await chooseTab(page, tab);
+    });
+  }
+  await open(page, `/family/${family.childId}`);
+  await expect(page.getByText("Nothing logged yet")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Log on the Family page" })).toHaveAttribute(
+    "href",
+    "/family",
+  );
+  await expectNoOverflow(page, "a new child's page");
+});
+
 test("quick logging: a diaper with Undo, a bottle, a timed breast feed and a sleep", async ({
   page,
 }) => {
