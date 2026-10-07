@@ -1254,3 +1254,75 @@ the social card's alt text lives in both `site.ts` and
 
 Finish the readiness sweep of H1 to H8 (API calls, gaps, shared files),
 land any lead prework it calls for, then launch the wave.
+
+### The readiness sweep, the lead prework and Phase A (2026-10-06, lead session dfc54107)
+
+The plan pull request #66 merged as `0a20c44` (preview smoke 37554115701).
+Before launching the page routes the lead ran a readiness sweep: one
+read-only scout per H route mapped the API calls, gaps, components,
+states and shared files against the code, and a cross-check settled the
+conflicts between routes (9 agents). What it found changed the plan:
+
+- Server components call the API in process, so a browser-level canned
+  answer cannot reach a server render. Builders run a local copy of CI's
+  seeded Postgres per task, and review captures sign in as seed personas
+  (lead tools in the session scratchpad: `seeded.sh`, `capture-auth.mjs`).
+- The `E2E_MAIL_CAPTURE` endpoint C5 named was never mounted (C6), and a
+  real sign-up answered 500 on the app role because the key hook claimed
+  system context that `is_system()` refuses for `tidefern_app` (D3).
+- Account closure and consent withdrawal make the same mistake on the
+  request's app-role connection (E10). The job runner, reminders and
+  closure were never wired into the web host, so production's cron path
+  answers 404 (I3). The server ignores `TIDEFERN_FAKE_NOW` although
+  architecture 15 says `todayIn()` honors it outside production (E11).
+- `child_events` has no feed method or diaper contents, and creating a
+  child writes no guardian consent (E12); no AAP or AASM ranges exist in
+  code (F6); nothing audits a sign-in or a device sign-out, and the
+  seed's partner audit names differ from the API's (C7, G10).
+- DaySheet loses a spotting flow, labels a shared note private and
+  submits a method-less form, and CycleRing recomputes predictions from
+  period starts the API never returns; H2 and H3 need one contract (G9).
+  Entry redirects, the invitation fragment, one e2e sign-in helper, a
+  checkbox field and seed cases are needed by several routes (G10).
+
+The lead prework merged as `e421439` (pull request #67): the shell's
+quick-log context (Today registers its opener; the button is left out
+for the `none` stage and disabled until registered), `/log/[date]`
+marking Calendar and `/activity` Settings, held grants showing Journey
+and Family, the rail at full height, one cached session read per request
+(`sessionMe()`), `formatChildAge`, `BackLink`, C6 and D3. A two-lens
+fresh-context review with a skeptic per finding confirmed five findings,
+all fixed before the merge; the largest was that a Next.js production
+build loads the auth package once per runtime, so the capture store now
+lives on `globalThis`. Gates: `pnpm check` 27 of 27; the seeded browser
+suite 164 passed; the `@smoke` subset 6 passed on a database-free
+server; CI verify 37557938167 and CodeQL green; preview smoke
+37558214802.
+
+Rulings for the wave, each repeated in the briefs: a period day is a day
+with flow light, medium or heavy, and the Period switch selects Medium
+visibly while spotting and none keep their flow; "weeks and days as of a
+date" is dropped from dating this wave (no honest method; owner input);
+the word she chooses after an ending is dialog-only and the dialog caps
+the date at today; pronouns are not in the profile (owner input); units
+are one metric or imperial control; a category label in the revoke path
+is not a health fact; sign-out moves to Settings and the shell-less
+layout; an invitation is accepted on `/sharing` from its `#invitation=`
+fragment, kept through sign-in.
+
+The plan marks C6 and D3 done and adds C7, E11, E12, F6, G9 and G10.
+Phase A launches now as one workflow (implement in a worktree, a
+fresh-context review, a fix pass): G10, G9, E10, E11, E12, F6, C7 and
+I3. Phase B, H1 to H8, follows once they merge, because every page
+depends on at least one of them (H1 on G10 and E12, H2 and H3 on G9, H4
+and H6 on G10, H5 on E12, F6 and G10, H7 on E10 and G10, H8 on G10 and
+C7). Follow-ups recorded: the console mailer prints invitation tokens on
+previews, measurements cannot be corrected or removed, "share this with
+[name]" after an ending, an API refusal of an ending dated in the
+future, moving the processor list into `packages/schemas`, and
+`playwright.config.ts` falling back to port 3000.
+
+### Next action
+
+Review and merge Phase A as each task passes its review, recording the
+production smoke for `e421439`, then launch H1 to H8.
