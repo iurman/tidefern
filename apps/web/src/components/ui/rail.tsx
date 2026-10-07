@@ -8,7 +8,7 @@ import styles from "./rail.module.css";
 export interface RailProps {
   destinations: Destination[];
   current: DestinationKey;
-  /** The quick-log button opens nothing yet; the Today route passes the sheet opener here. */
+  /** The quick-log action: what the page on screen registered with `useQuickLog` (quick-log.tsx). */
   onQuickLog?: () => void;
 }
 

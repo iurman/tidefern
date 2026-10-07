@@ -7,7 +7,7 @@ import styles from "./app-shell.module.css";
 export interface AppShellProps extends ShellProfile {
   /** The destination the person is on; it carries `aria-current="page"`. */
   current: DestinationKey;
-  /** The quick-log button opens nothing yet; the Today route passes the sheet opener here. */
+  /** The quick-log action: what the page on screen registered with `useQuickLog` (quick-log.tsx). */
   onQuickLog?: () => void;
   /**
    * `viewport` (the app) fills the viewport so the tab bar sits at the
