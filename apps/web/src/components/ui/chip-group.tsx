@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState } from "react";
-import { SymptomCode } from "@tidefern/schemas";
+import { SYMPTOM_CODES, SYMPTOM_LABELS, type SymptomCode } from "@tidefern/schemas";
 import styles from "./chip-group.module.css";
 
 export interface ChipOption<T extends string = string> {
@@ -29,10 +29,14 @@ export function labelFromCode(code: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-/** The symptom vocabulary from the schema, labelled for the day sheet. */
-export const symptomOptions: ChipOption<SymptomCode>[] = SymptomCode.options.map((value) => ({
+/**
+ * The symptom vocabulary with the API's own labels (SYMPTOM_LABELS, the
+ * same list GET /v1/cycle/vocabulary answers), in picker order, so a chip
+ * reads "Trouble sleeping" exactly where a day's summary does.
+ */
+export const symptomOptions: ChipOption<SymptomCode>[] = SYMPTOM_CODES.map((value) => ({
   value,
-  label: labelFromCode(value),
+  label: SYMPTOM_LABELS[value],
 }));
 
 /** Pure selection rule: a press adds the value, a second press removes it. Order is kept. */

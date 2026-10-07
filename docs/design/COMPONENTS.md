@@ -132,6 +132,45 @@ The day sheet (`DESIGN.md` 3.4) composes the bottom sheet, the flow
 scale, the chip group and the mood selector, so it is built after the
 wave merges, by the lead, with the chapter index.
 
+The day-logging contract (task G9) that Today and Calendar share:
+
+- `day-sheet.tsx` exports `DayLogForm`, the form body Today's open card,
+  the sheet and the page share, and `DaySheet`, which frames it as the
+  bottom sheet and dialog or, with `page`, as the page at `/log/[date]`
+  (an h1, the days and Close as links). The form keeps its own draft, read
+  once from `initial`; `draftKey` (`dayLogKey` in `lib/day-log.ts`: the
+  date, the entry version and a reseed count) remounts it after a late
+  load, a day change or an undo, never after its own save.
+- `lib/day-log.ts` is the pure part: the draft to the entry write with all
+  three fields, If-Match as a string for an entry and an integer for a
+  note, the period rule, the Undo plan, and the calls with results per
+  part. `components/day-log/` is the thin controller (`useDayLog`) and its
+  three bindings (`DayLogSheet`, `DayLogInline`, `DayLogPage`); it takes
+  the stage and today from the server and never reads the browser clock.
+- `lib/prediction-copy.ts` holds the 13.10 sentences, and `CycleRing`
+  takes the API's prediction and `latestStart` instead of period starts.
+- The sheet draws the flow and mood radios through `SegmentedControl`
+  with a value no option carries, so an unlogged flow or mood shows
+  nothing chosen without the control switching between controlled and
+  uncontrolled; `FlowScale` and `MoodSelector` have no such value yet.
+- The form posts to its own URL if it is ever submitted natively and stays
+  `inert` until the page hydrates, so a flow or mood code never reaches a
+  URL. Its success and error lines play their cue through
+  `InlineFeedback`, once per line; `cues={false}` silences them on the
+  reference page, where nothing answers a press.
+- A share is confirmed against the text on screen. When the saved note
+  changes under a field she has not edited (a share conflict read it
+  again, a share or a delete moved it), the field follows it and an open
+  confirm step closes; her own edit stays for Try again. A share that got
+  no answer is retried with the same Idempotency-Key, and a 409 whose read
+  shows the note already filed there with the same text counts as shared.
+- The flow scale keeps the shared pill where its five values fit at full
+  size; in a narrower sheet the segments tighten and share one row (a 360
+  px phone and up), and below about 296 px they part into chips that wrap,
+  as the phone sketch in `DESIGN.md` 3.4 draws them. The container queries
+  in `day-sheet.module.css` reach into `SegmentedControl`'s markup; a
+  layout option on `SegmentedControl` itself would remove that coupling.
+
 Each group owns only the files in its rows above plus its page, its
 specimens file and its browser spec; `docs/design/ASSETS.md` gains icon
 rows from the lead only. A group never edits `docs/BUILD_PLAN.md` or

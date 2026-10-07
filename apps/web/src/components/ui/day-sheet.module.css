@@ -6,6 +6,7 @@
 
 .dayNav {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: var(--space-2);
 }
@@ -32,10 +33,163 @@
   color: var(--muted);
 }
 
-.shareRow {
+/* A part that failed: the sentence that names the next step, then Try again. */
+.failure {
   display: flex;
-  justify-content: flex-start;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
   margin-top: calc(var(--space-4) * -1);
+}
+
+.otherNotes {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+.otherNotesLabel {
+  margin: 0;
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.otherList {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A note already shared: read-only text on the surface, never a field. */
+.otherNote {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.otherLabel {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  color: var(--muted);
+}
+
+.otherBy {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.otherBody {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
+.otherNote > button,
+.otherNote > a {
+  justify-self: start;
+}
+
+/*
+ * The flow scale (DESIGN.md 3.4): the shared segmented pill wherever its five
+ * values fit on one row at full size; narrower, as on most phones, the
+ * segments tighten and share one row; narrower still (a 320 px phone) they
+ * part into chips that wrap, as the phone sketch draws them, so the pill
+ * never folds into two uneven rows. The selectors reach into
+ * SegmentedControl's markup: a fieldset whose div holds one span per value,
+ * each a radio and its label.
+ */
+.flowScale {
+  container: flow-scale / inline-size;
+  min-width: 0;
+}
+
+@container flow-scale (width < 26rem) {
+  .flowScale fieldset > div {
+    justify-self: stretch;
+  }
+
+  .flowScale fieldset > div > span {
+    flex: 1 1 auto;
+  }
+
+  .flowScale label {
+    padding-inline: var(--space-1);
+  }
+}
+
+/* Below this the tight row would push a segment under 44 px wide. */
+@container flow-scale (width < 18.5rem) {
+  .flowScale fieldset > div {
+    gap: var(--space-2);
+    border: 0;
+    background: transparent;
+  }
+
+  .flowScale fieldset > div > span {
+    flex: 0 1 auto;
+  }
+
+  /* Drawn like the symptom chips beneath them. */
+  .flowScale label {
+    padding-inline: var(--space-4);
+    border-color: var(--border);
+    background: var(--surface);
+  }
+}
+
+.share {
+  display: grid;
+  gap: var(--space-2);
+  justify-items: start;
+  margin-top: calc(var(--space-4) * -1);
+}
+
+/* A share that did not go through; focus lands here when the step it answered closed. */
+.shareError {
+  min-width: 0;
+}
+
+.shareHelp {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+/* A confirm step that says what the action means before it happens. */
+.confirm {
+  display: grid;
+  gap: var(--space-3);
+  justify-self: stretch;
+  min-width: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  background: var(--panel);
+}
+
+.confirmTitle {
+  margin: 0;
+  font-weight: var(--weight-sans-strong);
+}
+
+.confirmText {
+  margin: 0;
+  font-size: var(--type-small);
+  max-width: 60ch;
+}
+
+.confirmActions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
 }
 
 .actions {
@@ -46,6 +200,19 @@
   border-top: 1px solid var(--soft-border);
 }
 
+/* "Saved for Monday, Oct 5." and Undo, inline beside the action that caused it. */
+.notice {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  margin-top: calc(var(--space-4) * -1);
+}
+
+.notice[hidden] {
+  display: none;
+}
+
 .footnote {
   display: flex;
   align-items: center;
@@ -53,4 +220,61 @@
   margin: 0;
   font-size: var(--type-caption);
   color: var(--muted);
+}
+
+.loading {
+  margin: 0;
+  color: var(--muted);
+}
+
+.loadFailure {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+  padding-top: var(--space-4);
+}
+
+.sheetFailure {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.sheetFailure > button {
+  justify-self: start;
+}
+
+/* Page mode at /log/[date]: the sheet's anatomy in the page flow. */
+.page {
+  display: grid;
+  gap: var(--space-4);
+  min-width: 0;
+  max-width: var(--size-reading);
+  padding: var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--overlay);
+  color: var(--text);
+}
+
+.pageTop {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+}
+
+.pageTitle {
+  margin: 0;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+}
+
+@media (max-width: 600px) {
+  .page {
+    padding: var(--space-4);
+  }
 }

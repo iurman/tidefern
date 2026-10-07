@@ -1,3 +1,4 @@
+import type { CyclePrediction } from "@tidefern/schemas";
 import { CycleRing } from "../cycle-ring";
 import { MeasurementChart } from "../measurement-chart";
 import type { ComponentState, SpecimenGroup } from "../specimen";
@@ -20,14 +21,45 @@ const today = "2026-10-05";
 
 const ringError = "We could not load your cycle. Try again.";
 
-/** Four completed cycles of 28 days, the latest start on Sep 24, so today is day 12. */
-const regularStarts = [
-  { date: "2026-06-04" },
-  { date: "2026-07-02" },
-  { date: "2026-07-30" },
-  { date: "2026-08-27" },
-  { date: "2026-09-24" },
-];
+/**
+ * The ring draws the API's answers, so these are GET /v1/cycle/predictions
+ * bodies: four completed cycles of 28 days with the latest start on Sep 24
+ * (GET /v1/cycle/status would say cycle day 12 today), the same day with
+ * one logged period, and two periods too far apart to estimate from.
+ */
+const latestStart = "2026-09-24";
+
+const regular: CyclePrediction = {
+  subjectId: "018f5e7a-5eed-7000-8000-000000000001",
+  computedAt: "2026-10-05T08:00:00.000Z",
+  basis: "estimate",
+  cycleLength: 28,
+  sampleSize: 4,
+  nextPeriod: { expected: "2026-10-22", start: "2026-10-20", end: "2026-10-24" },
+  ovulation: { expected: "2026-10-08", start: "2026-10-06", end: "2026-10-10" },
+  fertileWindow: { start: "2026-10-03", end: "2026-10-08" },
+  uncertaintyDays: 2,
+  ovulationBandDays: 2,
+};
+
+const firstGuess: CyclePrediction = {
+  ...regular,
+  basis: "first_guess",
+  sampleSize: 0,
+  nextPeriod: { expected: "2026-10-22", start: "2026-10-18", end: "2026-10-26" },
+  uncertaintyDays: 4,
+};
+
+const farApart: CyclePrediction = {
+  ...regular,
+  basis: "not_enough_regular_cycles",
+  cycleLength: null,
+  sampleSize: 0,
+  nextPeriod: null,
+  ovulation: null,
+  fertileWindow: null,
+  uncertaintyDays: 4,
+};
 
 const loggedDays = ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28"];
 
@@ -96,8 +128,9 @@ export const specimens: SpecimenGroup = {
       name: "Cycle ring",
       source: "apps/web/src/components/ui/cycle-ring.tsx",
       usage: `<CycleRing
-  today="2026-10-05"
-  periodStarts={starts}
+  today={status.date}
+  prediction={prediction}
+  latestStart={latestStartFrom(status)}
   loggedDays={loggedDays}
   logHref="/log"
 />`,
@@ -107,7 +140,8 @@ export const specimens: SpecimenGroup = {
       render: (state) => (
         <CycleRing
           today={today}
-          periodStarts={state === "empty" ? [] : regularStarts}
+          prediction={state === "empty" ? null : regular}
+          latestStart={state === "empty" ? null : latestStart}
           loggedDays={loggedDays}
           loading={state === "loading"}
           error={state === "error" ? ringError : undefined}
@@ -118,20 +152,22 @@ export const specimens: SpecimenGroup = {
       name: "Cycle ring, first guess",
       source: "apps/web/src/components/ui/cycle-ring.tsx",
       usage: `<CycleRing
-  today="2026-10-05"
-  periodStarts={[oneStart]}
+  today={status.date}
+  prediction={firstGuess}
+  latestStart={latestStartFrom(status)}
 />`,
       keyboard:
         "Not interactive. One logged period: the dashed and dotted arcs only, the 28 day default and the first-guess copy.",
       states: defaultOnly,
-      render: () => <CycleRing today={today} periodStarts={[{ date: "2026-09-24" }]} />,
+      render: () => <CycleRing today={today} prediction={firstGuess} latestStart={latestStart} />,
     },
     {
       name: "Cycle ring, not enough regular cycles",
       source: "apps/web/src/components/ui/cycle-ring.tsx",
       usage: `<CycleRing
-  today="2026-10-05"
-  periodStarts={farApart}
+  today={status.date}
+  prediction={farApart}
+  latestStart={latestStartFrom(status)}
   loggedDays={loggedDays}
 />`,
       keyboard:
@@ -140,7 +176,8 @@ export const specimens: SpecimenGroup = {
       render: () => (
         <CycleRing
           today={today}
-          periodStarts={[{ date: "2026-06-04" }, { date: "2026-09-24" }]}
+          prediction={farApart}
+          latestStart={latestStart}
           loggedDays={loggedDays}
         />
       ),
