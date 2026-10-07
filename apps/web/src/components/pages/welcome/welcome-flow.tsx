@@ -168,8 +168,12 @@ export function WelcomeFlow({ now, processors }: WelcomeFlowProps) {
 
   useEffect(() => {
     if (refusals === 0) return;
+    // The first field that stops her takes focus, which reads its error out. Not the time zone
+    // combobox: focus opens its list over the error line, so focus stays put and the line shows.
     formRef.current
-      ?.querySelector<HTMLElement>('[aria-invalid="true"], fieldset[data-invalid] input')
+      ?.querySelector<HTMLElement>(
+        '[aria-invalid="true"]:not([role="combobox"]), fieldset[data-invalid] input',
+      )
       ?.focus();
   }, [refusals]);
 

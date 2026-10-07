@@ -794,4 +794,11 @@ test("every step has no axe violations in both themes and no overflow at 390 and
   await page.getByRole("button", { name: "Skip for now" }).click();
   await heading(page, "Add a passkey");
   await checkState(page, "step 5");
+
+  // The agreement step without a consent record, for a stage that collects nothing.
+  await page.goto("/welcome");
+  await zoneAndStage(page, "Here for someone else");
+  await heading(page, "Before you start");
+  await next(page, "Continue");
+  await checkState(page, "step 3 of 4, terms only, with its errors");
 });

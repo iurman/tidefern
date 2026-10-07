@@ -137,7 +137,12 @@ describe("onboarding", () => {
 
     await press("Continue");
     expect(screen.getByText("Choose a zone from the list.")).toBeVisible();
-    expect(screen.getByRole("combobox", { name: /Time zone/ })).toHaveFocus();
+    // Focus would open the zone list over that line, so it stays on Continue and the list stays shut.
+    expect(screen.getByRole("combobox", { name: /Time zone/ })).not.toHaveFocus();
+    expect(screen.getByRole("combobox", { name: /Time zone/ })).toHaveAttribute(
+      "aria-expanded",
+      "false",
+    );
     expect(calls).toEqual([]);
 
     await press("Use Europe/Berlin");
