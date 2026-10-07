@@ -1,7 +1,14 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import type { Theme } from "./axe";
-import { freshAccount, onboard, signInAs, type Persona } from "./session";
+import {
+  baseOrigin,
+  freshAccount,
+  onboard,
+  signInAccount,
+  signInAs,
+  type Persona,
+} from "./session";
 
 /**
  * /activity against the production build (task H8): the person's audit
@@ -448,11 +455,16 @@ test("Load more reads the next page through the browser, says it is loading, and
   await expect(page.getByRole("status")).toHaveCount(0);
 });
 
-test("a fresh onboarded account has no activity yet: the empty state and no Load more", async ({
+// Changed on purpose when task C7 began auditing sign-ins: this test first showed a fresh
+// onboarded account's empty state, which a signed-in person can no longer reach, because the
+// sign-in that let her in is itself a row. The empty state stays covered by the list's own
+// component test (activity-list.test.tsx); here a fresh account's real sign-ins and the device
+// it signs out are its rows.
+test("a fresh account's own sign-ins and the device it signed out are its only rows", async ({
   page,
 }) => {
   test.setTimeout(120_000);
-  const account = await freshAccount(page, { label: "activity-empty" });
+  const account = await freshAccount(page, { label: "activity-sign-ins" });
   lastSignIn = Date.now();
   if (account === null) {
     await page.goto("/activity");
@@ -460,13 +472,49 @@ test("a fresh onboarded account has no activity yet: the empty state and no Load
     return;
   }
   await onboard(page, { stage: "none", timeZone: "America/New_York" });
+  const first = await apiActivity(page);
+  expect(first.items.map((item) => item.action)).toEqual(["session.sign_in"]);
   await page.goto("/activity");
-  await expect(page.getByRole("heading", { level: 2, name: "No activity yet" })).toBeVisible();
-  await expect(page.getByText("Sign-ins, devices and sharing changes appear here.")).toBeVisible();
-  await expect(list(page)).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Load more" })).toHaveCount(0);
-  await expectNoAxeViolationsHere(page, "the empty state");
+  await expect(list(page).locator("li")).toHaveCount(1);
+  await expect(
+    rows(page, "Signed in", "by you", dayIn(first.zone, first.items[0]?.occurredAt ?? "")),
+  ).toHaveCount(1);
+  await expect(page.getByText("No activity yet")).toHaveCount(0);
+
+  // A second device signs in, then signs the first one out.
+  const firstDevice = await page.context().cookies();
+  await page.context().clearCookies();
+  const second = await signInAccount(page, account);
+  lastSignIn = Date.now();
+  expect(second).not.toBeNull();
+  const origin = baseOrigin();
+  const revoked = await page.request.post(`${origin}/api/auth/revoke-other-sessions`, {
+    data: {},
+    headers: { origin },
+  });
+  expect(revoked.status()).toBe(200);
+
+  const { zone, items } = await apiActivity(page);
+  expect(items.map((item) => item.action)).toEqual([
+    "session.revoke",
+    "session.sign_in",
+    "session.sign_in",
+  ]);
+  await page.goto("/activity");
+  await expect(list(page).locator("li")).toHaveCount(3);
+  await expect(
+    rows(page, "Signed out other devices", "by you", dayIn(zone, items[0]?.occurredAt ?? "")),
+  ).toHaveCount(1);
+  await expect(rows(page, "Signed in", "by you")).toHaveCount(2);
+  const days = await daysDrawn(page);
+  expect(days, "newest first").toEqual([...days].sort().reverse());
+  await expectNoAxeViolationsHere(page, "a fresh account's sign-ins");
   await expectNoOverflow(page);
+
+  // The first device's session went with the sign-out.
+  await page.context().clearCookies();
+  await page.context().addCookies(firstDevice);
+  expect((await page.request.get(`${origin}/api/v1/me`)).status()).toBe(401);
 });
 
 test("the populated page has no axe violations in either theme at 1440 and 390", async ({
