@@ -218,12 +218,12 @@ describe("infant context data", () => {
       const days = new Set<number>();
       for (let day = 0; day < 460; day += 1) days.add(day);
       for (const months of [36, 72, 156, 228]) {
-        const centre = Math.round(months * DAYS_PER_MONTH);
-        const before = completedMonths(born, addDays(born, centre - 5));
-        const after = completedMonths(born, addDays(born, centre + 5));
+        const center = Math.round(months * DAYS_PER_MONTH);
+        const before = completedMonths(born, addDays(born, center - 5));
+        const after = completedMonths(born, addDays(born, center + 5));
         if (before >= months || after < months)
-          problems.push(`no ${months} month edge near day ${centre}`);
-        for (let day = centre - 5; day <= centre + 5; day += 1) days.add(day);
+          problems.push(`no ${months} month edge near day ${center}`);
+        for (let day = center - 5; day <= center + 5; day += 1) days.add(day);
       }
       for (const day of days) {
         const today = addDays(born, day);
@@ -258,11 +258,15 @@ describe("infant context data", () => {
 
 /**
  * The sentence each range relies on, as SOURCES.md quotes it. `states` holds
- * the figures; `supports` sets the band's edges or agrees with the figure.
+ * the figures; `supports` sets the band's edges or agrees with the figure;
+ * `age` is the source's own words for the band, from one of those sentences.
  */
-const QUOTES: Record<InfantContextRangeId, { states: string; supports: string[] }> = {
+const QUOTES: Record<InfantContextRangeId, { states: string; age: string; supports: string[] }> = {
   "feed-newborn": {
     states: "Nurse at least 8 to 12 times every 24 hours.",
+    // The breastfeeding page puts this under "A well-nourished newborn
+    // should:"; the "How Often" sentences name the age themselves.
+    age: "newborns",
     supports: [
       "If bottle-fed, most newborns eat every 2 to 3 hours; 8 times is generally recommended as the minimum every 24 hours.",
       "Breastfed newborns usually nurse every 2 hours from the start of the feeding to the next feeding so 10-12 sessions in 24 hours is the norm.",
@@ -271,15 +275,18 @@ const QUOTES: Record<InfantContextRangeId, { states: string; supports: string[] 
   },
   "wet-diaper-first-days": {
     states: "In the first few days after birth, a baby should have 2 to 3 wet diapers each day.",
+    age: "In the first few days after birth",
     supports: [],
   },
   "wet-diaper-after-first-days": {
     states: "After the first 4 to 5 days, a baby should have at least 5 to 6 wet diapers a day.",
+    age: "After the first 4 to 5 days",
     supports: ["A newborn's diaper is a good indicator of whether they are getting enough to eat."],
   },
   "sleep-4-to-12-months": {
     states:
       "Infants* 4 months to 12 months should sleep 12 to 16 hours per 24 hours (including naps) on a regular basis to promote optimal health.",
+    age: "4 months to 12 months",
     supports: [
       "*Recommendations for infants younger than 4 months are not included due to the wide range of normal variation in duration and patterns of sleep, and insufficient evidence for associations with health outcomes.",
       "Thus, no recommendations were made for children under 4 months of age for any of the categories.",
@@ -288,21 +295,25 @@ const QUOTES: Record<InfantContextRangeId, { states: string; supports: string[] 
   "sleep-1-to-2-years": {
     states:
       "Children 1 to 2 years of age should sleep 11 to 14 hours per 24 hours (including naps) on a regular basis to promote optimal health.",
+    age: "1 to 2 years",
     supports: [],
   },
   "sleep-3-to-5-years": {
     states:
       "Children 3 to 5 years of age should sleep 10 to 13 hours per 24 hours (including naps) on a regular basis to promote optimal health.",
+    age: "3 to 5 years",
     supports: [],
   },
   "sleep-6-to-12-years": {
     states:
       "Children 6 to 12 years of age should sleep 9 to 12 hours per 24 hours on a regular basis to promote optimal health.",
+    age: "6 to 12 years",
     supports: [],
   },
   "sleep-13-to-18-years": {
     states:
       "Teenagers 13 to 18 years of age should sleep 8 to 10 hours per 24 hours on a regular basis to promote optimal health.",
+    age: "13 to 18 years",
     supports: [],
   },
 };
@@ -312,6 +323,28 @@ const AASM_AGE_GROUPS =
   "the following age groups were created: < 12 months, 12 months to < 3 years, 3 years to < 6 years, 6 years to < 13 years, and";
 
 const normalize = (text: string) => text.replace(/\\\*/g, "*").replace(/\s+/g, " ").trim();
+
+/** The words and numbers of a text, lowercased: "Infants* 4 months" is infants, 4, months. */
+const tokens = (text: string) => text.toLowerCase().match(/[a-z0-9]+/g) ?? [];
+
+/**
+ * Whether `phrase` stands whole in `sentence`, word by word: "3 to 18 years"
+ * does not stand in "13 to 18 years", and "2 to 16" not in "12 to 16".
+ */
+function standsIn(sentence: string, phrase: string): boolean {
+  const all = tokens(sentence);
+  const part = tokens(phrase);
+  return all.some((_, start) => part.every((token, offset) => all[start + offset] === token));
+}
+
+const MONTHS =
+  "January February March April May June July August September October November December";
+
+/** A YYYY-MM-DD date as the Sources table writes it: "1/13/2025" (AAP) or "15 June 2016" (AASM). */
+function writtenDates(date: string): string[] {
+  const [year, month, day] = date.split("-").map(Number) as [number, number, number];
+  return [`${month}/${day}/${year}`, `${day} ${MONTHS.split(" ")[month - 1]} ${year}`];
+}
 
 /** The quotes under each source id in SOURCES.md's "The sentences each range relies on". */
 function quotesBySource(): Map<InfantContextSourceId, string[]> {
@@ -351,10 +384,24 @@ describe("the vendored quotes in packages/core/data/SOURCES.md", () => {
       expect(quotedBy(range.sources[0], states), `${range.id} under ${range.sources[0]}`).toBe(
         true,
       );
-      expect(states).toContain(`${range.low} to ${range.high}`);
+      expect(standsIn(states, `${range.low} to ${range.high}`), `${range.id} figures`).toBe(true);
       expect(states.includes("at least"), `${range.id} at least`).toBe(range.atLeast);
       expect(states.includes("(including naps)"), `${range.id} naps`).toBe(range.includesNaps);
-      for (const number of range.band.label.match(/\d+/g) ?? []) expect(states).toContain(number);
+    }
+  });
+  it("label each band in its source's own words", () => {
+    // The whole label against the age words of the range's own sentences, so
+    // a label edited to "1 to 4 years" or "After the first 4 to 6 days" fails;
+    // checking only that its numbers occur in the sentence let both through.
+    // Case is ignored, and "4 months to 12 months" is labeled "4 to 12 months".
+    const asLabel = (age: string) => age.replace(/^(\d+) (\w+) to (\d+) \2$/, "$1 to $3 $2");
+    for (const range of INFANT_CONTEXT_RANGES) {
+      const { states, age, supports } = QUOTES[range.id];
+      expect(
+        [states, ...supports].some((sentence) => standsIn(sentence, age)),
+        `${range.id}: ${age}`,
+      ).toBe(true);
+      expect(range.band.label.toLowerCase(), range.id).toBe(asLabel(age).toLowerCase());
     }
   });
   it("quote every supporting sentence under one of the range's sources", () => {
@@ -369,12 +416,39 @@ describe("the vendored quotes in packages/core/data/SOURCES.md", () => {
         expect(quotedBy("aasm-2016-methodology", AASM_AGE_GROUPS)).toBe(true);
     }
   });
-  it("list every source with its URL", () => {
+  it("list every source in the Sources table with its publisher, title, URL, date and day read", () => {
     const markdown = readFileSync(new URL("../data/SOURCES.md", import.meta.url), "utf8");
+    const table = markdown
+      .split("## Infant context ranges")[1]
+      ?.split("### Sources")[1]
+      ?.split("\n### ")[0];
+    if (!table) throw new Error("SOURCES.md has no Sources table for the infant context ranges");
+    // Columns: id, publisher and title, URL (and DOI), date on the source, day read.
+    const rows = new Map(
+      table
+        .split("\n")
+        .filter((line) => line.startsWith("| `"))
+        .map((line) =>
+          line
+            .split("|")
+            .slice(1, -1)
+            .map((cell) => cell.trim()),
+        )
+        .map((cells) => [cells[0]?.replace(/`/g, "") ?? "", cells] as const),
+    );
+    expect([...rows.keys()].sort()).toEqual(Object.keys(INFANT_CONTEXT_SOURCES).sort());
     for (const source of Object.values(INFANT_CONTEXT_SOURCES)) {
+      const [, credit = "", where = "", dated = "", read = ""] = rows.get(source.id) ?? [];
       expect(source.url).toMatch(/^https:\/\//);
-      expect(markdown).toContain(`\`${source.id}\``);
-      expect(markdown).toContain(source.url);
+      // "American Academy of Pediatrics, Section on Breastfeeding; Joan Younger Meek, ..."
+      expect(credit.split(/[,;]/)[0], `${source.id} publisher`).toBe(source.publisher);
+      expect(credit, `${source.id} title`).toContain(`"${source.title}"`);
+      expect(where.split(" ")[0], `${source.id} url`).toBe(source.url);
+      expect(where.match(/\(DOI ([^;)]+)/)?.[1], `${source.id} doi`).toBe(source.doi);
+      expect(writtenDates(source.dated), `${source.id} dated`).toContain(
+        dated.replace(/^(Last updated|Published) /, ""),
+      );
+      expect(read, `${source.id} read`).toBe(source.read);
     }
   });
 });

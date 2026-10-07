@@ -111,7 +111,8 @@ export interface InfantContextRange {
   band: AgeBand;
   /**
    * Per 24 hours: feeds (breast and bottle; solids are not part of the AAP
-   * figures), wet diapers (a mixed diaper is wet too) or hours of sleep.
+   * figures), wet diapers (a mixed diaper is wet too) or hours of sleep
+   * (AASM: sleep "on a regular basis", so usual sleep, not one day's).
    */
   low: number;
   high: number;
@@ -123,7 +124,11 @@ export interface InfantContextRange {
   sources: readonly [InfantContextSourceId, ...InfantContextSourceId[]];
 }
 
-/** The AAP pages speak of newborns and move on "by the end of the first month". */
+/**
+ * The newborn band ends at 1 month: the "How Often" page and AAP's formula
+ * page change the pattern "by the end of the first month"; the breastfeeding
+ * page speaks only of newborns.
+ */
 const NEWBORN_UNTIL: AgeEdge = { months: 1 };
 
 /** Every range, by kind and then by age. */
