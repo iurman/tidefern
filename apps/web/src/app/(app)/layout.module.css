@@ -9,23 +9,3 @@
   color: var(--text);
   font-size: var(--type-small);
 }
-
-/* The two policy links, quiet and always reachable; the tab bar is sticky, so it never covers them. */
-.policies {
-  margin-top: var(--space-12);
-  padding-top: var(--space-4);
-  border-top: 1px solid var(--soft-border);
-  color: var(--muted);
-  font-size: var(--type-small);
-}
-
-.policies nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--space-2) var(--space-6);
-}
-
-.policies a {
-  display: inline-block;
-  padding-block: var(--space-2);
-}

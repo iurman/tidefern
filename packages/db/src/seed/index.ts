@@ -14,11 +14,12 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { withSystem } from "../actor";
 import type { ActorDatabase, Transaction } from "../actor";
 import * as schema from "../schema/index";
-import { dateIn, daysBefore, hoursBefore, shiftDays } from "./calendar";
+import { dateIn, daysBefore, hoursBefore, noonIn, shiftDays } from "./calendar";
 import type { CalendarDate } from "./calendar";
 import {
   BLOCK,
   GRANT_LENA_MIRA_CONTRIBUTE,
+  GRANT_MIRA_LENA_SUMMARY,
   GRANT_MIRA_PIA_READ,
   GRANT_NOOR_THEO_READ,
   GRANT_NOOR_THEO_REVOKED,
@@ -45,6 +46,7 @@ import {
   PERSONAS,
   PIA,
   SOL,
+  SOL_BEYOND_BAND,
   THEO,
   invitationToken,
   seedId,
@@ -119,14 +121,28 @@ export function resolveSeedNow(env: Record<string, string | undefined>): Date {
 /** The version every seeded grant and consent records as what the person saw. */
 export const SEED_POLICY_VERSION = "2026-10";
 
-/** How a `share.read` row is deduplicated: one per actor, subject, category and day. */
+/**
+ * The audit names the API writes for a partner's read and write
+ * (`auditActions` in packages/api `middleware/audit.ts`, architecture 8.3
+ * step 6). Written out here because this package does not depend on the
+ * API; the activity view and the API's own dedupe read these exact names.
+ */
+export const PARTNER_READ = "partner.read";
+export const PARTNER_WRITE = "partner.write";
+
+/**
+ * How a `partner.read` row is deduplicated, in the API's own format
+ * (`readDedupeKey` in packages/api `middleware/audit.ts`): one per actor,
+ * subject, category and day, so a read the API audits on a seeded day
+ * collapses onto the seeded row instead of adding a second one.
+ */
 export function readDedupeKey(
   actorId: string,
   subjectId: string,
   category: string,
   day: CalendarDate,
 ): string {
-  return `read:${actorId}:${subjectId}:${category}:${day}`;
+  return `${actorId}/${subjectId}/${category}/${day}`;
 }
 
 function sha256(text: string): string {
@@ -706,6 +722,20 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
               createdAt: daysBefore(now, 200),
               updatedAt: daysBefore(now, 200),
             },
+            // Made while Mira's pregnancy was open (it began 300 days ago and
+            // ended in Ilo's birth 42 days ago), so Lena's view of it is now
+            // the neutral paused card of architecture 8.4 rule 2.
+            {
+              id: GRANT_MIRA_LENA_SUMMARY,
+              ownerId: MIRA.id,
+              granteeId: LENA.id,
+              category: "pregnancy.overview",
+              level: "summary",
+              policyVersion: SEED_POLICY_VERSION,
+              descriptionVersion: SEED_POLICY_VERSION,
+              createdAt: daysBefore(now, 280),
+              updatedAt: daysBefore(now, 280),
+            },
           ])
           .onConflictDoNothing()
           .returning({ id: schema.grants.id })
@@ -1144,6 +1174,19 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
                 lengthMillimetres: 920,
                 ...stamp(daysBefore(now, 5)),
               },
+              // The care case: at 912 days core places 10.5 kg on the CDC
+              // weight-for-age chart at z -2.40 (the 0.8th percentile, under
+              // the 2.3rd percentile edge of 10.93 kg), beyond two standard
+              // deviations, so a guardian's answer says `pointToCare` and a
+              // grantee's carries no such field.
+              {
+                id: SOL_BEYOND_BAND,
+                childId: SOL,
+                authorId: MIRA.id,
+                date: v(-1),
+                weightGrams: 10500,
+                ...stamp(daysBefore(now, 1)),
+              },
             ])
             .onConflictDoNothing()
             .returning({ id: schema.childMeasurements.id })
@@ -1200,7 +1243,10 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       dedupeKey: extra.dedupeKey ?? null,
       createdAt: occurredAt,
     });
-    // A partner read is deduplicated per day in the reader's own zone.
+    // A partner read is deduplicated per calendar day, read where the API
+    // reads it: in the subject's own zone for a person (the cycle, notes and
+    // pregnancy routes) and in the reader's zone for a child, who has none
+    // (the children routes).
     const read = (
       n: number,
       reader: Persona,
@@ -1208,16 +1254,14 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
       category: (typeof schema.dataCategoryValues)[number],
       occurredAt: Date,
       childId?: string,
-    ) =>
-      audit(n, reader.id, "share.read", subjectId, category, occurredAt, {
+    ) => {
+      const subject = PERSONAS.find((persona) => persona.id === subjectId);
+      const zone = childId === undefined && subject ? subject.timeZone : reader.timeZone;
+      return audit(n, reader.id, PARTNER_READ, subjectId, category, occurredAt, {
         childId,
-        dedupeKey: readDedupeKey(
-          reader.id,
-          subjectId,
-          category,
-          dateIn(occurredAt, reader.timeZone),
-        ),
+        dedupeKey: readDedupeKey(reader.id, subjectId, category, dateIn(occurredAt, zone)),
       });
+    };
     record(
       "audit_events",
       (
@@ -1237,13 +1281,27 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
             audit(11, MIRA.id, "grant.create", SOL, "child", daysBefore(now, 200), {
               childId: SOL,
             }),
-            read(12, THEO, NOOR.id, "cycle.symptoms", hoursBefore(now, 4)),
-            read(13, THEO, NOOR.id, "cycle.symptoms", daysBefore(now, 1)),
+            // Theo read her symptoms today and yesterday, each day read in
+            // Noor's zone, where the API keys a read of her data. Today's
+            // read is at `now` and yesterday's at noon on the day before, so
+            // the two fall on separate days at any hour on any date: CI's
+            // midnight UTC (02:00 in Berlin, when four hours earlier was
+            // still the day before) and Berlin's 25-hour day (where 24 hours
+            // before 23:30 is 00:30 on the same date) included.
+            read(12, THEO, NOOR.id, "cycle.symptoms", now),
+            read(
+              13,
+              THEO,
+              NOOR.id,
+              "cycle.symptoms",
+              noonIn(shiftDays(dateIn(now, NOOR.timeZone), -1), NOOR.timeZone),
+            ),
             read(14, PIA, SOL, "child", hoursBefore(now, 29), SOL),
-            audit(15, MIRA.id, "share.write", LENA.id, "pregnancy.overview", daysBefore(now, 3)),
-            audit(16, MIRA.id, "share.write", LENA.id, "pregnancy.overview", daysBefore(now, 14)),
+            audit(15, MIRA.id, PARTNER_WRITE, LENA.id, "pregnancy.overview", daysBefore(now, 3)),
+            audit(16, MIRA.id, PARTNER_WRITE, LENA.id, "pregnancy.overview", daysBefore(now, 14)),
             audit(17, NOOR.id, "invitation.create", NOOR.id, null, daysBefore(now, 1)),
             audit(18, NOOR.id, "invitation.withdraw", NOOR.id, null, daysBefore(now, 29)),
+            audit(19, MIRA.id, "grant.create", MIRA.id, "pregnancy.overview", daysBefore(now, 280)),
           ])
           .onConflictDoNothing()
           .returning({ id: schema.auditEvents.id })

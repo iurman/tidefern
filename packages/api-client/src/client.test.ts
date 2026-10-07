@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { createApiClient } from "./client";
 import { QueryNotAllowedError, allowedQuery } from "./query";
-import { forwardedRequest, readMe } from "./session";
+import { ACCOUNT_CLOSING, forwardedRequest, readMe } from "./session";
 
 const ORIGIN = "https://tidefern.example";
 
@@ -182,6 +182,48 @@ describe("readMe", () => {
     const { fetch } = recorder(() => Response.json({ code: "unauthenticated" }, { status: 401 }));
     const lookup = await readMe(createApiClient({ baseUrl: ORIGIN, fetch }));
     expect(lookup).toEqual({ kind: "anonymous" });
+  });
+
+  /** The API's 401 problem body, as `problem()` in packages/api writes it. */
+  function unauthenticated(detail?: string) {
+    return new Response(
+      JSON.stringify({
+        type: "urn:tidefern:problem:unauthenticated",
+        title: "Sign in required",
+        status: 401,
+        code: "unauthenticated",
+        instance: "/api/v1/me",
+        ...(detail === undefined ? {} : { detail }),
+      }),
+      { status: 401, headers: { "content-type": "application/problem+json" } },
+    );
+  }
+
+  it("reads a 401 whose problem says the account is closing as the closing kind", async () => {
+    const { fetch } = recorder(() => unauthenticated("account_closing"));
+    const lookup = await readMe(createApiClient({ baseUrl: ORIGIN, fetch }));
+    expect(lookup).toEqual({ kind: "closing" });
+  });
+
+  it("keeps every other 401 a visitor without a session, whatever its body", async () => {
+    for (const answer of [
+      () => unauthenticated(),
+      () => unauthenticated("fresh_authentication_required"),
+      () => new Response("account_closing", { status: 401 }),
+      () => Response.json({ detail: 42 }, { status: 401 }),
+    ]) {
+      const { fetch } = recorder(answer);
+      expect(await readMe(createApiClient({ baseUrl: ORIGIN, fetch }))).toEqual({
+        kind: "anonymous",
+      });
+    }
+  });
+
+  it("compares the closing detail by the value the API's constant holds", () => {
+    // The client never imports the API, so the two constants are pinned to each other here.
+    const source = readFileSync(new URL("../../api/src/auth.ts", import.meta.url), "utf8");
+    const declared = /export const ACCOUNT_CLOSING = "([^"]+)";/.exec(source)?.[1];
+    expect(declared).toBe(ACCOUNT_CLOSING);
   });
 
   it("reports any other answer or a thrown fetch as a failure, not as signed out", async () => {

@@ -137,6 +137,15 @@ export const GRANT_NOOR_THEO_READ = seedId(BLOCK.grants, 2);
 export const GRANT_NOOR_THEO_REVOKED = seedId(BLOCK.grants, 3);
 export const GRANT_LENA_MIRA_CONTRIBUTE = seedId(BLOCK.grants, 4);
 export const GRANT_MIRA_PIA_READ = seedId(BLOCK.grants, 5);
+/** Mira shared her pregnancy with Lena before it ended, so Lena's view of it is the paused card (8.4 rule 2). */
+export const GRANT_MIRA_LENA_SUMMARY = seedId(BLOCK.grants, 6);
+
+/**
+ * Sol's newest weight, beyond two standard deviations for his age, so a
+ * guardian's answer carries the pointing-to-care flag and a grantee's never
+ * does (architecture 8.4, task E5's `pointToCare`).
+ */
+export const SOL_BEYOND_BAND = seedId(BLOCK.childMeasurements, 6);
 
 /** The invitations, one per state. */
 export const INVITATION_THEO_ACCEPTED = seedId(BLOCK.invitations, 1);

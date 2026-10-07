@@ -41,3 +41,43 @@ export function hoursBefore(now: Date, hours: number): Date {
 export function daysBefore(now: Date, days: number): Date {
   return hoursBefore(now, days * 24);
 }
+
+/** How far the zone's wall clock runs ahead of UTC at `at`, in milliseconds. */
+function zoneOffsetMs(at: Date, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(at);
+  const get = (type: Intl.DateTimeFormatPartTypes) =>
+    Number(parts.find((part) => part.type === type)?.value ?? 0);
+  const wall = Date.UTC(
+    get("year"),
+    get("month") - 1,
+    get("day"),
+    get("hour"),
+    get("minute"),
+    get("second"),
+  );
+  return wall - (at.getTime() - at.getUTCMilliseconds());
+}
+
+/**
+ * The instant it is noon on `date` in the given IANA time zone. Clock
+ * changes happen at night, so noon exists exactly once on every calendar
+ * date, a 23-hour or a 25-hour one included, and an instant placed there
+ * reads back as that date in that zone at any `now`. The offset is
+ * measured at a first guess and again at the answer, so a change between
+ * the two cannot skew it.
+ */
+export function noonIn(date: CalendarDate, timeZone: string): Date {
+  const [year, month, day] = date.split("-").map(Number);
+  const wallNoon = Date.UTC(year ?? 0, (month ?? 1) - 1, day ?? 1, 12);
+  const guess = wallNoon - zoneOffsetMs(new Date(wallNoon), timeZone);
+  return new Date(wallNoon - zoneOffsetMs(new Date(guess), timeZone));
+}

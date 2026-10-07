@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
@@ -8,9 +8,10 @@ import {
   authClient,
   passkeyAutofillAvailable,
   passkeysAvailable,
-  SIGNED_IN_PATH,
+  signedInPath,
 } from "@/lib/auth-client";
 import type { AuthClientError, PasskeyHost } from "@/lib/auth-client";
+import { takeInvitationFragment } from "@/lib/invitation-fragment";
 import styles from "../auth.module.css";
 import { authCopy, describeAuthFailure, normaliseCode } from "../copy";
 
@@ -39,9 +40,15 @@ function needsSecondFactor(data: unknown): boolean {
   );
 }
 
-function leave() {
-  // A full navigation, so /today reads the fresh session cookie on the server.
-  window.location.assign(SIGNED_IN_PATH);
+/**
+ * A full navigation, so the next page reads the fresh session cookie on the
+ * server: Today, or the sharing screen with the invitation token back in
+ * its fragment when the page was opened from an invitation link, or a safe
+ * `?next=` path (the way back after a fresh sign-in).
+ */
+function leave(invitation: string | null) {
+  const next = new URLSearchParams(window.location.search).get("next");
+  window.location.assign(signedInPath(invitation, next));
 }
 
 /**
@@ -54,17 +61,28 @@ function leave() {
  * since the control the person submitted from has gone with the password
  * form. It mounts only after that action, never on page load. Nothing here
  * ever sends `trustDevice`.
+ *
+ * An invitation link's `#invitation=` fragment survives the redirect to this
+ * page; the form takes it out of the address bar on mount and holds the
+ * token in memory only, so the sign-in lands on the sharing screen with it.
  */
 export function SignInForm() {
   const [step, setStep] = useState<Step>("password");
   const [busy, setBusy] = useState<Busy>("none");
   const [failure, setFailure] = useState<Failure | null>(null);
+  const invitation = useRef<string | null>(null);
   // False on the server and during hydration, the browser's answer after it.
   const passkeys = useSyncExternalStore(
     subscribeToNothing,
     () => passkeysAvailable(window as unknown as PasskeyHost),
     () => false,
   );
+
+  useEffect(() => {
+    // Strict mode runs this twice in development: both reads get the same token, removed once.
+    const token = takeInvitationFragment();
+    if (token !== null) invitation.current = token;
+  }, []);
 
   useEffect(() => {
     const host = window as unknown as PasskeyHost;
@@ -76,7 +94,7 @@ export function SignInForm() {
     passkeyAutofillAvailable(host).then(async (available) => {
       if (!available || cancelled) return;
       const { data } = await authClient.signIn.passkey({ autoFill: true });
-      if (data && !cancelled) leave();
+      if (data && !cancelled) leave(invitation.current);
     });
     return () => {
       cancelled = true;
@@ -104,7 +122,7 @@ export function SignInForm() {
       setStep("totp");
       return;
     }
-    leave();
+    leave(invitation.current);
   }
 
   async function usePasskey() {
@@ -113,7 +131,7 @@ export function SignInForm() {
     setBusy("passkey");
     const { data, error } = await authClient.signIn.passkey();
     if (error || !data) return fail(error, "passkey");
-    leave();
+    leave(invitation.current);
   }
 
   async function submitCode(event: FormEvent<HTMLFormElement>) {
@@ -128,7 +146,7 @@ export function SignInForm() {
         ? await authClient.twoFactor.verifyBackupCode({ code })
         : await authClient.twoFactor.verifyTotp({ code });
     if (result.error) return fail(result.error, "two-factor");
-    leave();
+    leave(invitation.current);
   }
 
   function switchStep(next: Step) {

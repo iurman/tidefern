@@ -2,6 +2,7 @@ import { headers } from "next/headers";
 import { PolicyDocument } from "@/components/public/policy-document";
 import { Button } from "@/components/ui/button";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
+import { CLOSING_PATH } from "@/lib/auth-client";
 import { pageMetadata } from "@/lib/site";
 import { readSession } from "./session";
 
@@ -26,6 +27,10 @@ const copy = {
     lede: "The closure lives in Settings, where you confirm it after signing in again.",
     action: "Close my account",
   },
+  closing: {
+    lede: "Your account is already closing. Its own page says what happens next and what you can still do.",
+    action: "See your account",
+  },
   failed: "We could not check whether you are signed in. Try again.",
 };
 
@@ -34,18 +39,21 @@ const copy = {
  * Google Play later): one paragraph that says what closing deletes and
  * when, then one action that depends on the session. Signed out, the
  * action goes to sign in; signed in, to Settings, where the destructive
- * confirmation lives. No warmth surface.
+ * confirmation lives; already closing, to the locked view at /closing. No
+ * warmth surface.
  */
 export default async function DeleteAccountPage() {
   const session = await readSession(await headers());
-  const signedIn = session === "signed-in";
-  const state = signedIn ? copy.signedIn : copy.signedOut;
+  const state =
+    session === "closing" ? copy.closing : session === "signed-in" ? copy.signedIn : copy.signedOut;
+  const href =
+    session === "closing" ? CLOSING_PATH : session === "signed-in" ? "/settings" : "/sign-in";
   return (
     <PolicyDocument eyebrow="Account" title="Delete your account">
       <p className="intro">{copy.paragraph}</p>
       {session === "failed" ? <InlineFeedback tone="error">{copy.failed}</InlineFeedback> : null}
       <p>{state.lede}</p>
-      <Button href={signedIn ? "/settings" : "/sign-in"}>{state.action}</Button>
+      <Button href={href}>{state.action}</Button>
     </PolicyDocument>
   );
 }

@@ -1,5 +1,6 @@
 import { AUTH_BASE_PATH, createAuthClient } from "@tidefern/auth/client";
 import type { AuthClient, AuthClientError } from "@tidefern/auth/client";
+import { invitationLanding } from "./invitation-fragment";
 
 export { AUTH_BASE_PATH };
 
@@ -13,8 +14,60 @@ export const authClient: AuthClient = createAuthClient();
 
 export type { AuthClient, AuthClientError };
 
-/** Where every successful sign-in lands. */
+/** Where a successful sign-in lands unless an invitation or a `?next=` path says otherwise. */
 export const SIGNED_IN_PATH = "/today";
+
+/** Where the (app) layout sends a signed-in person without a profile: onboarding, outside the shell (task H1). */
+export const WELCOME_PATH = "/welcome";
+
+/** Where the (app) layout sends a person whose account is closing: the locked view with the undo (task H7). */
+export const CLOSING_PATH = "/closing";
+
+/** Long enough for any page path the app has; a longer `?next=` is refused unread. */
+const MAX_NEXT_LENGTH = 512;
+
+/** A base no real request carries, so a value that resolves anywhere else shows it leaves the origin. */
+const NEXT_BASE = "https://next.invalid";
+
+/**
+ * Whether a `?next=` value is a page on this origin that a sign-in may
+ * return to (the way back after a fresh sign-in): a path only, starting
+ * with exactly one slash; no backslash, no query, no fragment, no space or
+ * control character (a browser drops tabs and newlines from a URL, so
+ * "/\t/elsewhere.example" would become "//elsewhere.example"); already
+ * normalized, so no dot segment or encoding trick resolves somewhere else;
+ * and never the API. Returns the path, or null for anything else, and the
+ * person then lands on Today.
+ */
+export function safeNextPath(raw: string | null | undefined): string | null {
+  if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_NEXT_LENGTH) return null;
+  if (raw[0] !== "/" || raw[1] === "/") return null;
+  for (const character of raw) {
+    const code = character.charCodeAt(0);
+    if (code <= 0x20 || code === 0x7f || "\\?#".includes(character)) return null;
+  }
+  let url: URL;
+  try {
+    url = new URL(raw, NEXT_BASE);
+  } catch {
+    return null;
+  }
+  if (url.origin !== NEXT_BASE || url.pathname !== raw) return null;
+  if (url.pathname === "/api" || url.pathname.startsWith("/api/")) return null;
+  return url.pathname;
+}
+
+/**
+ * Where a successful sign-in lands (a full navigation, so the page reads
+ * the fresh session cookie on the server): the sharing screen with the
+ * token back in its fragment when the sign-in page was opened from an
+ * invitation link (the token the page took from the address bar,
+ * `takeInvitationFragment`), else a safe `?next=` path, else Today.
+ */
+export function signedInPath(invitation: string | null, next: string | null | undefined): string {
+  const landing = invitation === null ? null : invitationLanding(invitation);
+  return landing ?? safeNextPath(next) ?? SIGNED_IN_PATH;
+}
 
 /**
  * The callback the verification link in a sign-up mail lands on. Better Auth

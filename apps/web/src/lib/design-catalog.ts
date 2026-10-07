@@ -250,6 +250,12 @@ export const specimenGroups: readonly CatalogGroup[] = [
         source: `${ui}mood-selector.tsx`,
         description: "Three moods, one chosen, as a segmented radio group.",
       },
+      {
+        name: "Checkbox field",
+        source: `${ui}checkbox-field.tsx`,
+        description:
+          "One native checkbox with its label, help and inline error, for an agreement or a checklist item.",
+      },
     ],
   },
   {

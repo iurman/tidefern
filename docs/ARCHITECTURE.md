@@ -1529,8 +1529,12 @@ before a gesture.
 | Security, required | Vitest and Playwright | `withActor()` runs as a role with `rolbypassrls = false`; `withSystem()` is refused for the app role; an insert by a `summary` grantee is rejected by RLS; a query for a foreign subject returns zero rows; `script-src` carries a nonce and no `unsafe-inline`; log lines contain no body fields; idempotency replay never reads a stored body; the job runner answers 404 without `CRON_SECRET`; a child grant for one child does not reach another; a child note survives the author's account closure when a co-guardian exists |
 
 Browser tests sign in against the production build through seeded,
-already-verified users and a mail capture endpoint that exists only when
-`E2E_MAIL_CAPTURE=true`, which Vercel production never sets. Each
+already-verified users and a mail capture endpoint, `GET` and `DELETE
+/api/internal/e2e/mail` (the captured messages' recipients, subjects and
+first links, oldest first, and a reset), that is mounted only when
+`E2E_MAIL_CAPTURE=true` on a server that is not a Vercel deployment, so no
+preview or production ever serves it and Vercel production refuses the
+variable outright. Each
 Playwright worker signs in once and shares its `storageState`, because
 Better Auth's built-in production rule allows three sign-ins per ten
 seconds; tests never relax the rate limit. `@smoke` tests never

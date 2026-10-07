@@ -501,9 +501,9 @@ else; never reuse one anywhere real.
 | --- | --- | --- | --- | --- | --- |
 | Noor | `noor@example.test` | `tidefern-seed-noor` | Europe/Berlin, `cycle` | A, owner | Her own day sheet (17 days, 14 symptoms, 3 period starts 28 days apart), the live prediction, a private note and a shared one, 4 consents, the invitations she sent, the grants she made |
 | Theo | `theo@example.test` | `tidefern-seed-theo` | Europe/Berlin, `none` | A, partner | Noor's day sheet through a `read` grant on `cycle.symptoms` and a status card through a `summary` grant on `cycle.status` (notify on); his `read` grant on `cycle.history` was revoked 20 days ago, so no prediction; the shared note, never the private journal |
-| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events (Ilo's 90 ml `bottle` feed, a `breast` feed with a note, a night's sleep and a `mixed` diaper; Sol's night; 5 checked milestones), 5 measurements, the consent she gave on each child's behalf in the guardian's consent wording, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there) |
-| Lena | `lena@example.test` | `tidefern-seed-lena` | America/Vancouver, `pregnancy` | B, partner | Her open pregnancy (22 weeks, redated by 8 days at the 14 week scan; the `due_date_changes` row is hers alone), 4 events, 2 notes under `pregnancy.overview`, both children as a guardian; nothing of Mira's history |
-| Pia | `pia@example.test` | `tidefern-seed-pia` | America/New_York, `none`, imperial | none | Sol alone, through a `read` grant on `child` for that child: Sol's events and measurements, Sol's key, never Ilo and never the guardians |
+| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events (Ilo's 90 ml `bottle` feed, a `breast` feed with a note, a night's sleep and a `mixed` diaper; Sol's night; 5 checked milestones), 6 measurements (Sol's newest weight is beyond two standard deviations for his age, so her answers carry the pointing-to-care flag), the consent she gave on each child's behalf in the guardian's consent wording, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there); she shared her own pregnancy with Lena through a `summary` grant while it was open |
+| Lena | `lena@example.test` | `tidefern-seed-lena` | America/Vancouver, `pregnancy` | B, partner | Her open pregnancy (22 weeks, redated by 8 days at the 14 week scan; the `due_date_changes` row is hers alone), 4 events, 2 notes under `pregnancy.overview`, both children as a guardian; Mira's ended pregnancy through the `summary` grant, which the API answers with the neutral paused state of architecture 8.4 rule 2 (no week, no dates, never the reason), and nothing else of Mira's |
+| Pia | `pia@example.test` | `tidefern-seed-pia` | America/New_York, `none`, imperial | none | Sol alone, through a `read` grant on `child` for that child: Sol's events and his 3 measurements (the far one too, without the care flag, which only a guardian's answer carries), Sol's key, never Ilo and never the guardians |
 
 Invitations, all from household A unless noted: Theo's accepted one, a
 pending one to `kim@example.test` (expires in two days), an expired one to
@@ -522,18 +522,34 @@ Rows per table, which `src/seed/seed.test.ts` pins:
 | `households` | 2 | `cycle_predictions` | 1 |
 | `household_members` | 4 | `pregnancies` | 2 |
 | `invitations` | 5 | `pregnancy_events` | 5 |
-| `grants` | 5 | `due_date_changes` | 1 |
+| `grants` | 6 | `due_date_changes` | 1 |
 | `consents` | 11 | `child_events` | 10 |
-| `children` | 2 | `child_measurements` | 5 |
+| `children` | 2 | `child_measurements` | 6 |
 | `child_guardians` | 4 | `notes` | 5 |
-| `vocabulary` | 27 | `audit_events` | 18 |
+| `vocabulary` | 27 | `audit_events` | 19 |
 
-The audit trail holds one `session.sign_in` per person, every grant made
-and the one revoked, the pending invitation's creation and the withdrawn
-one's withdrawal, Theo's two reads of Noor's symptoms (one row per actor,
-subject, category and day, keyed by `dedupe_key`, the day being the
-reader's own calendar day), Pia's read of Sol, and
-Mira's two writes for Lena. `photos`, `jobs`, `idempotency_keys`,
+The audit trail uses the API's own names (`auditActions` in
+`packages/api/src/middleware/audit.ts`): one `session.sign_in` per person,
+every grant made (`grant.create`, Mira's summary grant to Lena among them)
+and the one revoked (`grant.revoke`), the pending invitation's creation and
+the withdrawn one's withdrawal, Theo's two reads of Noor's symptoms and
+Pia's read of Sol as `partner.read`, and Mira's two writes for Lena as
+`partner.write`. A read is one row per actor, subject, category and day,
+keyed by `dedupe_key` in the API's format (`actor/subject/category/day`),
+the day read where the API reads it: in the subject's own zone for a
+person and in the reader's zone for a child. Theo's two reads sit at the
+seed's `now` and at noon on the day before in Noor's zone, so they land on
+today and yesterday in Berlin at any hour on any date, CI's midnight UTC
+and Berlin's 25-hour day included; an API read on a seeded day collapses
+onto the seeded row.
+
+Sol's newest measurement (`SOL_BEYOND_BAND` in `src/seed/cast.ts`) is a
+weight of 10500 g at 912 days, which `growthAssessment` in packages/core
+places on the CDC weight-for-age chart at z -2.40 (the 0.8th percentile,
+under the 2.3rd percentile edge of 10934 g), beyond two standard
+deviations: a guardian's answer carries `pointToCare: true`, a grantee's
+carries no such field. This package does not depend on core, so the test
+pins the row and this paragraph records the placement. `photos`, `jobs`, `idempotency_keys`,
 `data_requests`, `product_events` and `disclosures` stay empty, as do the
 Better Auth session tables. No name, email, id or action name carries a
 health word; the test scans them.

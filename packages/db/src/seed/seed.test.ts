@@ -20,18 +20,23 @@ import { dateIn, shiftDays } from "./calendar";
 import {
   BLOCK,
   CHECKED_MILESTONES,
+  GRANT_MIRA_LENA_SUMMARY,
   ILO,
   ILO_FEED_NOTE,
   LENA,
   LENA_PREGNANCY,
   MIRA,
+  MIRA_PREGNANCY,
   NOOR,
   NOTE_NOOR_PRIVATE,
+  PARTNER_READ,
+  PARTNER_WRITE,
   PERSONAS,
   PIA,
   SEED_NOTES,
   SEED_PREGNANCY_EVENTS,
   SOL,
+  SOL_BEYOND_BAND,
   SeedConfigurationError,
   SeedRoleError,
   THEO,
@@ -68,7 +73,11 @@ const otherKek = new FixedKeyProvider(
   "v1",
 );
 
-/** The cast as packages/db/README.md documents it, rows per table. */
+/**
+ * The cast as packages/db/README.md documents it, rows per table. Task G10
+ * added a grant (Mira's summary grant to Lena), its audit row and one of
+ * Sol's measurements, for the page specs' paused-card and care cases.
+ */
 const CAST = {
   user: 5,
   account: 5,
@@ -77,7 +86,7 @@ const CAST = {
   households: 2,
   household_members: 4,
   invitations: 5,
-  grants: 5,
+  grants: 6,
   consents: 11,
   children: 2,
   child_guardians: 4,
@@ -88,9 +97,9 @@ const CAST = {
   pregnancy_events: 5,
   due_date_changes: 1,
   child_events: 10,
-  child_measurements: 5,
+  child_measurements: 6,
   notes: 5,
-  audit_events: 18,
+  audit_events: 19,
   vocabulary: 27,
 };
 
@@ -266,11 +275,13 @@ describe("the first run", () => {
         sql`select level::text as level, (revoked_at is not null) as revoked from grants order by level, revoked`,
       ),
     );
+    // The second summary grant is Mira's to Lena on her pregnancy (task G10).
     expect(levels).toEqual([
       { level: "contribute", revoked: false },
       { level: "read", revoked: false },
       { level: "read", revoked: false },
       { level: "read", revoked: true },
+      { level: "summary", revoked: false },
       { level: "summary", revoked: false },
     ]);
 
@@ -517,27 +528,120 @@ describe("the instants", () => {
     expect(instant(vocabulary?.at)).toBe(NOW.getTime());
   });
 
-  test("keys each partner read on the reader's own calendar day", async () => {
-    const reads = rows(
+  // The names and the key format changed on purpose in task G10: the seed wrote `share.read`,
+  // `share.write` and `read:a:b:c:day` where the API writes `partner.read`, `partner.write` and
+  // `a/b/c/day`, so the activity view could not name the seeded rows and an API read on a seeded
+  // day added a second row instead of collapsing onto the first.
+  test("names partner reads and writes as the API does and keys each read the API's way", async () => {
+    const actions = rows(
       await harness.db.execute(
-        sql`select actor_id, dedupe_key, occurred_at from audit_events where action = 'share.read' order by occurred_at desc`,
+        sql`select action, count(*)::int as n from audit_events where action like '%.read' or action like '%.write' group by action order by action`,
       ),
     );
-    expect(reads).toHaveLength(3);
+    expect(actions).toEqual([
+      { action: PARTNER_READ, n: 3 },
+      { action: PARTNER_WRITE, n: 2 },
+    ]);
+    expect([PARTNER_READ, PARTNER_WRITE]).toEqual(["partner.read", "partner.write"]);
+
+    const reads = rows(
+      await harness.db.execute(
+        sql`select actor_id, subject_id, child_id, dedupe_key, occurred_at from audit_events where action = ${PARTNER_READ} order by occurred_at desc`,
+      ),
+    );
     for (const read of reads) {
+      // The subject's own zone for a person, the reader's for a child (who has no zone).
+      const subject = PERSONAS.find((persona) => persona.id === read.subject_id);
       const reader = PERSONAS.find((persona) => persona.id === read.actor_id);
-      expect(reader).toBeDefined();
-      const readDay = dateIn(
-        new Date(read.occurred_at as string | Date),
-        reader?.timeZone ?? "UTC",
-      );
-      expect(read.dedupe_key).toMatch(new RegExp(`:${readDay}$`));
+      const zone = read.child_id === null && subject ? subject.timeZone : reader?.timeZone;
+      const readDay = dateIn(new Date(read.occurred_at as string | Date), zone ?? "UTC");
+      expect(read.dedupe_key).toMatch(new RegExp(`/${readDay}$`));
     }
     expect(reads.map((read) => read.dedupe_key)).toEqual([
-      `read:${THEO.id}:${NOOR.id}:cycle.symptoms:2026-10-05`,
-      `read:${THEO.id}:${NOOR.id}:cycle.symptoms:2026-10-04`,
-      `read:${PIA.id}:${SOL}:child:2026-10-03`,
+      `${THEO.id}/${NOOR.id}/cycle.symptoms/2026-10-05`,
+      `${THEO.id}/${NOOR.id}/cycle.symptoms/2026-10-04`,
+      `${PIA.id}/${SOL}/child/2026-10-03`,
     ]);
+  });
+
+  // Two instants where a read placed a whole 24 hours before `now` shares today's Berlin date or
+  // skips yesterday's: CI's midnight UTC, and 23:30 on Berlin's 25-hour day (2026-10-25, back to
+  // winter time), where 24 hours earlier is 00:30 on the same date (found in G10's review).
+  test.each([
+    ["at midnight UTC, as CI's does", "2026-10-05T00:00:00Z", "2026-10-05", "2026-10-04"],
+    ["late on Berlin's 25-hour day", "2026-10-25T22:30:00Z", "2026-10-25", "2026-10-24"],
+  ])(
+    "keeps Theo's two reads on today and yesterday in Berlin when the seed runs %s",
+    async (_, at, today, yesterday) => {
+      const twin = await createTestDatabase();
+      try {
+        await seed(twin.db, { now: new Date(at), kek });
+        const reads = rows(
+          await twin.db.execute(
+            sql`select dedupe_key from audit_events where action = ${PARTNER_READ} and actor_id = ${THEO.id}::uuid order by occurred_at desc`,
+          ),
+        ).map((read) => read.dedupe_key);
+        expect(reads).toEqual([
+          `${THEO.id}/${NOOR.id}/cycle.symptoms/${today}`,
+          `${THEO.id}/${NOOR.id}/cycle.symptoms/${yesterday}`,
+        ]);
+      } finally {
+        await twin.close();
+      }
+    },
+  );
+});
+
+describe("the cases the page specs need", () => {
+  test("Mira's summary grant to Lena predates the end of the pregnancy it reaches", async () => {
+    const [grant] = rows(
+      await harness.db.execute(
+        sql`select owner_id, grantee_id, category::text as category, level::text as level, created_at, revoked_at from grants where id = ${GRANT_MIRA_LENA_SUMMARY}::uuid`,
+      ),
+    );
+    expect(grant).toMatchObject({
+      owner_id: MIRA.id,
+      grantee_id: LENA.id,
+      category: "pregnancy.overview",
+      level: "summary",
+      revoked_at: null,
+    });
+    const [pregnancy] = rows(
+      await harness.db.execute(
+        sql`select started_at, ended_at::text as ended, ended_reason::text as reason from pregnancies where id = ${MIRA_PREGNANCY}::uuid`,
+      ),
+    );
+    // Shared while open, so the API now answers Lena with the paused state (architecture 8.4 rule 2).
+    expect(instant(grant?.created_at)).toBeGreaterThan(instant(pregnancy?.started_at));
+    expect(pregnancy?.reason).toBe("birth");
+    expect(instant(grant?.created_at)).toBeLessThan(
+      instant(`${pregnancy?.ended as string}T00:00:00Z`),
+    );
+    const audited = rows(
+      await harness.db.execute(
+        sql`select occurred_at from audit_events where action = 'grant.create' and actor_id = ${MIRA.id}::uuid and category = 'pregnancy.overview'`,
+      ),
+    ).map((row) => instant(row.occurred_at));
+    expect(audited).toEqual([instant(grant?.created_at)]);
+  });
+
+  test("Sol's newest measurement is the weight placed beyond two standard deviations", async () => {
+    const [newest] = rows(
+      await harness.db.execute(
+        sql`select id, author_id, weight_grams, length_millimetres, head_millimetres, (date - (select date_of_birth from children where id = ${SOL}::uuid))::int as age_days from child_measurements where child_id = ${SOL}::uuid order by date desc limit 1`,
+      ),
+    );
+    // packages/core's growthAssessment puts 10500 g at 912 days on the CDC chart at z -2.40,
+    // the 0.8th percentile, under the 2.3rd percentile edge of 10934 g (this package cannot import
+    // core, so the README records the check). Only the weight is set, so no other indicator is placed.
+    expect(newest).toEqual({
+      id: SOL_BEYOND_BAND,
+      author_id: MIRA.id,
+      weight_grams: 10500,
+      length_millimetres: null,
+      head_millimetres: null,
+      age_days: 912,
+    });
   });
 });
 
@@ -834,7 +938,8 @@ describe("under the B8 policies", () => {
     expect(seen).toEqual({
       children: [SOL],
       events: new Set([SOL]),
-      measurements: 2,
+      // Sol's three, the newest the one beyond his band (task G10); the API sends her no care flag.
+      measurements: 3,
       guardians: 0,
       // Her own key and Sol's.
       keys: 2,
@@ -881,7 +986,8 @@ describe("under the B8 policies", () => {
       children: 2,
       child_guardians: 4,
       child_events: 10,
-      child_measurements: 5,
+      // Ilo's three and Sol's three, the newest of Sol's beyond his band (task G10).
+      child_measurements: 6,
       // Her own ended one and Lena's open one.
       pregnancies: 2,
       pregnancy_events: 5,
@@ -893,14 +999,15 @@ describe("under the B8 policies", () => {
       subject_keys: 4,
       // Herself, Lena and Pia.
       profiles: 3,
-      grants: 2,
-      // Her sign-in, the child grant she made, her two writes for Lena, and
+      // Lena's to her, and the two she made: Sol's to Pia and her pregnancy's to Lena (task G10).
+      grants: 3,
+      // Her sign-in, the two grants she made, her two writes for Lena, and
       // Pia's read of Sol, whose guardian she is.
-      audit_events: 5,
+      audit_events: 6,
     });
   });
 
-  test("Lena sees her own journey and the children, and none of Mira's history", async () => {
+  test("Lena sees her own journey, the children, and Mira's ended pregnancy only through the summary grant", async () => {
     expect(
       await countsAs(LENA.id, [
         "pregnancies",
@@ -913,16 +1020,27 @@ describe("under the B8 policies", () => {
         "cycle_entries",
       ]),
     ).toEqual({
-      pregnancies: 1,
-      pregnancy_events: 4,
+      // Her open one and, since task G10's summary grant, Mira's ended one; the API answers
+      // her with the paused state for it and never projects its reason.
+      pregnancies: 2,
+      // Her four and Mira's one milestone, which the API's paused answer leaves out.
+      pregnancy_events: 5,
+      // Her own redating; Mira has none, and none is ever projected for a grantee.
       due_date_changes: 1,
+      // Her two; Mira's private note never.
       notes: 2,
       children: 2,
-      // Herself and both children; no grant from Mira.
-      subject_keys: 3,
+      // Herself, both children and Mira, who granted to her.
+      subject_keys: 4,
       profiles: 2,
       cycle_entries: 0,
     });
+    const notes = await withActor(
+      LENA.id,
+      (tx) => tx.select({ category: schema.notes.category }).from(schema.notes),
+      harness.db,
+    );
+    expect(notes.map((note) => note.category)).not.toContain("journal.private");
   });
 
   test("a contribute grantee writes for the subject and the row stays the subject's", async () => {

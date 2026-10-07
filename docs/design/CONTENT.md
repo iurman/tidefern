@@ -95,11 +95,6 @@ still closes the page.
   policies.
 - `[OWNER]` attorney review of both policies, the terms and the consent text
   (Phase 2 gate).
-- `[OWNER]` attorney review of the guardian's consent on a child's behalf,
-  the draft text the add-a-child form shows in full before its box
-  (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
-  `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
-  gate).
 - `[OWNER]` approval of the mark, which the home page and the brand chapter
   present.
 - `[OWNER]` the updated date each policy page shows (`/privacy`,
@@ -109,3 +104,46 @@ still closes the page.
   disputes), after attorney review; the page says it is missing.
 - `[OWNER]` the contact for accessibility reports on `/accessibility`, if it
   differs from the privacy inbox.
+- `[OWNER]` the version label of the terms the onboarding consent records
+  beside the consent (`TERMS_VERSION` in `packages/schemas/src/profile.ts`,
+  `2026-10` until the terms text is approved); it changes whenever the terms
+  text does.
+
+One subsection per page route below, so each route's builder adds its own
+lines without touching another's.
+
+### `/welcome` (H1)
+
+(none yet)
+
+### `/today` (H2)
+
+(none yet)
+
+### `/calendar` and `/log/[date]` (H3)
+
+(none yet)
+
+### `/journey` (H4)
+
+(none yet)
+
+### `/family` (H5)
+
+- `[OWNER]` attorney review of the guardian's consent on a child's behalf,
+  the draft text the add-a-child form shows in full before its box
+  (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
+  `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
+  gate).
+
+### `/sharing` (H6)
+
+(none yet)
+
+### `/settings` (H7)
+
+(none yet)
+
+### `/activity` (H8)
+
+(none yet)

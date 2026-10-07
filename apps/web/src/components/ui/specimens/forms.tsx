@@ -1,4 +1,5 @@
 import type { ComponentState, SpecimenGroup } from "../specimen";
+import { CheckboxField } from "../checkbox-field";
 import { ChipGroup, symptomOptions } from "../chip-group";
 import { FlowScale } from "../flow-scale";
 import { FormField } from "../form-field";
@@ -273,6 +274,34 @@ export const specimens: SpecimenGroup = {
           label="Mood"
           defaultValue="steady"
           error={state === "error" ? "Choose one value for this day." : undefined}
+          {...common(state)}
+        />
+      ),
+    },
+    {
+      name: "Checkbox field",
+      source: "apps/web/src/components/ui/checkbox-field.tsx",
+      usage: `<CheckboxField
+  label="I am 18 or older"
+  help="Tidefern is for adults. No date of birth is stored."
+  name="ageAttested"
+  required
+  error={ageError}
+/>`,
+      keyboard:
+        "Tab reaches the box; Space ticks and unticks it. A click or tap anywhere on the field does the same; a link in the label or the help is followed instead.",
+      /* Every state has a meaning: empty is nothing ticked yet, error an agreement left unticked,
+         loading the checklist use (an item that saves on its own). The label is the age
+         attestation of architecture 8.4, not a milestone: a milestone list carries the 13.10
+         framing and the not-a-screening-tool line once for the whole list, never per item. */
+      render: (state) => (
+        <CheckboxField
+          label="I am 18 or older"
+          help="Tidefern is for adults. No date of birth is stored."
+          required
+          defaultChecked={state !== "empty" && state !== "error"}
+          loading={state === "loading"}
+          error={state === "error" ? "Confirm you are 18 or older to continue." : undefined}
           {...common(state)}
         />
       ),

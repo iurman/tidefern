@@ -21,6 +21,57 @@ test("the forms chapter has one H1 and is not indexable", async ({ page }) => {
   await expect(page).toHaveTitle("Forms | Tidefern");
 });
 
+test("the forms chapter renders every specimen in both themes", async ({ page }) => {
+  await page.goto(route);
+  // Ten specimens from G5, and the checkbox field the lead added before the page routes (G10).
+  await expect(page.locator('main [data-theme="light"]')).toHaveCount(11);
+  await expect(page.locator('main [data-theme="dark"]')).toHaveCount(11);
+});
+
+test("the checkbox field ticks from its label and Space, and its target is 44 px tall", async ({
+  page,
+}) => {
+  await page.goto(route);
+  const empty = page
+    .getByRole("region", { name: "Checkbox field" })
+    .locator('[data-theme="light"] ol > li')
+    .nth(7);
+  // The specimen is the age attestation since G10's review (it showed half of the 13.10 milestone
+  // template), so the name and the description follow it.
+  const box = empty.getByRole("checkbox", { name: "I am 18 or older" });
+  await expect(box).not.toBeChecked();
+  await expect(box).toHaveAccessibleDescription(
+    "Tidefern is for adults. No date of birth is stored.",
+  );
+  // A real pointer at the middle of the label's words: the input covering the field takes it.
+  const label = empty.getByText("I am 18 or older");
+  await label.scrollIntoViewIfNeeded();
+  const words = await label.boundingBox();
+  expect(words).not.toBeNull();
+  await page.mouse.click(words!.x + words!.width / 2, words!.y + words!.height / 2);
+  await expect(box).toBeChecked();
+  await box.focus();
+  await page.keyboard.press("Space");
+  await expect(box).not.toBeChecked();
+  const target = await box.boundingBox();
+  expect(target?.height ?? 0).toBeGreaterThanOrEqual(44);
+  // The ring sits just inside the full-width field, here and in the frame's forced state, so the
+  // stage that clips sideways (or a card) never cuts its sides (G10's review).
+  await expect(box).toHaveCSS("outline-offset", "-2px");
+  await expect(box).toHaveCSS("outline-style", "solid");
+  const forced = page
+    .getByRole("region", { name: "Checkbox field" })
+    .locator('[data-theme="light"] [data-specimen-state="focus-visible"] > *');
+  await expect(forced).toHaveCSS("outline-offset", "-2px");
+  const error = page
+    .getByRole("region", { name: "Checkbox field" })
+    .locator('[data-theme="light"] ol > li')
+    .nth(6)
+    .getByRole("checkbox");
+  await expect(error).toHaveAttribute("aria-invalid", "true");
+  await expect(error).toHaveAccessibleDescription(/Confirm you are 18 or older to continue\./);
+});
+
 test("the time zone combobox filters, chooses with the keyboard and prints the offset", async ({
   page,
 }) => {
