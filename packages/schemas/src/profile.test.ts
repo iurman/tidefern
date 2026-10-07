@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { ShareCategory, Stage } from "./index";
+import { ShareCategory, Stage, TERMS_VERSION as rootTermsVersion } from "./index";
 import {
   CHILD_CONSENT_DISCLOSURES,
   CONSENT_DISCLOSURES,
@@ -13,6 +13,7 @@ import {
   IdempotentReplay,
   Profile,
   ProfileInput,
+  TERMS_VERSION,
   TimeZone,
   childConsentTextVersions,
   consentTextVersions,
@@ -119,6 +120,13 @@ describe("ConsentInput", () => {
       ConsentInput.safeParse({ ...disclosure, termsVersion: "I had a loss in May" }).success,
     ).toBe(false);
     expect(ConsentInput.safeParse({ ...disclosure, termsVersion: "2026-10.1" }).success).toBe(true);
+  });
+
+  it("takes the terms version the onboarding page sends, exported from the package root", () => {
+    expect(rootTermsVersion).toBe(TERMS_VERSION);
+    expect(ConsentInput.safeParse({ ...disclosure, termsVersion: TERMS_VERSION }).success).toBe(
+      true,
+    );
   });
 });
 

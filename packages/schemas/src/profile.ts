@@ -162,6 +162,14 @@ export const consentTextVersions = ["2026-10"] as const;
 export type ConsentTextVersion = (typeof consentTextVersions)[number];
 
 /**
+ * The version of the terms the onboarding page records beside the consent
+ * (`ConsentInput.termsVersion`). A free label, not a catalog key: the terms
+ * text is still awaiting the owner and the attorney (docs/design/CONTENT.md,
+ * the `[OWNER]` line for it), and this value changes whenever that text does.
+ */
+export const TERMS_VERSION = "2026-10";
+
+/**
  * The catalog of consent text, keyed by version. The page renders these
  * sentences and the server writes them into the consent rows, so the
  * plaintext `purpose` column only ever holds the product's own words and
