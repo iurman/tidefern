@@ -538,8 +538,9 @@ Pia's read of Sol as `partner.read`, and Mira's two writes for Lena as
 keyed by `dedupe_key` in the API's format (`actor/subject/category/day`),
 the day read where the API reads it: in the subject's own zone for a
 person and in the reader's zone for a child. Theo's two reads sit at the
-seed's `now` and a day before it, so they land on separate Berlin days at
-any hour, CI's midnight UTC included; an API read on a seeded day collapses
+seed's `now` and at noon on the day before in Noor's zone, so they land on
+today and yesterday in Berlin at any hour on any date, CI's midnight UTC
+and Berlin's 25-hour day included; an API read on a seeded day collapses
 onto the seeded row.
 
 Sol's newest measurement (`SOL_BEYOND_BAND` in `src/seed/cast.ts`) is a

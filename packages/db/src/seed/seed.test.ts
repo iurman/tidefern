@@ -564,23 +564,32 @@ describe("the instants", () => {
     ]);
   });
 
-  test("keeps Theo's two reads on separate Berlin days when the seed runs at midnight UTC, as CI's does", async () => {
-    const midnight = await createTestDatabase();
-    try {
-      await seed(midnight.db, { now: new Date("2026-10-05T00:00:00Z"), kek });
-      const reads = rows(
-        await midnight.db.execute(
-          sql`select dedupe_key from audit_events where action = ${PARTNER_READ} and actor_id = ${THEO.id}::uuid order by occurred_at desc`,
-        ),
-      ).map((read) => read.dedupe_key);
-      expect(reads).toEqual([
-        `${THEO.id}/${NOOR.id}/cycle.symptoms/2026-10-05`,
-        `${THEO.id}/${NOOR.id}/cycle.symptoms/2026-10-04`,
-      ]);
-    } finally {
-      await midnight.close();
-    }
-  });
+  // Two instants where a read placed a whole 24 hours before `now` shares today's Berlin date or
+  // skips yesterday's: CI's midnight UTC, and 23:30 on Berlin's 25-hour day (2026-10-25, back to
+  // winter time), where 24 hours earlier is 00:30 on the same date (found in G10's review).
+  test.each([
+    ["at midnight UTC, as CI's does", "2026-10-05T00:00:00Z", "2026-10-05", "2026-10-04"],
+    ["late on Berlin's 25-hour day", "2026-10-25T22:30:00Z", "2026-10-25", "2026-10-24"],
+  ])(
+    "keeps Theo's two reads on today and yesterday in Berlin when the seed runs %s",
+    async (_, at, today, yesterday) => {
+      const twin = await createTestDatabase();
+      try {
+        await seed(twin.db, { now: new Date(at), kek });
+        const reads = rows(
+          await twin.db.execute(
+            sql`select dedupe_key from audit_events where action = ${PARTNER_READ} and actor_id = ${THEO.id}::uuid order by occurred_at desc`,
+          ),
+        ).map((read) => read.dedupe_key);
+        expect(reads).toEqual([
+          `${THEO.id}/${NOOR.id}/cycle.symptoms/${today}`,
+          `${THEO.id}/${NOOR.id}/cycle.symptoms/${yesterday}`,
+        ]);
+      } finally {
+        await twin.close();
+      }
+    },
+  );
 });
 
 describe("the cases the page specs need", () => {

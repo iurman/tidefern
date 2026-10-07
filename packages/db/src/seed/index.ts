@@ -14,7 +14,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { withSystem } from "../actor";
 import type { ActorDatabase, Transaction } from "../actor";
 import * as schema from "../schema/index";
-import { dateIn, daysBefore, hoursBefore, shiftDays } from "./calendar";
+import { dateIn, daysBefore, hoursBefore, noonIn, shiftDays } from "./calendar";
 import type { CalendarDate } from "./calendar";
 import {
   BLOCK,
@@ -1281,13 +1281,21 @@ export async function seed(db: ActorDatabase, options: SeedOptions): Promise<See
             audit(11, MIRA.id, "grant.create", SOL, "child", daysBefore(now, 200), {
               childId: SOL,
             }),
-            // Theo read her symptoms today and yesterday. Today's read is at
-            // `now` itself and yesterday's a whole day before it, so the two
-            // fall on separate Berlin days at any hour the seed runs: CI seeds
-            // at midnight UTC, 02:00 in Berlin, when four hours earlier was
-            // still the day before and the two rows would share one key.
+            // Theo read her symptoms today and yesterday, each day read in
+            // Noor's zone, where the API keys a read of her data. Today's
+            // read is at `now` and yesterday's at noon on the day before, so
+            // the two fall on separate days at any hour on any date: CI's
+            // midnight UTC (02:00 in Berlin, when four hours earlier was
+            // still the day before) and Berlin's 25-hour day (where 24 hours
+            // before 23:30 is 00:30 on the same date) included.
             read(12, THEO, NOOR.id, "cycle.symptoms", now),
-            read(13, THEO, NOOR.id, "cycle.symptoms", daysBefore(now, 1)),
+            read(
+              13,
+              THEO,
+              NOOR.id,
+              "cycle.symptoms",
+              noonIn(shiftDays(dateIn(now, NOOR.timeZone), -1), NOOR.timeZone),
+            ),
             read(14, PIA, SOL, "child", hoursBefore(now, 29), SOL),
             audit(15, MIRA.id, PARTNER_WRITE, LENA.id, "pregnancy.overview", daysBefore(now, 3)),
             audit(16, MIRA.id, PARTNER_WRITE, LENA.id, "pregnancy.overview", daysBefore(now, 14)),
