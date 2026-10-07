@@ -211,7 +211,78 @@ neither is repeated below.
 
 ### `/journey` (H4)
 
-(none yet)
+The route uses the rows above word for word (the title, "No pregnancy
+recorded" without its action, "Predictions are paused after birth", and
+"When you are ready" after a loss or another ending), DESIGN.md 3.5 and
+5.3 for its labels, and task C4's fresh sign-in sentence. Every other
+string is a draft in `apps/web/src/components/pages/journey/copy.ts`
+waiting for review, one line each:
+
+- `[OWNER]` the one resources link the ending dialog offers once
+  (architecture 8.4, DESIGN.md 5.3): organization, address and link text.
+  The dialog shows `[OWNER]` in its place until then.
+- `[OWNER]` review: metadata description "What is coming and what has
+  happened, week by week."
+- `[OWNER]` review: the week list: "Week by week", the tide marker's "This
+  week", "Earlier weeks" with "1 entry" or "N entries", "Week N" with its
+  range, and the empty line "Nothing is added for the weeks ahead yet.
+  Appointments and milestones show here under their week."
+- `[OWNER]` review: a row's line under its title: "Appointment" or
+  "Milestone", "Appointment, added by Mira", "Added by you".
+- `[OWNER]` review: "Due date history", "Only you can see this list.",
+  "From Feb 15, 2027 to Feb 7, 2027" over the dating method, and "The due
+  date has not changed since it was set. If it changes, the earlier date
+  stays listed here."
+- `[OWNER]` review: the event form: "Edit the appointment" or "Edit the
+  milestone", the fields "Kind", "Date" and "Details" with "Optional, up to
+  500 characters.", "Save" and "Saving", the row's "Edit", "Delete this
+  appointment", its confirmation "Delete this appointment?" with "It is
+  gone for you and for everyone who can see your pregnancy. This cannot be
+  undone.", "Delete", "Deleting" and "Keep it", and the outcomes "Saved for
+  Nov 1." and "Deleted."
+- `[OWNER]` review: the event form's failures: "Enter the date as month, day
+  and year.", "That date does not exist. Check the day and the month.",
+  "Keep the details to 500 characters or fewer.", "Choose appointment or
+  milestone.", "This changed since you opened it. Close it and open it again
+  to see the latest.", "Updates to this pregnancy are paused, so this was not
+  saved." (a grantee's; never "ended"), "This is no longer here. Reload the
+  page to see the latest.", "Too many changes in a row. Wait a minute and try
+  again.", "We could not reach Tidefern. Check your connection and try
+  again.", "We could not save this. Try again." and "We could not delete
+  this. Try again."
+- `[OWNER]` review: the ending dialog: "The day it ended", "What happened"
+  with "Birth", "Loss" and "Other", "Only you can see this. Nobody you share
+  with ever does.", after a loss "The word you want Tidefern to use" with
+  "Pregnancy" and "Baby", "Mira will see it as paused, with no week or dates.
+  Tidefern does not notify anyone." (or only "Tidefern does not notify
+  anyone." when she shares it with nobody, and "Anyone you share it with will
+  see it as paused, with no week or dates. Tidefern does not notify anyone."
+  when the names could not be read), the lead-in to the resources
+  link ("Support after a pregnancy loss" or "Support after losing a baby"
+  after a loss, in her word, else "Support, if you want it"), and the
+  confirm "Record the ending".
+- `[OWNER]` review: the ending dialog's failures: "Enter the day it ended as
+  month, day and year.", "That day has not happened yet. Enter today or an
+  earlier day.", "That day is before this pregnancy began. Check the date.",
+  "Choose what happened.", "This pregnancy is already marked as ended.
+  Reload the page to see it.", "We could not find this pregnancy. Reload the
+  page to see the latest.", "Too many attempts in a row. Wait a minute and
+  try again.", and the offline and generic lines above.
+- `[OWNER]` review: once a period has been logged after an ending, "No
+  pregnancy in progress" with "Weeks, appointments and milestones show here
+  while a pregnancy is in progress." (no action).
+- `[OWNER]` review: the `none` stage's empty state, which asks no body
+  question: "Nothing shared with you yet" with "When someone shares their
+  pregnancy with you, it shows here week by week."
+- `[OWNER]` review: a shared pregnancy's heading "Lena's pregnancy" (or "A
+  pregnancy shared with you" without a name), "Nothing to show here right
+  now." and "We could not load this pregnancy just now. Reload the page to
+  try again."
+- `[OWNER]` review: the read failures: "We could not load your pregnancy
+  just now.", "We could not load the appointments and milestones just
+  now.", "We could not load the due date history just now." and "We could
+  not load your children just now.", each followed by "Reload the page to
+  try again."
 
 ### `/family` (H5)
 
