@@ -127,7 +127,7 @@ export function ChildCard({ card, today, units, warm, context = {} }: ChildCardP
       {access.canRead ? (
         <p className={styles.open}>
           <TextLink href={`/family/${child.id}`}>
-            {copy.open}
+            {copy.open}{" "}
             <span className="sr-only">{familyCopy.log.forChild(child.displayName)}</span>
           </TextLink>
         </p>

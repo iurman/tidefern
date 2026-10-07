@@ -51,7 +51,7 @@ export const familyCopy = {
     sleep: "Sleep",
     endSleep: "End sleep",
     diaper: "Diaper",
-    forChild: (name: string) => ` for ${name}`,
+    forChild: (name: string) => `for ${name}`,
     feedTitle: (name: string) => `Log a feed for ${name}`,
     sleepTitle: (name: string) => `Log a sleep for ${name}`,
     endSleepTitle: (name: string) => `End ${name}'s sleep`,

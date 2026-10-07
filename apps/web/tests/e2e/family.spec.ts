@@ -372,8 +372,17 @@ for (const persona of ["noor", "theo"] as const) {
     await expect(
       empty.getByText("Add a child to keep feeds, sleep, growth and milestones in one place."),
     ).toBeVisible();
-    await expect(empty.getByRole("button", { name: "Add a child" })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Add a child" })).toHaveCount(1);
+    // The one action, right under the empty state: the only "Add a child" on the page.
+    const action = page.getByRole("button", { name: "Add a child" });
+    await expect(action).toHaveCount(1);
+    await expect(action).toBeVisible();
+    const below = await action.evaluate(
+      (button, region) =>
+        region !== null &&
+        button.getBoundingClientRect().top >= region.getBoundingClientRect().bottom,
+      await empty.elementHandle(),
+    );
+    expect(below).toBe(true);
     const navigation = page.locator("nav[aria-label='Main']");
     await expect(navigation.getByRole("link", { name: "Family", exact: true })).toHaveCount(0);
     await expectNoOverflow(page, `/family as ${persona}`);
@@ -540,6 +549,9 @@ test("adding a child: the consent in full, the checks, a failure, then the child
   await expect(card.locator("header p")).toHaveText("10 days");
   await expect(card.getByText("Guardian: you")).toBeVisible();
   await expect(card.locator("[data-warmth]")).toHaveCount(1);
+  // The line outlives the page reading again: the control keeps its place in the tree.
+  await expect(page.getByText("Ada was added.")).toBeVisible();
+  await expect(page.getByRole("region", { name: "No child added yet" })).toHaveCount(0);
   const href = await card
     .getByRole("link", { name: "Timeline, growth and milestones for Ada" })
     .getAttribute("href");

@@ -44,8 +44,18 @@
   }
 }
 
-.empty {
-  grid-column: 1 / -1;
+/* No child yet: the empty state's one action sits right under it at every width. */
+.emptyPage {
+  grid-template-areas:
+    "heading"
+    "children"
+    "add";
+  grid-template-columns: minmax(0, 1fr);
+  row-gap: var(--space-6);
+}
+
+.emptyPage .add .addChild {
+  justify-items: start;
 }
 
 .children {

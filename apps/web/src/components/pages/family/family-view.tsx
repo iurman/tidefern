@@ -20,7 +20,10 @@ export interface FamilyViewProps {
  * 600 px (after the children on phones, as the sketch has it), then one card
  * per child, youngest first. One summary sits on warmth: the youngest
  * child's that has one, since a screen has one warmth surface (architecture
- * 13.6, move 5). No child: the CONTENT.md empty state with its one action.
+ * 13.6, move 5). No child: the CONTENT.md empty state, its one action the
+ * same "Add a child" right under it. That control keeps one place in the
+ * tree in both states, so the line it shows after adding the first child
+ * survives the page reading again.
  */
 export function FamilyView({ family, today, units }: FamilyViewProps) {
   if (family.kind === "failed") {
@@ -33,40 +36,33 @@ export function FamilyView({ family, today, units }: FamilyViewProps) {
       </section>
     );
   }
-  if (family.cards.length === 0) {
-    return (
-      <section className={styles.page} aria-labelledby="family-title">
-        <h1 id="family-title" className={styles.heading}>
-          {copy.heading}
-        </h1>
-        <EmptyState
-          className={styles.empty}
-          heading={copy.empty.heading}
-          why={copy.empty.why}
-          action={<AddChild today={today} variant="primary" />}
-        />
-      </section>
-    );
-  }
+  const empty = family.cards.length === 0;
   const warm = family.cards.findIndex((card) => card.day !== null && card.day !== "failed");
   return (
-    <section className={styles.page} aria-labelledby="family-title">
+    <section
+      className={empty ? `${styles.page} ${styles.emptyPage}` : styles.page}
+      aria-labelledby="family-title"
+    >
       <h1 id="family-title" className={styles.heading}>
         {copy.heading}
       </h1>
       <div className={styles.children}>
-        {family.cards.map((card, index) => (
-          <ChildCard
-            key={card.child.id}
-            card={card}
-            today={today}
-            units={units}
-            warm={index === warm}
-          />
-        ))}
+        {empty ? (
+          <EmptyState heading={copy.empty.heading} why={copy.empty.why} />
+        ) : (
+          family.cards.map((card, index) => (
+            <ChildCard
+              key={card.child.id}
+              card={card}
+              today={today}
+              units={units}
+              warm={index === warm}
+            />
+          ))
+        )}
       </div>
       <div className={styles.add}>
-        <AddChild today={today} />
+        <AddChild today={today} variant={empty ? "primary" : "secondary"} />
       </div>
     </section>
   );

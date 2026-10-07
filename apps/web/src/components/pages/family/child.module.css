@@ -168,13 +168,3 @@
   display: grid;
   gap: var(--space-2);
 }
-
-.emptyAction {
-  display: inline-flex;
-  align-items: center;
-  min-height: var(--size-control);
-  color: var(--accent);
-  font-weight: var(--weight-sans-strong);
-  text-decoration: underline;
-  text-underline-offset: 0.2em;
-}

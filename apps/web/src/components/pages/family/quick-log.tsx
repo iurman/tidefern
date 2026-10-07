@@ -286,7 +286,13 @@ export function QuickLog({
         : ongoingSleep !== null
           ? copy.endSleepTitle(childName)
           : copy.sleepTitle(childName);
-  const suffix = <span className="sr-only">{copy.forChild(childName)}</span>;
+  // The space sits outside the hidden words, so every accessible name reads "Feed for Ilo".
+  const suffix = (
+    <>
+      {" "}
+      <span className="sr-only">{copy.forChild(childName)}</span>
+    </>
+  );
   const failure =
     error === null ? null : (
       <InlineFeedback key={error.id} tone="error" cue>

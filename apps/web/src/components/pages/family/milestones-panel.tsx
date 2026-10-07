@@ -1,6 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
-import { useRef, useState } from "react";
+import { useId, useRef, useState } from "react";
+import { Button } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { EmptyState } from "@/components/ui/empty-state";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
@@ -12,9 +13,6 @@ import type { MilestoneCheck, MilestoneChecklist } from "./types";
 import styles from "./child.module.css";
 
 const copy = familyCopy.milestones;
-
-/** The checklist heading's id, which the empty state's action moves to (one list per page). */
-const CHECKLIST_ID = "milestone-checklist";
 
 const domains: readonly MilestoneCheck["domain"][] = [
   "social",
@@ -52,6 +50,8 @@ export interface MilestonesPanelProps {
  */
 export function MilestonesPanel({ childId, checklist, canWrite }: MilestonesPanelProps) {
   const router = useRouter();
+  const headingId = useId();
+  const list = useRef<HTMLElement>(null);
   const [items, setItems] = useState(checklist.items);
   // A re-read after any write (here, or a log on another device) brings the API's list again.
   const [seen, setSeen] = useState(checklist.items);
@@ -96,15 +96,21 @@ export function MilestonesPanel({ childId, checklist, canWrite }: MilestonesPane
           why={copy.empty.why}
           action={
             canWrite ? (
-              <a className={styles.emptyAction} href={`#${CHECKLIST_ID}`}>
+              // Moves focus to the first box rather than to an address, which stays as it is.
+              <Button
+                variant="secondary"
+                onClick={() =>
+                  list.current?.querySelector<HTMLInputElement>("input[type='checkbox']")?.focus()
+                }
+              >
                 {copy.empty.action}
-              </a>
+              </Button>
             ) : undefined
           }
         />
       ) : null}
-      <section className={styles.checklist} aria-labelledby={CHECKLIST_ID}>
-        <h3 id={CHECKLIST_ID} className={styles.checklistHeading} tabIndex={-1}>
+      <section ref={list} className={styles.checklist} aria-labelledby={headingId}>
+        <h3 id={headingId} className={styles.checklistHeading}>
           {copy.heading(checklist.label)}
         </h3>
         {/* The 13.10 template, once per list; when nothing is marked the empty state above
