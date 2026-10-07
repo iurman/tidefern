@@ -95,11 +95,6 @@ still closes the page.
   policies.
 - `[OWNER]` attorney review of both policies, the terms and the consent text
   (Phase 2 gate).
-- `[OWNER]` attorney review of the guardian's consent on a child's behalf,
-  the draft text the add-a-child form shows in full before its box
-  (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
-  `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
-  gate).
 - `[OWNER]` approval of the mark, which the home page and the brand chapter
   present.
 - `[OWNER]` the updated date each policy page shows (`/privacy`,
@@ -135,7 +130,11 @@ lines without touching another's.
 
 ### `/family` (H5)
 
-(none yet)
+- `[OWNER]` attorney review of the guardian's consent on a child's behalf,
+  the draft text the add-a-child form shows in full before its box
+  (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
+  `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
+  gate).
 
 ### `/sharing` (H6)
 
