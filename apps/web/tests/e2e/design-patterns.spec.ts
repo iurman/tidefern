@@ -268,7 +268,11 @@ function scales(element: Element) {
         };
       });
       const widths = labels.map((label) => label.width);
+      // Inside the form that holds it: one control that cannot shrink must not widen every row.
+      const form = group.closest("form")?.getBoundingClientRect();
       return {
+        inForm:
+          form === undefined || (box.left >= form.left - 0.5 && box.right <= form.right + 0.5),
         name: group.querySelector("legend")?.textContent ?? "",
         options: labels.length,
         rows: new Set(labels.map((label) => label.top)).size,
@@ -311,6 +315,7 @@ test("the scales keep the pill where it fits, equal columns on a phone and one v
     for (const group of [flow!, mood!]) {
       expect(group.cut, `${group.name} at ${width}`).toBe(false);
       expect(group.inside, `${group.name} at ${width}`).toBe(true);
+      expect(group.inForm, `${group.name} at ${width}`).toBe(true);
       expect(group.lowest, `${group.name} at ${width}`).toBeGreaterThanOrEqual(44);
     }
     return { flow: flow!, mood: mood! };
@@ -359,6 +364,7 @@ for (const width of [1440, 390, 320]) {
       if (group.rows > 1) expect(group.radius, `${group.name} at ${width}`).toBe("10px");
       expect(group.cut, `${group.name} at ${width}`).toBe(false);
       expect(group.inside, `${group.name} at ${width}`).toBe(true);
+      expect(group.inForm, `${group.name} at ${width}`).toBe(true);
     }
   });
 }

@@ -1,5 +1,7 @@
 .form {
   display: grid;
+  /* One column the form's own width: a control that cannot shrink stays in its row instead of widening every row, the scales with it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   min-width: 0;
 }
