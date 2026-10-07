@@ -1,0 +1,186 @@
+.field {
+  --checkbox-size: 24px;
+  position: relative;
+  display: grid;
+  gap: var(--space-1);
+  width: 100%;
+  max-width: var(--size-reading);
+}
+
+/* The box, the label and the saving note on one line, 44 px tall at least so the target is too. */
+.row {
+  display: grid;
+  grid-template-columns: var(--checkbox-size) minmax(0, 1fr) auto;
+  align-items: start;
+  column-gap: var(--space-3);
+  min-height: var(--size-control);
+  padding-block: calc((var(--size-control) - var(--checkbox-size)) / 2);
+}
+
+/* The native checkbox covers the whole field (box, label, help and error), transparent, so clicks,
+   taps and hover land on the input itself without hiding the control, and the global focus ring
+   draws around the field with no text inside it to cross. The specimen frame draws its forced
+   focus ring on the field the same way, so no twin is needed here. */
+.input {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+
+.box {
+  grid-column: 1;
+  grid-row: 1;
+  display: grid;
+  place-items: center;
+  width: var(--checkbox-size);
+  height: var(--checkbox-size);
+  border: 2px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--action-text);
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    border-color var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface),
+    filter var(--duration-feedback) var(--ease-interface);
+}
+
+.check {
+  width: 18px;
+  height: 18px;
+  opacity: 0;
+  transform: scale(0.6);
+  transition:
+    opacity var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.input:checked + .box {
+  border-color: var(--action);
+  background: var(--action);
+}
+
+.input:checked + .box .check {
+  opacity: 1;
+  transform: none;
+}
+
+.input:hover + .box,
+[data-specimen-state="hover"] > .field .box {
+  border-color: var(--accent);
+}
+
+.input:checked:hover + .box,
+[data-specimen-state="hover"] > .field .input:checked + .box {
+  border-color: var(--action);
+  filter: brightness(1.08);
+}
+
+.input:active + .box,
+[data-specimen-state="active"] > .field .box {
+  transform: scale(0.92);
+}
+
+.label {
+  grid-column: 2;
+  grid-row: 1;
+  line-height: 1.4;
+}
+
+/* A link in the label or the help (the terms beside an agreement) sits above the input, so it is
+   followed, not ticked. */
+.label a,
+.help a {
+  position: relative;
+  z-index: 2;
+}
+
+.required {
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.status {
+  grid-column: 3;
+  grid-row: 1;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.6;
+  color: var(--muted);
+}
+
+.help,
+.error {
+  margin: calc(-1 * var(--space-2)) 0 0;
+  padding-inline-start: calc(var(--checkbox-size) + var(--space-3));
+  font-size: var(--type-small);
+  line-height: 1.5;
+}
+
+.help {
+  color: var(--muted);
+}
+
+.error {
+  color: var(--danger);
+  font-weight: var(--weight-sans-strong);
+}
+
+.field[data-invalid="true"] .input:not(:checked) + .box {
+  border-color: var(--danger);
+}
+
+.input[aria-busy="true"] {
+  cursor: progress;
+}
+
+.input:disabled {
+  cursor: not-allowed;
+}
+
+.input:disabled + .box {
+  border-color: var(--soft-border);
+  background: var(--panel);
+}
+
+.input:disabled:checked + .box {
+  border-color: var(--soft-border);
+  background: var(--soft-border);
+  color: var(--muted);
+}
+
+.field[data-disabled="true"] .label,
+.field[data-disabled="true"] .help {
+  color: var(--muted);
+}
+
+@media (forced-colors: active) {
+  .box {
+    border-color: CanvasText;
+  }
+
+  .input:checked + .box {
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+
+  .input:disabled + .box {
+    border-color: GrayText;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .box,
+  .check {
+    transition-duration: 0ms;
+  }
+}

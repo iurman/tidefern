@@ -1,4 +1,5 @@
 import type { ComponentState, SpecimenGroup } from "../specimen";
+import { CheckboxField } from "../checkbox-field";
 import { ChipGroup, symptomOptions } from "../chip-group";
 import { FlowScale } from "../flow-scale";
 import { FormField } from "../form-field";
@@ -273,6 +274,30 @@ export const specimens: SpecimenGroup = {
           label="Mood"
           defaultValue="steady"
           error={state === "error" ? "Choose one value for this day." : undefined}
+          {...common(state)}
+        />
+      ),
+    },
+    {
+      name: "Checkbox field",
+      source: "apps/web/src/components/ui/checkbox-field.tsx",
+      usage: `<CheckboxField
+  label="Rolls from tummy to back"
+  help="Most children do this by 6 months."
+  checked={marked}
+  loading={saving}
+  onChange={mark}
+/>`,
+      keyboard:
+        "Tab reaches the box; Space ticks and unticks it. A click or tap anywhere on the field does the same; a link in the label or the help is followed instead.",
+      /* Every state has a meaning: empty is nothing ticked yet, loading a checklist item saving. */
+      render: (state) => (
+        <CheckboxField
+          label="Rolls from tummy to back"
+          help="Most children do this by 6 months."
+          defaultChecked={state !== "empty" && state !== "error"}
+          loading={state === "loading"}
+          error={state === "error" ? "We could not save this. Try again." : undefined}
           {...common(state)}
         />
       ),
