@@ -3,6 +3,9 @@
 Every dataset under `packages/core/data` is listed here with its origin, the
 date it was captured, its licence terms and the attribution the product must
 show. The growth chart tables come first; the milestone checklists follow.
+The infant context ranges close the file: they are a few published figures
+encoded in `src/infant-context.ts`, so no file is vendored for them, and the
+sentences they rely on are quoted here.
 
 ## Growth chart data
 
@@ -277,3 +280,218 @@ pages may be contractor owned and were not captured.
 Attribution shown with the data: "Source: CDC. Reference to CDC materials does
 not imply endorsement by CDC, HHS or the U.S. Government." Shown next to it at
 all times: "This is not a screening tool; your pediatrician is."
+
+## Infant context ranges (`src/infant-context.ts`)
+
+Architecture 8.4: "Feeding, diaper and sleep counts are shown against the
+published AAP and AASM ranges as context, never as alarms, and no sleep
+target is shown before four months." The ranges are encoded as data in
+`packages/core/src/infant-context.ts`, each with the ids of the sources
+below, and `infantContext(kind, dateOfBirth, today)` returns the range for a
+child's age with its band and source ids, never a judgment. This section
+quotes the sentence each range relies on, copied from the source and checked
+against it on 2026-10-06. `src/infant-context.test.ts` reads this section:
+it fails when a quote is missing, or when a range's figures, its "at least"
+or its "including naps" stop matching the quote. The proposed family screen
+lines wait for the owner in `docs/design/CONTENT.md`, and the claim is
+registered in `docs/CLAIMS.md`.
+
+### Attribution and terms
+
+Feeding and wet diaper figures: American Academy of Pediatrics,
+HealthyChildren.org. Sleep figures: American Academy of Sleep Medicine,
+Paruthi S, et al., J Clin Sleep Med 2016;12(6):785-786. Tidefern is not
+affiliated with either organization, neither has reviewed Tidefern, and
+naming them implies no endorsement. The product names the publisher beside a
+range and links to the page; it never shows their logos and never
+reproduces their pages.
+
+Both publishers keep their text under copyright, and neither grants the open
+reuse CDC does. AAP's terms of use (https://www.aap.org/en/pages/terms-of-use/,
+last updated 09/24/2026, read 2026-10-06) say:
+
+> You will not copy, or distribute the Websites or other content without
+> written permission from the AAP;
+
+> Use or enable any of the Content from the Websites in conjunction with any
+> artificial intelligence tool without the express written permission of the
+> AAP.
+
+and allow links:
+
+> The AAP grants you a limited, revocable, and nonexclusive right to create a
+> hyperlink to the webpages of the Websites, so long as the links do not
+> portray AAP or its products or services in a false or misleading manner.
+
+AASM's website terms (https://go.aasm.org/terms.html, effective 2/6/2026,
+read 2026-10-06) say:
+
+> AASM content and related intellectual property ("AASM IP") may not be
+> entered into or used in any form in connection with generative artificial
+> intelligence ("AI") tools.
+
+Both sets of terms also forbid automated access, and the pages below were
+read for this task by an AI agent with automated tools (curl, a headless
+browser and a fetch tool). The figures are facts and each quote here is one
+sentence kept so the figure can be checked, but whether Tidefern may keep
+the quotes, should ask both publishers for written permission, or should
+cite CDC instead is an open question for the owner's attorney in
+`docs/CLAIMS.md`. Nothing in the build or the product fetches these pages.
+
+### Sources
+
+| Id                           | Publisher and title                                                                                                                                                                                                    | URL                                                                                                                                  | Date on the source       | Read       |
+| ---------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------ | ------------------------ | ---------- |
+| `aap-breastfed-enough-milk`  | American Academy of Pediatrics, Section on Breastfeeding; Joan Younger Meek, "How to Tell if Your Breastfed Baby is Getting Enough Milk", HealthyChildren.org                                                          | https://www.healthychildren.org/English/ages-stages/baby/breastfeeding/Pages/How-to-Tell-if-Baby-is-Getting-Enough-Milk.aspx         | Last updated 1/13/2025   | 2026-10-06 |
+| `aap-how-often-and-how-much` | American Academy of Pediatrics; Sanjeev Jain and Maya Bunik, "How Often and How Much Should Your Baby Eat?", HealthyChildren.org                                                                                       | https://www.healthychildren.org/English/ages-stages/baby/feeding-nutrition/Pages/How-Often-and-How-Much-Should-Your-Baby-Eat.aspx    | Last updated 4/2/2024    | 2026-10-06 |
+| `aasm-2016-statement`        | American Academy of Sleep Medicine; Paruthi S, et al., "Recommended Amount of Sleep for Pediatric Populations: A Consensus Statement of the American Academy of Sleep Medicine", J Clin Sleep Med 2016;12(6):785-786 | https://aasm.org/resources/pdf/pediatricsleepdurationconsensus.pdf (DOI 10.5664/jcsm.5866; also https://pmc.ncbi.nlm.nih.gov/articles/PMC4877308/) | Published 15 June 2016   | 2026-10-06 |
+| `aasm-2016-methodology`      | American Academy of Sleep Medicine; Paruthi S, et al., "Consensus Statement of the American Academy of Sleep Medicine on the Recommended Amount of Sleep for Healthy Children: Methodology and Discussion", J Clin Sleep Med 2016;12(11):1549-1561 | https://www.aasm.org/resources/pdf/pediatricsleepdurationmethods.pdf (DOI 10.5664/jcsm.6288)                                         | Published 15 November 2016 | 2026-10-06 |
+
+The DOIs resolve to the journal's current publisher, Springer, whose pages
+show the citation and the dates above but put the full text behind a
+subscription. AASM's own copies of the two papers are the free full text:
+`pediatricsleepdurationconsensus.pdf` is 226556 bytes with SHA-256
+`2ed4737a4e30bfa42edc1a7b0867f456aec734e5e6146819abf9b98152013585`, and
+`pediatricsleepdurationmethods.pdf` is 2242364 bytes with SHA-256
+`779eb5c764cf3178de545e39f2e03e849a978a6f8474eade86689b0901a3fcfe`. PMC's
+copy of the statement carries the same sentences, and AASM's position page
+"Child Sleep Duration Health Advisory" (updated by the AASM Board of
+Directors April 3, 2016) repeats the figures through 12 years. The
+statement says it was endorsed by the American Academy of Pediatrics.
+
+### Ranges
+
+| Range id                      | Kind      | Age band (label)                    | From             | Until            | Figure per 24 hours            | Sources                                              |
+| ----------------------------- | --------- | ----------------------------------- | ---------------- | ---------------- | ------------------------------ | ---------------------------------------------------- |
+| `feed-newborn`                | feed      | Newborns                            | birth            | 1 month          | at least 8 to 12 feeds         | `aap-breastfed-enough-milk`, `aap-how-often-and-how-much` |
+| `wet-diaper-first-days`       | wetDiaper | In the first few days after birth   | birth            | day 5            | 2 to 3 wet diapers             | `aap-how-often-and-how-much`                         |
+| `wet-diaper-after-first-days` | wetDiaper | After the first 4 to 5 days         | day 5            | 1 month          | at least 5 to 6 wet diapers    | `aap-how-often-and-how-much`                         |
+| `sleep-4-to-12-months`        | sleep     | 4 to 12 months                      | 4 months         | 12 months        | 12 to 16 hours, naps included  | `aasm-2016-statement`, `aasm-2016-methodology`       |
+| `sleep-1-to-2-years`          | sleep     | 1 to 2 years                        | 1 year           | 3 years          | 11 to 14 hours, naps included  | `aasm-2016-statement`, `aasm-2016-methodology`       |
+| `sleep-3-to-5-years`          | sleep     | 3 to 5 years                        | 3 years          | 6 years          | 10 to 13 hours, naps included  | `aasm-2016-statement`, `aasm-2016-methodology`       |
+| `sleep-6-to-12-years`         | sleep     | 6 to 12 years                       | 6 years          | 13 years         | 9 to 12 hours                  | `aasm-2016-statement`, `aasm-2016-methodology`       |
+| `sleep-13-to-18-years`        | sleep     | 13 to 18 years                      | 13 years         | 19 years         | 8 to 10 hours                  | `aasm-2016-statement`, `aasm-2016-methodology`       |
+
+"From" is the first day of the band and "Until" the first day after it. Day
+0 is the date of birth. Months and years are completed calendar months, the
+rule of the age label (`formatChildAge` in apps/web): a band that starts at
+4 months starts on the day the label first says "4 months", and a year band
+starts on a birthday. Outside every band of its kind the function returns
+nothing: no sleep range before 4 months, no feed or wet diaper range after
+the first month.
+
+### The sentences each range relies on
+
+`aap-breastfed-enough-milk`, under "A well-nourished newborn should:", the
+figure for `feed-newborn`:
+
+> Nurse at least 8 to 12 times every 24 hours.
+
+`aap-how-often-and-how-much`, the same newborn figure for bottle-fed and
+breastfed babies, the end of the newborn band, and both wet diaper bands:
+
+> If bottle-fed, most newborns eat every 2 to 3 hours; 8 times is generally
+> recommended as the minimum every 24 hours.
+
+> Breastfed newborns usually nurse every 2 hours from the start of the
+> feeding to the next feeding so 10-12 sessions in 24 hours is the norm.
+
+> By the end of the first month, most babies consume at least 3 or 4 ounces
+> per feeding, about every 3 to 4 hours.
+
+> A newborn's diaper is a good indicator of whether they are getting enough
+> to eat.
+
+> In the first few days after birth, a baby should have 2 to 3 wet diapers
+> each day.
+
+> After the first 4 to 5 days, a baby should have at least 5 to 6 wet
+> diapers a day.
+
+`aasm-2016-statement`, the five recommendations and the footnote on infants
+(the asterisk is the statement's own):
+
+> Infants\* 4 months to 12 months should sleep 12 to 16 hours per 24 hours
+> (including naps) on a regular basis to promote optimal health.
+
+> Children 1 to 2 years of age should sleep 11 to 14 hours per 24 hours
+> (including naps) on a regular basis to promote optimal health.
+
+> Children 3 to 5 years of age should sleep 10 to 13 hours per 24 hours
+> (including naps) on a regular basis to promote optimal health.
+
+> Children 6 to 12 years of age should sleep 9 to 12 hours per 24 hours on a
+> regular basis to promote optimal health.
+
+> Teenagers 13 to 18 years of age should sleep 8 to 10 hours per 24 hours on
+> a regular basis to promote optimal health.
+
+> \*Recommendations for infants younger than 4 months are not included due to
+> the wide range of normal variation in duration and patterns of sleep, and
+> insufficient evidence for associations with health outcomes.
+
+`aasm-2016-methodology`, section 2.3, which defines the age groups behind
+the statement's labels (the source writes the last group, 13 to 18 years,
+with a range dash, so the quote stops before it):
+
+> After a preliminary review of the literature, prior Centers for Disease
+> Control and Prevention (CDC), AASM, and National Sleep Foundation (NSF)
+> recommendations, as well as commonly frequented websites, the following
+> age groups were created: < 12 months, 12 months to < 3 years, 3 years to
+> < 6 years, 6 years to < 13 years, and
+
+and, after the voting rounds:
+
+> Thus, no recommendations were made for children under 4 months of age for
+> any of the categories.
+
+### How the edges were chosen
+
+- Sleep. The statement's labels overlap at 12 months ("4 months to 12
+  months", then "1 to 2 years"); the methodology's groups do not, so the
+  bands follow them: a child moves to the next band on the birthday that
+  starts it, and "13 to 18 years" runs to the 19th birthday. The figures
+  before 6 years count naps; the statement says nothing of naps after that.
+- Newborn feeds. The breastfeeding page says to nurse at least 8 to 12
+  times every 24 hours; the "How Often" page says bottle-fed newborns eat
+  every 2 to 3 hours with at least 8 feeds, and breastfed newborns 10 to 12
+  times. Each of those falls within "at least 8 to 12", so one range covers
+  either way of feeding. The band ends at 1 month because the "How Often"
+  page and AAP's formula page change the pattern "by the end of the first
+  month". After that no AAP count applies to every baby: the formula page
+  ("Amount and Schedule of Baby Formula Feedings",
+  https://www.healthychildren.org/English/ages-stages/baby/formula-feeding/Pages/amount-and-schedule-of-formula-feedings.aspx,
+  last updated 5/16/2022, read 2026-10-06) gives formula-fed babies
+  feedings about every 3 to 4 hours at one month and 4 or 5 feedings in 24
+  hours at 6 months, and says breastfed babies take smaller, more frequent
+  feedings. A bottle may hold breast milk, so the product cannot tell which
+  figure would apply, and no feed range is offered after the first month.
+  Solids are not part of these figures.
+- Wet diapers. "After the first 4 to 5 days" leaves day 4 on either side;
+  the higher figure starts at day 5, the later edge, so it never shows
+  early. The page presents diapers as a newborn sign, so the second band
+  ends with the newborn band at 1 month. A diaper logged as mixed is wet.
+
+### Read and left out
+
+- `aap-breastfed-enough-milk` also lists "6 or more wet diapers per day ...
+  by 5 to 7 days old", close to but not the same as the "How Often" page's
+  "at least 5 to 6" after 4 to 5 days; the encoded bands follow the "How
+  Often" page because it gives both the first days and the days after.
+- The "How Often" page gives stools too ("at least 4 stools a day" by the
+  fourth day) but says stool frequency varies more and depends on whether
+  the baby is breastfed or formula-fed, and the breastfeeding page gives
+  other day by day figures, so no dirty diaper range is encoded: the diaper
+  ranges count wet diapers only.
+- CDC's public domain pages, read 2026-10-06 in a browser, state the newborn
+  feed count ("Your baby will breastfeed about 8 to 12 times in 24 hours.",
+  https://www.cdc.gov/infant-toddler-nutrition/breastfeeding/how-much-and-how-often.html)
+  and the AASM sleep figures from 4 months to 12 years
+  (https://www.cdc.gov/sleep/about/index.html, which says 8 to 10 hours for
+  13 to 17 years and adds a 0 to 3 month row from another source that
+  Tidefern must not use, since no sleep target is shown before 4 months),
+  but give a different day by day table of minimum
+  wet diapers (https://www.cdc.gov/infant-toddler-nutrition/breastfeeding/newborn-basics.html:
+  1 on day 1, 2 on day 2, 5 on day 3, 6 on day 4, 6 on days 5 to 7). They
+  are the fallback if the attorney advises against the AAP and AASM quotes,
+  with the diaper bands redone from CDC's table.
