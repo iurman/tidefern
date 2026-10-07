@@ -60,12 +60,17 @@
   }
 }
 
+/* Top aligned, so opening "How this is estimated" grows the column without moving the ring. */
 @container today (min-width: 600px) {
   .hero[data-ring] {
     grid-template-columns: 260px minmax(0, 1fr);
     grid-template-areas: "ring facts";
     column-gap: var(--space-12);
-    align-items: center;
+    align-items: start;
+  }
+
+  .hero[data-ring] .ringCell {
+    padding-top: var(--space-6);
   }
 }
 
