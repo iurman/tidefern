@@ -88,8 +88,17 @@ describe("the month the page shows", () => {
   it("reads ?month=YYYY-MM as that month's first day and falls back to today's month", () => {
     expect(monthFromParam("2026-09", today)).toBe("2026-09-01");
     expect(monthFromParam(["2025-12", "2026-01"], today)).toBe("2025-12-01");
+    expect(monthFromParam("1900-01", today)).toBe("1900-01-01");
+    expect(monthFromParam("2999-12", today)).toBe("2999-12-01");
     for (const bad of [undefined, "", "2026-13", "2026-9", "2026-09-01", "September", "0000-00"]) {
       expect(monthFromParam(bad, today), String(bad)).toBe("2026-10-01");
+    }
+  });
+
+  it("refuses a year the date helpers would misread", () => {
+    // Date.UTC reads a year under 100 as 19xx, so 0001-01 would ask the API for 1901.
+    for (const far of ["0001-01", "0099-12", "1899-12", "3000-01"]) {
+      expect(monthFromParam(far, today), far).toBe("2026-10-01");
     }
   });
 

@@ -52,13 +52,30 @@ export interface CalendarDay {
 
 const MONTH_PARAM = /^(\d{4})-(\d{2})$/;
 
+/**
+ * The years a month address may name. Wider than any calendar a person
+ * keeps, and narrow enough that every date in it is a four-digit year the
+ * date helpers read as written (a two-digit `Date.UTC` year is read as 19xx).
+ */
+const FIRST_YEAR = 1900;
+const LAST_YEAR = 2999;
+
 /** The first day of the month `?month=YYYY-MM` names, or of today's month when it names none. */
 export function monthFromParam(
   value: string | string[] | undefined,
   today: CalendarDate,
 ): CalendarDate {
   const raw = Array.isArray(value) ? value[0] : value;
-  if (raw !== undefined && MONTH_PARAM.test(raw) && isCalendarDate(`${raw}-01`)) return `${raw}-01`;
+  const year = Number(raw?.slice(0, 4));
+  if (
+    raw !== undefined &&
+    MONTH_PARAM.test(raw) &&
+    year >= FIRST_YEAR &&
+    year <= LAST_YEAR &&
+    isCalendarDate(`${raw}-01`)
+  ) {
+    return `${raw}-01`;
+  }
   return firstOfMonth(today);
 }
 
