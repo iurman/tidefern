@@ -1414,3 +1414,46 @@ I3, G9 and G10 and marks A3 blocked with what exists in Neon.
 
 Merge E10, C7 and F6, then review Phase B's captures and merge H1 to H8
 and G9b through the queue.
+
+### Phase A merged (2026-10-07, lead session dfc54107)
+
+The merge queue finished Phase A: E10 (`840b1fe`, its migration
+regenerated as 0013, production smoke 37580686504), C7 (`79916df`,
+production smoke 37583221330) and F6 (`309f5ba`, production smoke
+37586092231), after G10, G9, E11, E12 and I3. Plan pull request #79
+merged as `cdc1871`.
+
+E10 found more than its brief named. Besides moving closure and consent
+withdrawal onto the app role with one narrow definer function, it showed
+that the B8 and B14 definer helpers searched the session's temporary
+schema first (`SET search_path = pg_catalog, public` leaves `pg_temp`
+implicit and first), so the app role, which may create temporary tables,
+could shadow a table a helper reads: `is_guardian()` answering true for a
+stranger, for example. Migration 0013 puts `pg_temp` last on every
+function and a test proves the shadowing no longer works; architecture
+7.2 now says so.
+
+Phase B is building: H1 to H8 and G9b. H6 met the contract gate on
+purpose: narrowing `descriptionVersion` on `PUT
+/api/v1/sharing/grants/{personId}` to the catalog's keys is an
+error-level change to oasdiff. Only the web app calls that route, deployed
+from the same commit, so the lead approves it under architecture 5.1; its
+line goes into `openapi/BREAKING.md` with H6's merge.
+
+Follow-ups recorded from the Phase A reports: an ESLint rule that forbids
+`withSystem` in API route code, so the D3 and E10 class of defect cannot
+return; the test task in `turbo.json` has no inputs from workspace
+dependencies, so a local `pnpm check` can replay API and auth tests from
+cache after a database change (CI restores no cache and is unaffected);
+the job runner's `describeError()` drops the SQLSTATE of a Drizzle
+failure; the children and measurements lists answer 500 to a forged
+cursor; `pnpm jobs:run` cannot configure reminders and closure without
+`packages/api` depending on `@tidefern/auth` at runtime; and the
+WeekStrip draws today's warmth box clipped when a period pill continues
+from before the strip.
+
+### Next action
+
+Review Phase B's captures and merge H1 to H8 and G9b through the queue,
+then the lead's follow-ups, then J1 to J4.
+
