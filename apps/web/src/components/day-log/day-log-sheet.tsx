@@ -120,9 +120,11 @@ export function DayLogInline({ stage, today, date = today, initial }: DayLogInli
       <div className={styles.failure}>
         {/* A read that failed is background data: the text, no cue (DESIGN.md 7). */}
         <InlineFeedback tone="error">{log.loadError}</InlineFeedback>
-        <Button variant="secondary" onClick={log.retryLoad}>
-          Try again
-        </Button>
+        {log.retryLoad ? (
+          <Button variant="secondary" onClick={log.retryLoad}>
+            Try again
+          </Button>
+        ) : null}
       </div>
     );
   }

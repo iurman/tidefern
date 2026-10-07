@@ -97,11 +97,64 @@
   justify-self: start;
 }
 
+/*
+ * The flow scale (DESIGN.md 3.4): the shared segmented pill wherever its five
+ * values fit on one row at full size; narrower, as on most phones, the
+ * segments tighten and share one row; narrower still (a 320 px phone) they
+ * part into chips that wrap, as the phone sketch draws them, so the pill
+ * never folds into two uneven rows. The selectors reach into
+ * SegmentedControl's markup: a fieldset whose div holds one span per value,
+ * each a radio and its label.
+ */
+.flowScale {
+  container: flow-scale / inline-size;
+  min-width: 0;
+}
+
+@container flow-scale (width < 26rem) {
+  .flowScale fieldset > div {
+    justify-self: stretch;
+  }
+
+  .flowScale fieldset > div > span {
+    flex: 1 1 auto;
+  }
+
+  .flowScale label {
+    padding-inline: var(--space-1);
+  }
+}
+
+/* Below this the tight row would push a segment under 44 px wide. */
+@container flow-scale (width < 18.5rem) {
+  .flowScale fieldset > div {
+    gap: var(--space-2);
+    border: 0;
+    background: transparent;
+  }
+
+  .flowScale fieldset > div > span {
+    flex: 0 1 auto;
+  }
+
+  /* Drawn like the symptom chips beneath them. */
+  .flowScale label {
+    padding-inline: var(--space-4);
+    border-color: var(--border);
+    background: var(--surface);
+  }
+}
+
 .share {
   display: grid;
   gap: var(--space-2);
   justify-items: start;
   margin-top: calc(var(--space-4) * -1);
+}
+
+/* A share that did not go through; focus lands here when the step it answered closed. */
+.shareError {
+  min-width: 0;
 }
 
 .shareHelp {

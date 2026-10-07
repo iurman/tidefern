@@ -449,9 +449,29 @@ export const specimenGroups: readonly CatalogGroup[] = [
         description: "The saved line beside Save, with Undo for ten seconds.",
       },
       {
+        name: "Day sheet, undo in flight",
+        source: `${ui}day-sheet.tsx`,
+        description: "Undo reads Undoing and keeps focus until the compensating writes answer.",
+      },
+      {
+        name: "Day sheet, undo failed",
+        source: `${ui}day-sheet.tsx`,
+        description: "An undo that could not put every part back, said beside Save.",
+      },
+      {
         name: "Day sheet, a part failed",
         source: `${ui}day-sheet.tsx`,
         description: "Each failure under the part that failed, each with its own Try again.",
+      },
+      {
+        name: "Day sheet, session ended",
+        source: `${ui}day-sheet.tsx`,
+        description: "An ended session said once under the day's fields, with no Try again.",
+      },
+      {
+        name: "Day sheet, session ended on load",
+        source: `${ui}day-sheet.tsx`,
+        description: "A day that could not be read because the session ended, with no Try again.",
       },
       {
         name: "Day sheet, shared note",
@@ -459,14 +479,52 @@ export const specimenGroups: readonly CatalogGroup[] = [
         description: "A note already shared, read-only and labelled by who can read it.",
       },
       {
+        name: "Day sheet, deleting a note",
+        source: `${ui}day-sheet.tsx`,
+        description:
+          "The confirm step that says a deleted note is gone for everyone who could read it.",
+      },
+      {
+        name: "Day sheet, delete in flight",
+        source: `${ui}day-sheet.tsx`,
+        description: "Delete note reads Deleting at the same width until the answer.",
+      },
+      {
+        name: "Day sheet, delete failed",
+        source: `${ui}day-sheet.tsx`,
+        description: "The failure under the note it is about, with the confirm step still open.",
+      },
+      {
+        name: "Day sheet, note edited",
+        source: `${ui}day-sheet.tsx`,
+        description: "A note changed and not saved yet: the share action is off and says why.",
+      },
+      {
         name: "Day sheet, sharing a note",
         source: `${ui}day-sheet.tsx`,
         description: "The confirm step that says where the note goes and that sharing is one way.",
       },
       {
+        name: "Day sheet, share in flight",
+        source: `${ui}day-sheet.tsx`,
+        description: "Share note reads Sharing at the same width until the answer.",
+      },
+      {
+        name: "Day sheet, share failed",
+        source: `${ui}day-sheet.tsx`,
+        description: "The failure inside the confirm step; Share note tries the same share again.",
+      },
+      {
+        name: "Day sheet, note changed elsewhere",
+        source: `${ui}day-sheet.tsx`,
+        description:
+          "A share that met a newer note: the field shows the current text and the step closes.",
+      },
+      {
         name: "Day sheet, pregnancy",
         source: `${ui}day-sheet.tsx`,
-        description: "No Period switch and no flow scale: symptoms, mood and the note.",
+        description:
+          "No Period switch and no flow scale, with a note someone she shares with added.",
       },
       {
         name: "Day sheet, as a page",

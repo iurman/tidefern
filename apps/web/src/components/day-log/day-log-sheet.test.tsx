@@ -49,21 +49,26 @@ interface Call {
   path: string;
   query: string;
   ifMatch: string | null;
+  key: string | null;
   body: unknown;
 }
 
 let calls: Call[] = [];
-let routes: Map<string, Array<() => Response>>;
+let routes: Map<string, Array<() => Response | Promise<Response>>>;
 
-function route(key: string, ...answers: Array<() => Response>) {
+function route(key: string, ...answers: Array<() => Response | Promise<Response>>) {
   routes.set(key, [...(routes.get(key) ?? []), ...answers]);
 }
 
 const json =
-  (body: unknown, status = 200) =>
+  (body: unknown, status = 200, headers: Record<string, string> = {}) =>
   () =>
-    Response.json(body, { status });
+    Response.json(body, { status, headers });
 const empty = (status: number) => () => new Response(null, { status });
+/** A request that never gets an answer, as when the connection drops. */
+const dropped = () => {
+  throw new TypeError("Failed to fetch");
+};
 
 beforeAll(() => {
   // jsdom draws <dialog> but does not open it as a modal; the sheet only needs the attribute.
@@ -88,6 +93,7 @@ beforeEach(() => {
       path: url.pathname,
       query: url.search,
       ifMatch: request.headers.get("if-match"),
+      key: request.headers.get("idempotency-key"),
       body: text === "" ? undefined : JSON.parse(text),
     });
     const next = routes.get(`${request.method} ${url.pathname}`)?.shift();
@@ -238,6 +244,183 @@ describe("DayLogSheet", () => {
     expect(calls.find((call) => call.path.endsWith("/share"))?.body).toEqual({
       category: "pregnancy.overview",
     });
+  });
+
+  it("shows the note as it is now after a share conflict, and shares only after a fresh confirm", async () => {
+    const user = userEvent.setup();
+    loadsTheDay([entry()], [note({ body: "Text A" })]);
+    route(`POST /api/v1/notes/${noteId}/share`, json({ code: "conflict" }, 409));
+    route(`GET /api/v1/notes/${noteId}`, json(note({ body: "Text B from laptop", version: 2 })));
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: "Share this note with..." }));
+    await user.click(screen.getByRole("button", { name: "Share note" }));
+    const conflict = await screen.findByText(
+      "This note changed somewhere else. Check it, then share it again.",
+    );
+    // The field shows the text a share would now send, and the step about the old text is gone.
+    expect(screen.getByRole("textbox", { name: "Private note" })).toHaveValue("Text B from laptop");
+    expect(screen.queryByRole("group", { name: "Share this note?" })).not.toBeInTheDocument();
+    expect(conflict.closest("[tabindex]")).toHaveFocus();
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+    expect(calls.filter((call) => call.path.endsWith("/share"))).toHaveLength(1);
+    expect(refresh).not.toHaveBeenCalled();
+
+    route(
+      `POST /api/v1/notes/${noteId}/share`,
+      json(note({ body: "Text B from laptop", category: "cycle.symptoms", version: 3 })),
+    );
+    await user.click(screen.getByRole("button", { name: "Share this note with..." }));
+    const confirm = screen.getByRole("group", { name: "Share this note?" });
+    // The line about the last attempt stays behind when she opens the step again.
+    expect(
+      within(confirm).queryByText(
+        "This note changed somewhere else. Check it, then share it again.",
+      ),
+    ).not.toBeInTheDocument();
+    await user.click(within(confirm).getByRole("button", { name: "Share note" }));
+    expect(await screen.findByText("Note shared.")).toBeVisible();
+    const shares = calls.filter((call) => call.path.endsWith("/share"));
+    expect(shares.map((call) => call.ifMatch)).toEqual(["1", "2"]);
+    expect(shares[1]?.key).not.toBe(shares[0]?.key);
+  });
+
+  it("retries a share whose answer was lost with the same key, so the stored answer completes it", async () => {
+    const user = userEvent.setup();
+    loadsTheDay([entry()], [note({ body: "Text A" })]);
+    route(
+      `POST /api/v1/notes/${noteId}/share`,
+      dropped,
+      json({ id: noteId }, 200, { "Idempotency-Replayed": "true" }),
+    );
+    route(
+      `GET /api/v1/notes/${noteId}`,
+      json(note({ body: "Text A", category: "cycle.symptoms", version: 2 })),
+    );
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: "Share this note with..." }));
+    await user.click(screen.getByRole("button", { name: "Share note" }));
+    const confirm = screen.getByRole("group", { name: "Share this note?" });
+    expect(
+      await within(confirm).findByText("We could not share this note. Try again."),
+    ).toBeVisible();
+    await user.click(within(confirm).getByRole("button", { name: "Share note" }));
+    expect(await screen.findByText("Note shared.")).toBeVisible();
+    const shares = calls.filter((call) => call.path.endsWith("/share"));
+    expect(shares).toHaveLength(2);
+    expect(shares[0]?.key).toEqual(expect.any(String));
+    expect(shares[1]?.key).toBe(shares[0]?.key);
+    const shared = screen.getByRole("list", { name: "Notes on this day" });
+    expect(within(shared).getByText("Text A")).toBeVisible();
+    // Nothing of the shared note stays behind as an unsaved private copy.
+    expect(screen.getByRole("textbox", { name: "Private note" })).toHaveValue("");
+    expect(screen.queryByRole("button", { name: "Cancel" })).not.toBeInTheDocument();
+  });
+
+  it("counts a share that already landed as shared when the retry meets a moved version", async () => {
+    const user = userEvent.setup();
+    loadsTheDay([entry()], [note({ body: "Text A" })]);
+    route(`POST /api/v1/notes/${noteId}/share`, json({ code: "conflict" }, 409));
+    route(
+      `GET /api/v1/notes/${noteId}`,
+      json(note({ body: "Text A", category: "cycle.symptoms", version: 2 })),
+    );
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: "Share this note with..." }));
+    await user.click(screen.getByRole("button", { name: "Share note" }));
+    expect(await screen.findByText("Note shared.")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "Private note" })).toHaveValue("");
+    expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("says a note deleted somewhere else is gone, and empties the field", async () => {
+    const user = userEvent.setup();
+    loadsTheDay([entry()], [note({ body: "Text A" })]);
+    route(`POST /api/v1/notes/${noteId}/share`, json({ code: "not_found" }, 404));
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("button", { name: "Share this note with..." }));
+    await user.click(screen.getByRole("button", { name: "Share note" }));
+    const gone = await screen.findByText("This note was deleted somewhere else.");
+    expect(gone.closest("[tabindex]")).toHaveFocus();
+    expect(screen.getByRole("textbox", { name: "Private note" })).toHaveValue("");
+    expect(screen.queryByRole("button", { name: /Share this note/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps Note shared on screen while the day has changes of its own", async () => {
+    const user = userEvent.setup();
+    loadsTheDay();
+    route(
+      `POST /api/v1/notes/${noteId}/share`,
+      json(note({ category: "cycle.symptoms", version: 2 })),
+    );
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("radio", { name: "Low" }));
+    await user.click(screen.getByRole("button", { name: "Share this note with..." }));
+    await user.click(screen.getByRole("button", { name: "Share note" }));
+    const shared = await screen.findByText("Note shared.");
+    expect(shared).toBeVisible();
+    expect(shared.closest("[tabindex]")).toHaveFocus();
+    // The unsaved mood is still hers to save.
+    expect(screen.getByRole("radio", { name: "Low" })).toBeChecked();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
+  });
+
+  it("keeps Undoing on screen until the undo answers, even past the ten seconds", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    let answer: (() => void) | null = null;
+    loadsTheDay();
+    route("PUT /api/v1/cycle/entries/2026-10-05", json(entry({ mood: "low", version: 4 })));
+    route(
+      "PUT /api/v1/cycle/entries/2026-10-05",
+      () =>
+        new Promise<Response>((resolve) => {
+          answer = () => resolve(Response.json(entry({ mood: "steady", version: 5 })));
+        }),
+    );
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("radio", { name: "Low" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    await screen.findByText("Saved for Monday, Oct 5.");
+    act(() => {
+      vi.advanceTimersByTime(UNDO_WINDOW_MS - 300);
+    });
+    await user.click(screen.getByRole("button", { name: "Undo" }));
+    act(() => {
+      vi.advanceTimersByTime(400);
+    });
+    const pending = screen.getByRole("button", { name: "Undoing" });
+    expect(pending).toHaveFocus();
+    await act(async () => {
+      answer?.();
+    });
+    expect(await screen.findByText("Changes undone for Monday, Oct 5.")).toBeVisible();
+  });
+
+  it("says an ended session once, under the day's fields, without Try again", async () => {
+    const user = userEvent.setup();
+    loadsTheDay();
+    route("PUT /api/v1/cycle/entries/2026-10-05", json({ code: "unauthenticated" }, 401));
+    route(`PUT /api/v1/notes/${noteId}`, json({ code: "unauthenticated" }, 401));
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    await user.click(await screen.findByRole("radio", { name: "Low" }));
+    await user.type(screen.getByRole("textbox", { name: "Private note" }), " Better now.");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      await screen.findAllByText(
+        "Your session has ended. Sign in again, then come back to this day.",
+      ),
+    ).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
+  });
+
+  it("offers no Try again when the day could not be loaded because the session ended", async () => {
+    route("GET /api/v1/cycle/entries", json({ code: "unauthenticated" }, 401));
+    route("GET /api/v1/notes", json({ code: "unauthenticated" }, 401));
+    render(<DayLogSheet stage="cycle" today={today} date={today} onClose={() => {}} />);
+    expect(
+      await screen.findByText("Your session has ended. Sign in again, then come back to this day."),
+    ).toBeVisible();
+    expect(screen.queryByRole("button", { name: "Try again" })).not.toBeInTheDocument();
   });
 
   it("says what to do when the day could not be loaded, and loads again", async () => {

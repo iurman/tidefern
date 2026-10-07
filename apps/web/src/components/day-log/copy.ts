@@ -1,5 +1,5 @@
 import type { DayLogPartError } from "@/components/ui/day-sheet";
-import { formatSheetDate, isSignedOut, type PartResult } from "@/lib/day-log";
+import { formatSheetDate, isSignedOut, type NotePlace, type PartResult } from "@/lib/day-log";
 
 /**
  * The day log's words in one module (architecture 13.10): pending says what
@@ -21,6 +21,8 @@ export const dayLogCopy = {
   noteConflict: "This note was changed somewhere else. Try again to save your version.",
   shareFailed: "We could not share this note. Try again.",
   shareConflict: "This note changed somewhere else. Check it, then share it again.",
+  shareMoved: "This note was already shared somewhere else.",
+  shareGone: "This note was deleted somewhere else.",
   deleteFailed: "We could not delete this note. Try again.",
 } as const;
 
@@ -45,10 +47,20 @@ export function noteErrorFor(result: PartResult | null, attempt = 0): DayLogPart
   return undefined;
 }
 
-/** What a share that did not go through says beside the confirm step. */
-export function shareErrorFor(result: PartResult): string | undefined {
+/**
+ * What a share that did not go through says by the share action. `place` is
+ * where the note sits after the share read it again (`notePlace`): a
+ * conflict on a note still in the field means its text changed, one on a
+ * note now in the list means it was shared elsewhere, and one on a note
+ * that is nowhere means it was deleted.
+ */
+export function shareErrorFor(result: PartResult, place: NotePlace = "field"): string | undefined {
   if (isSignedOut(result)) return dayLogCopy.signedOut;
-  if (result.outcome === "conflict") return dayLogCopy.shareConflict;
+  if (result.outcome === "conflict") {
+    if (place === "listed") return dayLogCopy.shareMoved;
+    if (place === "absent") return dayLogCopy.shareGone;
+    return dayLogCopy.shareConflict;
+  }
   if (result.outcome === "failed") return dayLogCopy.shareFailed;
   return undefined;
 }

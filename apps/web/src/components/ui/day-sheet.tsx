@@ -60,6 +60,14 @@ export interface DayLogPartError {
   id?: number | string;
 }
 
+/** A share or a delete that did not go through. */
+export interface DayLogActionError {
+  /** What went wrong and what to do next. */
+  message: string;
+  /** Changes for every attempt that fails, so a second failure is a new line with its cue. */
+  id?: number | string;
+}
+
 /** The line beside Save: "Saved for Monday, Oct 5." with Undo, or what an undo, share or delete did. */
 export interface DayLogNotice {
   tone: "success" | "error";
@@ -75,6 +83,14 @@ export interface DayLogNotice {
    * the page.
    */
   focus?: boolean;
+  /**
+   * The line reports a share or a delete, which leave the draft alone, so
+   * it stays shown while the draft has changes of its own. Without it the
+   * line reports a save or an undo and hides once the draft differs from
+   * what is saved: the day no longer matches it, and Undo would throw the
+   * new changes away.
+   */
+  keepWhileEditing?: boolean;
 }
 
 /** The quiet action beside Save: close the sheet, follow a link back, or put the draft back. */
@@ -90,7 +106,11 @@ export interface DayLogFormProps {
    * remounts it with new values; a save of its own never needs to.
    */
   initial: DayDraft;
-  /** The day as last saved, which the draft is compared with; `initial` when absent. */
+  /**
+   * The day as last saved, which the draft is compared with; `initial` when
+   * absent. When its note changes under a field she has not edited, the
+   * field follows it and an open share step closes.
+   */
   saved?: DayDraft;
   /** Notes on the day the field does not edit (shared ones), shown read-only. */
   otherNotes?: readonly Note[];
@@ -105,7 +125,12 @@ export interface DayLogFormProps {
   /** Shares the saved private note once she confirms; resolves true when it is shared. */
   onShareNote?: () => Promise<boolean>;
   sharing?: boolean;
-  shareError?: string;
+  /**
+   * Why the last share did not go through: inside the confirm step while it
+   * is open, or under the share action once the note changed and the step
+   * closed. Opening or closing the step herself puts the line away.
+   */
+  shareError?: DayLogActionError;
   /** Deletes one of the read-only notes once she confirms; resolves true when it is gone. */
   onDeleteNote?: (id: string) => Promise<boolean>;
   deletingNoteId?: string | null;
@@ -113,6 +138,12 @@ export interface DayLogFormProps {
   secondary?: DayLogSecondary;
   /** Opens with a confirm step showing, for the reference page only. */
   defaultConfirm?: "share" | { delete: string };
+  /**
+   * Plays the success and error cues with the lines that answer her presses
+   * (the default). The reference page turns them off: nothing there answers
+   * a press, and a navigation plays only the settle cue (DESIGN.md 7).
+   */
+  cues?: boolean;
 }
 
 /** The radio groups' "nothing chosen yet": no option carries it, so no radio is checked. */
@@ -186,6 +217,7 @@ export function DayLogForm({
   deleteError = null,
   secondary,
   defaultConfirm,
+  cues = true,
 }: DayLogFormProps) {
   const hydrated = useHydrated();
   const [draft, setDraft] = useState<DayDraft>(initial);
@@ -193,21 +225,48 @@ export function DayLogForm({
   const [confirmingDelete, setConfirmingDelete] = useState<string | null>(
     typeof defaultConfirm === "object" ? defaultConfirm.delete : null,
   );
+  /** The saved note the field last followed, so a change underneath it is noticed once. */
+  const [followedNote, setFollowedNote] = useState(saved.note);
+  /** The share failure she put away by opening or closing the confirm step herself. */
+  const [settledShareError, setSettledShareError] = useState<string | number | undefined>();
+  /** Counts the times the confirm step closed under her press; focus follows each one. */
+  const [shareStepCloses, setShareStepCloses] = useState(0);
   const periodLabelId = useId();
   const periodHelpId = useId();
   const shareTitleId = useId();
   const otherNotesId = useId();
   const shareTitle = useRef<HTMLParagraphElement>(null);
   const shareRow = useRef<HTMLDivElement>(null);
+  const shareErrorLine = useRef<HTMLDivElement>(null);
   const noticeLine = useRef<HTMLDivElement>(null);
   /** Where focus goes after the next render; set only by her own presses, never on mount. */
   const focusNext = useRef<"share-title" | "share-button" | null>(null);
+
+  if (saved.note !== followedNote) {
+    // The saved note changed under the field: a save wrote it, a share or a
+    // delete moved it, or a conflict read it again. A field she has not
+    // edited follows it, so it always shows the text a share would send;
+    // her own edit stays for Try again. A confirm step about the old text
+    // closes, so a share is always confirmed against the text on screen.
+    setFollowedNote(saved.note);
+    setDraft((current) =>
+      current.note === followedNote ? { ...current, note: saved.note } : current,
+    );
+    if (confirmingShare) {
+      setConfirmingShare(false);
+      setShareStepCloses((count) => count + 1);
+    }
+  }
+
   const dirty = !sameDraft(saved, draft);
   const noteChanged = draft.note !== saved.note;
   const hasSavedNote = saved.note.trim() !== "";
   const tracksPeriod = stage !== "pregnancy";
   const noticeId = notice?.id;
   const noticeTakesFocus = notice?.focus === true;
+  const shareErrorKey = shareError ? (shareError.id ?? shareError.message) : undefined;
+  const visibleShareError =
+    shareError && shareErrorKey !== settledShareError ? shareError : undefined;
 
   useEffect(() => {
     const target = focusNext.current;
@@ -216,6 +275,15 @@ export function DayLogForm({
     if (target === "share-title") shareTitle.current?.focus();
     else shareRow.current?.querySelector("button")?.focus();
   });
+
+  useEffect(() => {
+    if (shareStepCloses === 0) return;
+    // Only when the control she pressed went away with the step; a press
+    // elsewhere (Save, the field) keeps its focus.
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    (shareErrorLine.current ?? shareRow.current?.querySelector("button"))?.focus();
+  }, [shareStepCloses]);
 
   useEffect(() => {
     if (noticeTakesFocus) noticeLine.current?.focus();
@@ -232,16 +300,18 @@ export function DayLogForm({
 
   function openShare() {
     focusNext.current = "share-title";
+    setSettledShareError(shareErrorKey);
     setConfirmingShare(true);
   }
 
   function keepPrivate() {
     focusNext.current = "share-button";
+    setSettledShareError(shareErrorKey);
     setConfirmingShare(false);
   }
 
   async function confirmShare() {
-    if (!onShareNote || sharing) return;
+    if (!onShareNote || sharing || noteChanged) return;
     if (await onShareNote()) {
       setConfirmingShare(false);
       // The note now lives with the shared ones; the field is for a new private note.
@@ -253,6 +323,15 @@ export function DayLogForm({
     if (!onDeleteNote || deletingNoteId !== null) return;
     if (await onDeleteNote(id)) setConfirmingDelete(null);
   }
+
+  // Inside the confirm step while it is open, under the share action once it closed.
+  const shareFailure = visibleShareError ? (
+    <div className={styles.shareError} ref={shareErrorLine} tabIndex={-1}>
+      <InlineFeedback key={shareErrorKey} tone="error" cue={cues}>
+        {visibleShareError.message}
+      </InlineFeedback>
+    </div>
+  ) : null;
 
   let secondaryAction: ReactNode = null;
   if (secondary?.kind === "close") {
@@ -304,15 +383,17 @@ export function DayLogForm({
               aria-describedby={periodHelpId}
             />
           </div>
-          <SegmentedControl<FlowChoice>
-            label="Flow"
-            options={flowOptions}
-            value={draft.flow ?? UNSET}
-            onChange={(flow) => {
-              if (flow !== UNSET) update({ flow });
-            }}
-            tone="period"
-          />
+          <div className={styles.flowScale}>
+            <SegmentedControl<FlowChoice>
+              label="Flow"
+              options={flowOptions}
+              value={draft.flow ?? UNSET}
+              onChange={(flow) => {
+                if (flow !== UNSET) update({ flow });
+              }}
+              tone="period"
+            />
+          </div>
         </>
       ) : null}
 
@@ -333,7 +414,9 @@ export function DayLogForm({
         }}
       />
 
-      {entryError ? <PartFailure error={entryError} cue saving={saving} onRetry={submit} /> : null}
+      {entryError ? (
+        <PartFailure error={entryError} cue={cues} saving={saving} onRetry={submit} />
+      ) : null}
 
       {otherNotes.length > 0 ? (
         <div className={styles.otherNotes}>
@@ -348,6 +431,7 @@ export function DayLogForm({
                 confirming={confirmingDelete === note.id}
                 deleting={deletingNoteId === note.id}
                 error={deleteError?.id === note.id ? deleteError.message : undefined}
+                cue={cues}
                 onAsk={onDeleteNote ? () => setConfirmingDelete(note.id) : undefined}
                 onKeep={() => setConfirmingDelete(null)}
                 onConfirm={() => confirmDelete(note.id)}
@@ -370,12 +454,12 @@ export function DayLogForm({
         )}
       </FormField>
       {noteError ? (
-        <PartFailure error={noteError} cue={!entryError} saving={saving} onRetry={submit} />
+        <PartFailure error={noteError} cue={cues && !entryError} saving={saving} onRetry={submit} />
       ) : null}
 
-      {onShareNote && hasSavedNote ? (
+      {onShareNote && (hasSavedNote || visibleShareError) ? (
         <div className={styles.share} ref={shareRow}>
-          {confirmingShare ? (
+          {hasSavedNote && confirmingShare ? (
             <div className={styles.confirm} role="group" aria-labelledby={shareTitleId}>
               <p id={shareTitleId} className={styles.confirmTitle} ref={shareTitle} tabIndex={-1}>
                 Share this note?
@@ -388,6 +472,7 @@ export function DayLogForm({
                   onClick={confirmShare}
                   loading={sharing}
                   loadingText="Sharing"
+                  disabled={noteChanged || saving}
                 >
                   Share note
                 </Button>
@@ -395,25 +480,27 @@ export function DayLogForm({
                   Keep it private
                 </Button>
               </div>
-              {shareError ? (
-                <InlineFeedback tone="error" cue>
-                  {shareError}
-                </InlineFeedback>
-              ) : null}
-            </div>
-          ) : (
-            <>
-              <Button
-                variant="quiet"
-                icon="sharing"
-                onClick={openShare}
-                disabled={noteChanged || saving}
-              >
-                Share this note with...
-              </Button>
               {noteChanged ? (
                 <p className={styles.shareHelp}>Save the note first, then share it.</p>
               ) : null}
+              {shareFailure}
+            </div>
+          ) : (
+            <>
+              {hasSavedNote ? (
+                <Button
+                  variant="quiet"
+                  icon="sharing"
+                  onClick={openShare}
+                  disabled={noteChanged || saving}
+                >
+                  Share this note with...
+                </Button>
+              ) : null}
+              {hasSavedNote && noteChanged ? (
+                <p className={styles.shareHelp}>Save the note first, then share it.</p>
+              ) : null}
+              {shareFailure}
             </>
           )}
         </div>
@@ -426,8 +513,13 @@ export function DayLogForm({
         {secondaryAction}
       </div>
       {notice ? (
-        <div className={styles.notice} hidden={dirty} ref={noticeLine} tabIndex={-1}>
-          <InlineFeedback key={notice.id ?? notice.message} tone={notice.tone} cue>
+        <div
+          className={styles.notice}
+          hidden={dirty && notice.keepWhileEditing !== true}
+          ref={noticeLine}
+          tabIndex={-1}
+        >
+          <InlineFeedback key={notice.id ?? notice.message} tone={notice.tone} cue={cues}>
             {notice.message}
           </InlineFeedback>
           {notice.onUndo && !dirty ? (
@@ -455,6 +547,7 @@ function OtherNote({
   confirming,
   deleting,
   error,
+  cue,
   onAsk,
   onKeep,
   onConfirm,
@@ -463,6 +556,7 @@ function OtherNote({
   confirming: boolean;
   deleting: boolean;
   error: string | undefined;
+  cue: boolean;
   onAsk: (() => void) | undefined;
   onKeep: () => void;
   onConfirm: () => void;
@@ -533,7 +627,7 @@ function OtherNote({
         </Button>
       ) : null}
       {error ? (
-        <InlineFeedback tone="error" cue>
+        <InlineFeedback tone="error" cue={cue}>
           {error}
         </InlineFeedback>
       ) : null}
@@ -607,6 +701,7 @@ export function DaySheet(props: DaySheetProps) {
     deletingNoteId: props.deletingNoteId,
     deleteError: props.deleteError,
     defaultConfirm: props.defaultConfirm,
+    cues: props.cues,
   };
   const title = formatSheetDate(props.date);
   const retry = onRetry ? (

@@ -17,7 +17,9 @@ import {
   isLoggingStage,
   isOlderDay,
   isSignedOut,
+  keepsShareKey,
   loadDay,
+  notePlace,
   periodOn,
   planSave,
   planUndo,
@@ -690,6 +692,73 @@ describe("shareNote", () => {
     const { day, result } = await shareNote(client, logged, "cycle.symptoms");
     expect(result).toEqual({ outcome: "conflict" });
     expect(day.note).toEqual({ status: "saved", id: noteId, body: "Edited elsewhere", version: 2 });
+  });
+
+  it("sends the key it is given, so a retry after a lost answer can replay", async () => {
+    const shared = note({ category: "cycle.symptoms", version: 2 });
+    const key = "018f5e7a-5eed-7050-8000-0000000000aa";
+    const { client, calls } = fakeApi({ [`POST ${notePath(noteId)}/share`]: [json(shared)] });
+    await shareNote(client, logged, "cycle.symptoms", key);
+    expect(calls[0]?.headers.get("idempotency-key")).toBe(key);
+  });
+
+  it("counts a 409 as shared when the note is already filed there with the text she saw", async () => {
+    const shared = note({ category: "cycle.symptoms", version: 2 });
+    const { client } = fakeApi({
+      [`POST ${notePath(noteId)}/share`]: [problem(409)],
+      [`GET ${notePath(noteId)}`]: [json(shared)],
+    });
+    const { day, result } = await shareNote(client, logged, "cycle.symptoms");
+    expect(result).toEqual({ outcome: "saved" });
+    expect(day.note).toEqual({ status: "none" });
+    expect(day.others).toEqual([shared]);
+  });
+
+  it("reports a 409 that moved nothing as a failure, so Try again keeps the key", async () => {
+    const { client } = fakeApi({
+      [`POST ${notePath(noteId)}/share`]: [problem(409, "idempotency_key_in_flight")],
+      [`GET ${notePath(noteId)}`]: [json(note())],
+    });
+    const { day, result } = await shareNote(client, logged, "cycle.symptoms");
+    expect(result).toEqual({ outcome: "failed", status: 409 });
+    expect(day).toBe(logged);
+    expect(keepsShareKey(result)).toBe(true);
+  });
+
+  it("treats a note shared elsewhere with other text, or deleted, as a conflict", async () => {
+    const other = note({ category: "cycle.symptoms", body: "Edited and shared", version: 3 });
+    const moved = fakeApi({
+      [`POST ${notePath(noteId)}/share`]: [problem(409)],
+      [`GET ${notePath(noteId)}`]: [json(other)],
+    });
+    const listed = await shareNote(moved.client, logged, "cycle.symptoms");
+    expect(listed.result).toEqual({ outcome: "conflict" });
+    expect(notePlace(listed.day, noteId)).toBe("listed");
+    const deleted = fakeApi({ [`POST ${notePath(noteId)}/share`]: [problem(404)] });
+    const gone = await shareNote(deleted.client, logged, "cycle.symptoms");
+    expect(gone.result).toEqual({ outcome: "conflict" });
+    expect(notePlace(gone.day, noteId)).toBe("absent");
+    expect(keepsShareKey(listed.result)).toBe(false);
+  });
+
+  it("reports a 409 it could not read back as a failure without an answer", async () => {
+    const { client } = fakeApi({
+      [`POST ${notePath(noteId)}/share`]: [problem(409)],
+      [`GET ${notePath(noteId)}`]: ["network-error"],
+    });
+    const { day, result } = await shareNote(client, logged, "cycle.symptoms");
+    expect(result).toEqual({ outcome: "failed", status: 0 });
+    expect(day).toBe(logged);
+  });
+
+  it("keeps a share's key only where the first attempt may still land or have landed", () => {
+    expect(keepsShareKey({ outcome: "failed", status: 0 })).toBe(true);
+    expect(keepsShareKey({ outcome: "failed", status: 503 })).toBe(true);
+    expect(keepsShareKey({ outcome: "failed", status: 409 })).toBe(true);
+    expect(keepsShareKey({ outcome: "failed", status: 401 })).toBe(false);
+    expect(keepsShareKey({ outcome: "failed", status: 429 })).toBe(false);
+    expect(keepsShareKey({ outcome: "saved" })).toBe(false);
+    expect(keepsShareKey({ outcome: "conflict" })).toBe(false);
   });
 
   it("has nothing to share without a saved note", async () => {

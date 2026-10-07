@@ -1,10 +1,22 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { Note } from "@tidefern/schemas";
 import { renderToString } from "react-dom/server";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { EMPTY_DRAFT, type DayDraft } from "@/lib/day-log";
 import { DayLogForm, DaySheet, formatSheetDate, noteAudience, shareExplanation } from "./day-sheet";
+import { componentStates } from "./specimen";
+import { specimens as patterns } from "./specimens/patterns";
+
+const play = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sound", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sound")>()),
+  play,
+}));
+
+beforeEach(() => {
+  play.mockReset();
+});
 
 describe("formatSheetDate", () => {
   it("names the weekday and the month day from a calendar string, in UTC", () => {
@@ -232,7 +244,7 @@ describe("DaySheet: notes already shared and the share action", () => {
       sheet({
         initial: day({ note: "Steadier today." }),
         onShareNote: async () => false,
-        shareError: "We could not share this note. Try again.",
+        shareError: { message: "We could not share this note. Try again.", id: 1 },
         defaultConfirm: "share",
       }),
     );
@@ -282,6 +294,82 @@ describe("DaySheet: notes already shared and the share action", () => {
       }),
     );
     expect(screen.getByText("Share this note?")).not.toHaveFocus();
+  });
+
+  it("puts the note's current text in an untouched field when it changed, and closes the step", async () => {
+    const user = userEvent.setup();
+    let answer: (shared: boolean) => void = () => {};
+    const onShareNote = vi.fn(
+      () =>
+        new Promise<boolean>((resolve) => {
+          answer = resolve;
+        }),
+    );
+    const conflict = "This note changed somewhere else. Check it, then share it again.";
+    const { rerender } = render(
+      sheet({ initial: day({ note: "Text A" }), onShareNote, defaultConfirm: "share" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Share note" }));
+    // The controller read the note again: newer text, and the share did not happen.
+    rerender(
+      sheet({
+        initial: day({ note: "Text A" }),
+        saved: day({ note: "Text B" }),
+        onShareNote,
+        shareError: { message: conflict, id: 1 },
+      }),
+    );
+    await act(async () => answer(false));
+    expect(screen.getByRole("textbox", { name: "Private note" })).toHaveValue("Text B");
+    expect(screen.queryByRole("group", { name: "Share this note?" })).not.toBeInTheDocument();
+    expect(screen.getByText(conflict).closest("[tabindex]")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Share this note with..." })).toBeEnabled();
+  });
+
+  it("keeps her own edit when the saved note changes under it", async () => {
+    const user = userEvent.setup();
+    const { rerender } = render(
+      sheet({ initial: day({ note: "Text A" }), onShareNote: async () => false }),
+    );
+    await user.type(screen.getByRole("textbox", { name: "Private note" }), " and more");
+    rerender(
+      sheet({
+        initial: day({ note: "Text A" }),
+        saved: day({ note: "Text B" }),
+        onShareNote: async () => false,
+      }),
+    );
+    expect(screen.getByRole("textbox", { name: "Private note" })).toHaveValue("Text A and more");
+  });
+
+  it("will not share text that differs from what is saved, even from the confirm step", async () => {
+    const user = userEvent.setup();
+    const onShareNote = vi.fn(async () => true);
+    render(sheet({ initial: day({ note: "Saved text" }), onShareNote, defaultConfirm: "share" }));
+    await user.type(screen.getByRole("textbox", { name: "Private note" }), " and more");
+    const confirm = screen.getByRole("group", { name: "Share this note?" });
+    expect(within(confirm).getByRole("button", { name: "Share note" })).toBeDisabled();
+    expect(within(confirm).getByText("Save the note first, then share it.")).toBeVisible();
+    expect(onShareNote).not.toHaveBeenCalled();
+  });
+
+  it("puts a share failure away once she opens or closes the step herself", async () => {
+    const user = userEvent.setup();
+    const failed = "We could not share this note. Try again.";
+    const props = {
+      initial: day({ note: "Steadier today." }),
+      onShareNote: async () => false,
+      defaultConfirm: "share" as const,
+    };
+    const { rerender } = render(sheet({ ...props, shareError: { message: failed, id: 1 } }));
+    await user.click(screen.getByRole("button", { name: "Keep it private" }));
+    expect(screen.queryByText(failed)).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Share this note with..." }));
+    expect(screen.queryByText(failed)).not.toBeInTheDocument();
+    // A new failure is a new line.
+    rerender(sheet({ ...props, shareError: { message: failed, id: 2 } }));
+    const confirm = screen.getByRole("group", { name: "Share this note?" });
+    expect(within(confirm).getByText(failed)).toBeVisible();
   });
 
   it("says a note was added by someone else when they wrote it", () => {
@@ -352,6 +440,18 @@ describe("DaySheet: saving, failing and undoing", () => {
     expect(screen.getByText("Saved for Monday, Oct 5.")).not.toBeVisible();
   });
 
+  it("keeps a share's or a delete's line on screen while the draft has changes", async () => {
+    const user = userEvent.setup();
+    render(
+      sheet({
+        initial: day({ mood: "steady" }),
+        notice: { tone: "success", message: "Note shared.", id: 2, keepWhileEditing: true },
+      }),
+    );
+    await user.click(screen.getByRole("radio", { name: "Low" }));
+    expect(screen.getByText("Note shared.")).toBeVisible();
+  });
+
   it("cancels or closes through the quiet action and ignores a save while one is in flight", async () => {
     const user = userEvent.setup();
     const onClose = vi.fn();
@@ -368,6 +468,47 @@ describe("DaySheet: saving, failing and undoing", () => {
     expect(screen.getByRole("button", { name: "Saving" })).toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Saving" }));
     expect(onSave).not.toHaveBeenCalled();
+  });
+});
+
+describe("DaySheet: cues", () => {
+  const lines = {
+    notice: { tone: "success" as const, message: "Saved for Monday, Oct 5.", id: 1 },
+    entryError: { message: "We could not save this day. Try again.", id: 1 },
+    noteError: { message: "We could not save your note. Try again.", id: 1 },
+    shareError: { message: "We could not share this note. Try again.", id: 1 },
+    deleteError: { id: sharedNote.id, message: "We could not delete this note. Try again." },
+    otherNotes: [sharedNote],
+    onDeleteNote: async () => false,
+    onShareNote: async () => false,
+    defaultConfirm: "share" as const,
+    initial: day({ note: "Text" }),
+  };
+
+  it("plays a cue with each line that answers a press, one error cue for the save", () => {
+    render(sheet(lines));
+    expect(play.mock.calls.map(([cue]) => cue).sort()).toEqual([
+      "error",
+      "error",
+      "error",
+      "success",
+    ]);
+  });
+
+  it("plays none with cues off", () => {
+    render(sheet({ ...lines, cues: false }));
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("plays none on the reference page, where nothing answers a press", () => {
+    for (const specimen of patterns.specimens) {
+      for (const state of componentStates) {
+        if (specimen.states?.[state] === "none") continue;
+        const { unmount } = render(<>{specimen.render(state)}</>);
+        unmount();
+      }
+    }
+    expect(play).not.toHaveBeenCalled();
   });
 });
 

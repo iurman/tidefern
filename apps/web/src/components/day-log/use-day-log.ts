@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import type { DayLogNotice, DayLogPartError } from "@/components/ui/day-sheet";
+import type { NoteShareCategory } from "@tidefern/schemas";
+import type { DayLogActionError, DayLogNotice, DayLogPartError } from "@/components/ui/day-sheet";
 import { browserApiClient } from "@/lib/api-browser";
 import {
   EMPTY_DRAFT,
@@ -12,7 +13,10 @@ import {
   draftFrom,
   isEmptyPlan,
   isOlderDay,
+  isSignedOut,
+  keepsShareKey,
   loadDay,
+  notePlace,
   planSave,
   planUndo,
   runPlan,
@@ -53,7 +57,8 @@ export interface DayLogController {
   /** The day as last saved, which the draft is compared with. */
   savedDraft: DayDraft;
   loadError: string | undefined;
-  retryLoad: () => void;
+  /** Loads the day again; absent when trying again cannot help (the session ended). */
+  retryLoad: (() => void) | undefined;
   save: (draft: DayDraft) => void;
   saving: boolean;
   /** Something is being written; the views hold day navigation until it ends. */
@@ -63,7 +68,7 @@ export interface DayLogController {
   notice: DayLogNotice | undefined;
   shareNote: () => Promise<boolean>;
   sharing: boolean;
-  shareError: string | undefined;
+  shareError: DayLogActionError | undefined;
   deleteNote: (id: string) => Promise<boolean>;
   deletingNoteId: string | null;
   deleteError: { id: string; message: string } | null;
@@ -144,7 +149,7 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
   } | null>(null);
   const [notice, setNotice] = useState<Omit<DayLogNotice, "onUndo" | "undoing"> | null>(null);
   const [undo, setUndo] = useState<DayPlan | null>(null);
-  const [shareError, setShareError] = useState<string | undefined>(undefined);
+  const [shareError, setShareError] = useState<DayLogActionError | undefined>(undefined);
   const [deleteError, setDeleteError] = useState<{ id: string; message: string } | null>(null);
   /** One write at a time; a ref, because a second press can land before React re-renders. */
   const busyRef = useRef(false);
@@ -152,7 +157,20 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
   const baseline = useRef<DayState | null>(null);
   /** The id a new private note gets, kept across retries so a lost answer never makes two notes. */
   const pendingNoteId = useRef<string | null>(null);
+  /**
+   * The Idempotency-Key of a share that got no answer, kept for the next
+   * press on the same note, version and category, so a retry meets the
+   * first attempt instead of a version that attempt already moved.
+   */
+  const shareAttempt = useRef<{
+    noteId: string;
+    version: number;
+    category: NoteShareCategory;
+    key: string;
+  } | null>(null);
   const noticeCount = useRef(0);
+  /** Numbers each failed share, so a second failure is a new line with its own cue. */
+  const shareCount = useRef(0);
   /** Numbers each save, so a failure line after Try again is a new line with its own cue. */
   const saveCount = useRef(0);
   const dateRef = useRef(date);
@@ -163,6 +181,7 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     dateRef.current = date;
     baseline.current = null;
     pendingNoteId.current = null;
+    shareAttempt.current = null;
   }, [date]);
 
   if (session.date !== date) {
@@ -210,15 +229,36 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
   }, [session.phase, session.date, session.generation]);
 
   useEffect(() => {
-    if (undo === null) return undefined;
+    // An undo she started keeps its Undoing control until it answers, even past the window.
+    if (undo === null || undoing) return undefined;
     const timer = window.setTimeout(() => setUndo(null), UNDO_WINDOW_MS);
     return () => window.clearTimeout(timer);
-  }, [undo]);
+  }, [undo, undoing]);
 
-  /** A new line beside Save; `focus` when the control she pressed went away with the action. */
-  function nextNotice(tone: DayLogNotice["tone"], message: string, focus = false) {
+  /**
+   * A new line beside Save. `focus` when the control she pressed went away
+   * with the action; `keepWhileEditing` for a share or a delete, which leave
+   * the draft alone, so the line shows even while the draft has changes.
+   */
+  function nextNotice(
+    tone: DayLogNotice["tone"],
+    message: string,
+    { focus = false, keepWhileEditing = false } = {},
+  ) {
     noticeCount.current += 1;
-    setNotice({ tone, message, id: noticeCount.current, ...(focus ? { focus } : {}) });
+    setNotice({
+      tone,
+      message,
+      id: noticeCount.current,
+      ...(focus ? { focus } : {}),
+      ...(keepWhileEditing ? { keepWhileEditing } : {}),
+    });
+  }
+
+  /** A new action puts away the lines a share or a delete left behind. */
+  function clearActionErrors() {
+    setShareError(undefined);
+    setDeleteError(null);
   }
 
   /** Applies a day the API answered with, unless the person has moved to another day meanwhile. */
@@ -238,6 +278,7 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     const day = session.day;
     if (day === null || busyRef.current) return;
     busyRef.current = true;
+    clearActionErrors();
     const client = browserApiClient();
     pendingNoteId.current ??= client.newId();
     const plan = planSave(day, draft, pendingNoteId.current);
@@ -275,6 +316,7 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     const day = session.day;
     if (day === null || undo === null || busyRef.current) return;
     busyRef.current = true;
+    clearActionErrors();
     setUndoing(true);
     const result = await runPlan(browserApiClient(), day, undo);
     busyRef.current = false;
@@ -285,23 +327,31 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     if (!applyDay(result.day, true)) return;
     setResults(null);
     if (allSaved(result.entry, result.note)) {
-      nextNotice("success", dayLogCopy.undone(day.date), true);
+      nextNotice("success", dayLogCopy.undone(day.date), { focus: true });
     } else {
-      nextNotice("error", dayLogCopy.undoFailed, true);
+      nextNotice("error", dayLogCopy.undoFailed, { focus: true });
     }
   }
 
   async function shareNote(): Promise<boolean> {
     const day = session.day;
-    if (day === null || busyRef.current) return false;
+    if (day === null || day.note.status !== "saved" || busyRef.current) return false;
     busyRef.current = true;
     setSharing(true);
-    setShareError(undefined);
-    const { day: next, result } = await shareDayNote(
-      browserApiClient(),
-      day,
-      shareCategoryFor(stage),
-    );
+    clearActionErrors();
+    const client = browserApiClient();
+    const { id: noteId, version } = day.note;
+    const category = shareCategoryFor(stage);
+    const kept = shareAttempt.current;
+    const key =
+      kept !== null &&
+      kept.noteId === noteId &&
+      kept.version === version &&
+      kept.category === category
+        ? kept.key
+        : client.newId();
+    const { day: next, result } = await shareDayNote(client, day, category, key);
+    shareAttempt.current = keepsShareKey(result) ? { noteId, version, category, key } : null;
     busyRef.current = false;
     setSharing(false);
     if (result.outcome === "saved") router.refresh();
@@ -310,10 +360,16 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
       // There is no undo for a share, and the plan before it may now point at the shared note.
       setUndo(null);
       baseline.current = null;
-      nextNotice("success", dayLogCopy.shared, true);
+      nextNotice("success", dayLogCopy.shared, { focus: true, keepWhileEditing: true });
       return true;
     }
-    setShareError(shareErrorFor(result));
+    // A conflict carries the note as it is now: the form shows its current
+    // text (or that it moved), so she checks it before she shares again.
+    shareCount.current += 1;
+    setShareError({
+      message: shareErrorFor(result, notePlace(next, noteId)) ?? dayLogCopy.shareFailed,
+      id: shareCount.current,
+    });
     return false;
   }
 
@@ -322,7 +378,7 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     if (day === null || busyRef.current) return false;
     busyRef.current = true;
     setDeletingNoteId(id);
-    setDeleteError(null);
+    clearActionErrors();
     const { day: next, result } = await deleteDayNote(browserApiClient(), day, id);
     busyRef.current = false;
     setDeletingNoteId(null);
@@ -330,7 +386,7 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     if (!applyDay(next, false)) return false;
     if (result.outcome === "saved") {
       setUndo(null);
-      nextNotice("success", dayLogCopy.deleted, true);
+      nextNotice("success", dayLogCopy.deleted, { focus: true, keepWhileEditing: true });
       return true;
     }
     setDeleteError({ id, message: deleteErrorFor(result) ?? dayLogCopy.deleteFailed });
@@ -345,6 +401,15 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     );
   }
 
+  const signedOutOnLoad = session.phase === "failed" && session.loadStatus === 401;
+  const entryError = entryErrorFor(results?.entry ?? null, results?.attempt);
+  const noteResult = results?.note ?? null;
+  // An ended session is said once, under the day's fields, though both parts failed on it.
+  const noteError =
+    entryError?.retry === false && noteResult !== null && isSignedOut(noteResult)
+      ? undefined
+      : noteErrorFor(noteResult, results?.attempt);
+
   return {
     phase: session.phase,
     day: session.day,
@@ -354,15 +419,15 @@ export function useDayLog({ date, stage, initial }: UseDayLogOptions): DayLogCon
     loadError:
       session.phase !== "failed"
         ? undefined
-        : session.loadStatus === 401
+        : signedOutOnLoad
           ? dayLogCopy.signedOut
           : dayLogCopy.loadFailed,
-    retryLoad,
+    retryLoad: signedOutOnLoad ? undefined : retryLoad,
     save: (draft) => void save(draft),
     saving,
     busy,
-    entryError: entryErrorFor(results?.entry ?? null, results?.attempt),
-    noteError: noteErrorFor(results?.note ?? null, results?.attempt),
+    entryError,
+    noteError,
     notice:
       notice === null
         ? undefined

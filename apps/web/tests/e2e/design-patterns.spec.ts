@@ -141,6 +141,148 @@ test("the pregnancy sheet has no Period switch and no flow scale", async ({ page
   await expect(sheet.getByRole("group", { name: "Symptoms" })).toBeVisible();
   await expect(sheet.getByRole("switch", { name: "Period" })).toHaveCount(0);
   await expect(sheet.getByRole("group", { name: "Flow" })).toHaveCount(0);
+  const note = sheet.getByRole("list", { name: "Notes on this day" }).getByRole("listitem");
+  await expect(
+    note.getByText("Shared with people who can see your pregnancy overview"),
+  ).toBeVisible();
+  await expect(note.getByText("Added by someone you share with.")).toBeVisible();
+});
+
+test("an undo in flight says Undoing beside the saved line", async ({ page }) => {
+  await page.goto(route);
+  const sheet = stage(page, "Day sheet, undo in flight");
+  await expect(sheet.getByText("Saved for Monday, Oct 5.")).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Undoing" })).toHaveAttribute("aria-busy", "true");
+});
+
+test("an undo that failed says so beside Save, with no Undo left", async ({ page }) => {
+  await page.goto(route);
+  const sheet = stage(page, "Day sheet, undo failed");
+  await expect(
+    sheet.getByText("We could not undo every change. Check this day and change it back."),
+  ).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Undo" })).toHaveCount(0);
+});
+
+test("an edited note cannot be shared until it is saved, and says why", async ({ page }) => {
+  await page.goto(route);
+  const sheet = stage(page, "Day sheet, note edited");
+  await expect(sheet.getByRole("button", { name: "Share this note with..." })).toBeDisabled();
+  await expect(sheet.getByText("Save the note first, then share it.")).toBeVisible();
+  await expect(sheet.getByRole("button", { name: "Cancel" })).toBeVisible();
+});
+
+test("an ended session is said once and offers no Try again", async ({ page }) => {
+  await page.goto(route);
+  const signedOut = "Your session has ended. Sign in again, then come back to this day.";
+  for (const name of ["Day sheet, session ended", "Day sheet, session ended on load"]) {
+    const sheet = stage(page, name);
+    await expect(sheet.getByText(signedOut)).toHaveCount(1);
+    await expect(sheet.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  }
+  await expect(
+    stage(page, "Day sheet, session ended").getByRole("textbox", { name: "Private note" }),
+  ).toBeVisible();
+});
+
+test("deleting a shared note asks first, then says Deleting or what failed", async ({ page }) => {
+  await page.goto(route);
+  const confirm = stage(page, "Day sheet, deleting a note").getByRole("group", {
+    name: "Delete this note?",
+  });
+  await expect(
+    confirm.getByText(
+      "It is removed for you and for everyone who can read it, and it cannot be brought back.",
+    ),
+  ).toBeVisible();
+  await expect(confirm.getByRole("button", { name: "Delete note" })).toBeVisible();
+  await expect(confirm.getByRole("button", { name: "Keep it" })).toBeVisible();
+  const pending = stage(page, "Day sheet, delete in flight").getByRole("group", {
+    name: "Delete this note?",
+  });
+  await expect(pending.getByRole("button", { name: "Deleting" })).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
+  await expect(pending.getByRole("button", { name: "Keep it" })).toBeDisabled();
+  const failed = stage(page, "Day sheet, delete failed").getByRole("listitem");
+  await expect(failed.getByRole("group", { name: "Delete this note?" })).toBeVisible();
+  await expect(failed.getByText("We could not delete this note. Try again.")).toBeVisible();
+});
+
+test("a share in flight says Sharing, and a failed one says what to do in the step", async ({
+  page,
+}) => {
+  await page.goto(route);
+  const pending = stage(page, "Day sheet, share in flight").getByRole("group", {
+    name: "Share this note?",
+  });
+  await expect(pending.getByRole("button", { name: "Sharing" })).toHaveAttribute(
+    "aria-busy",
+    "true",
+  );
+  await expect(pending.getByRole("button", { name: "Keep it private" })).toBeDisabled();
+  const failed = stage(page, "Day sheet, share failed").getByRole("group", {
+    name: "Share this note?",
+  });
+  await expect(failed.getByText("We could not share this note. Try again.")).toBeVisible();
+  await expect(failed.getByRole("button", { name: "Share note" })).toBeEnabled();
+});
+
+test("a note changed elsewhere shows its current text with the step closed", async ({ page }) => {
+  await page.goto(route);
+  const sheet = stage(page, "Day sheet, note changed elsewhere");
+  await expect(sheet.getByRole("textbox", { name: "Private note" })).toHaveValue(
+    "Slept badly; better after lunch.",
+  );
+  await expect(sheet.getByRole("group", { name: "Share this note?" })).toHaveCount(0);
+  const line = sheet.getByText("This note changed somewhere else. Check it, then share it again.");
+  await expect(line).toBeVisible();
+  const share = sheet.getByRole("button", { name: "Share this note with..." });
+  const below = async () =>
+    ((await line.boundingBox())?.y ?? 0) > ((await share.boundingBox())?.y ?? 0);
+  expect(await below()).toBe(true);
+});
+
+// The flow scale stays one row where its values fit and never folds the pill
+// into two uneven rows: at a 390 px phone's sheet width and at a 360 px one's
+// the segments share one row; at a 320 px one's they part into chips that wrap.
+test("the flow scale keeps one row on a phone and parts into chips only at the narrowest", async ({
+  page,
+}) => {
+  await page.goto(route);
+  const flow = stage(page, "Day sheet").getByRole("group", { name: "Flow" });
+  const frame = flow.locator("xpath=..");
+  const layout = (width: string) =>
+    frame.evaluate((element, size) => {
+      (element as HTMLElement).style.width = size;
+      const box = element.getBoundingClientRect();
+      const labels = [...element.querySelectorAll("label")].map((label) => {
+        const rect = label.getBoundingClientRect();
+        return { top: Math.round(rect.top), left: rect.left, right: rect.right, width: rect.width };
+      });
+      const segments = element.querySelector("fieldset > div") as HTMLElement;
+      return {
+        rows: new Set(labels.map((label) => label.top)).size,
+        inside: labels.every((label) => label.left >= box.left && label.right <= box.right + 0.5),
+        narrowest: Math.min(...labels.map((label) => label.width)),
+        pillBorder: getComputedStyle(segments).borderTopWidth,
+        chipBorder: getComputedStyle(element.querySelector("label") as HTMLElement).borderTopColor,
+      };
+    }, width);
+  for (const width of ["100%", "340px", "310px"]) {
+    const row = await layout(width);
+    expect(row.rows, width).toBe(1);
+    expect(row.inside, width).toBe(true);
+    expect(row.narrowest, width).toBeGreaterThanOrEqual(44);
+    expect(row.pillBorder, width).toBe("1px");
+  }
+  const chips = await layout("270px");
+  expect(chips.rows).toBe(2);
+  expect(chips.inside).toBe(true);
+  expect(chips.narrowest).toBeGreaterThanOrEqual(44);
+  expect(chips.pillBorder).toBe("0px");
+  expect(chips.chipBorder).not.toBe("rgba(0, 0, 0, 0)");
 });
 
 test("the page mode is a page: the date as its heading, the days and Close as links", async ({

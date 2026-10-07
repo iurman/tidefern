@@ -156,7 +156,20 @@ The day-logging contract (task G9) that Today and Calendar share:
 - The form posts to its own URL if it is ever submitted natively and stays
   `inert` until the page hydrates, so a flow or mood code never reaches a
   URL. Its success and error lines play their cue through
-  `InlineFeedback`, once per line.
+  `InlineFeedback`, once per line; `cues={false}` silences them on the
+  reference page, where nothing answers a press.
+- A share is confirmed against the text on screen. When the saved note
+  changes under a field she has not edited (a share conflict read it
+  again, a share or a delete moved it), the field follows it and an open
+  confirm step closes; her own edit stays for Try again. A share that got
+  no answer is retried with the same Idempotency-Key, and a 409 whose read
+  shows the note already filed there with the same text counts as shared.
+- The flow scale keeps the shared pill where its five values fit at full
+  size; in a narrower sheet the segments tighten and share one row (a 360
+  px phone and up), and below about 296 px they part into chips that wrap,
+  as the phone sketch in `DESIGN.md` 3.4 draws them. The container queries
+  in `day-sheet.module.css` reach into `SegmentedControl`'s markup; a
+  layout option on `SegmentedControl` itself would remove that coupling.
 
 Each group owns only the files in its rows above plus its page, its
 specimens file and its browser spec; `docs/design/ASSETS.md` gains icon

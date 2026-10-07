@@ -703,18 +703,30 @@ export async function loadDay(client: ApiClient, date: string): Promise<DayLoad>
  * The explicit share (architecture 8.2): POST /v1/notes/{id}/share re-files
  * the saved private note under `category`, with its version as If-Match so
  * she shares exactly the text she sees. One way; there is no unshare.
+ *
+ * `idempotencyKey` is this share's key. The controller keeps it across the
+ * retries of a share that got no answer (`keepsShareKey`), so a retry meets
+ * the first attempt's stored answer instead of a version that attempt
+ * already moved. A 409 reads the note again and sorts out what it means:
+ * filed under `category` with the text she saw, an earlier attempt landed
+ * and the share is done; still private at the version she sent, nothing
+ * moved yet (the first attempt is still running) and the share failed;
+ * anything else is a conflict, and the day carries the note as it is now
+ * so the sheet can show her the current text before she shares again.
  */
 export async function shareNote(
   client: ApiClient,
   day: DayState,
   category: NoteShareCategory,
+  idempotencyKey?: string,
 ): Promise<{ day: DayState; result: PartResult }> {
   if (day.note.status !== "saved") return { day, result: UNCHANGED };
-  const { id, version } = day.note;
+  const { id, version, body } = day.note;
   const sent = await answer(
     client.POST("/api/v1/notes/{id}/share", {
       params: { path: { id }, header: { "If-Match": version } },
       body: { category },
+      ...(idempotencyKey === undefined ? {} : { headers: { "Idempotency-Key": idempotencyKey } }),
     }),
   );
   if (sent.status === 200) {
@@ -729,9 +741,37 @@ export async function shareNote(
   if (sent.status === 404) return { day: placeNote(day, id, "gone"), result: CONFLICT };
   if (sent.status === 409) {
     const fresh = await readNote(client, id);
-    return { day: fresh === null ? day : placeNote(day, id, fresh), result: CONFLICT };
+    // Without the note's current state there is nothing to show her: Try again reads it.
+    if (fresh === null) return { day, result: failed(UNCONFIRMED) };
+    if (fresh !== "gone" && fresh.body === body) {
+      if (fresh.category === category) return { day: placeNote(day, id, fresh), result: SAVED };
+      if (fresh.category === "journal.private" && fresh.version === version) {
+        return { day, result: failed(409) };
+      }
+    }
+    return { day: placeNote(day, id, fresh), result: CONFLICT };
   }
   return { day, result: failed(sent.status) };
+}
+
+/**
+ * Whether the next press of Share note reuses this share's Idempotency-Key:
+ * yes after no answer, a server error or a 409 that moved nothing, where the
+ * first attempt may still land or have landed; no after any other answer,
+ * which the server keeps under the key and would only replay.
+ */
+export function keepsShareKey(result: PartResult): boolean {
+  if (result.outcome !== "failed") return false;
+  const status = result.status ?? 0;
+  return status === 0 || status === 409 || status >= 500;
+}
+
+/** Where a note sits on the day: the field's private note, the read-only list, or nowhere. */
+export type NotePlace = "field" | "listed" | "absent";
+
+export function notePlace(day: DayState, id: string): NotePlace {
+  if (day.note.status === "saved" && day.note.id === id) return "field";
+  return day.others.some((note) => note.id === id) ? "listed" : "absent";
 }
 
 /** Deletes one of the read-only notes (a shared note can only be deleted). A note already gone counts as deleted. */
