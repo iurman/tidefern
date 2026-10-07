@@ -3,14 +3,13 @@ import {
   DEFAULT_CYCLE_LENGTH,
   addDays,
   compareDates,
-  cycleDay,
   diffDays,
-  predictCycle,
+  isCalendarDate,
   type CalendarDate,
-  type CyclePrediction,
-  type PeriodStart,
 } from "@tidefern/core";
-import { formatDay, formatDaySpan } from "./marks-format";
+import type { CyclePrediction } from "@tidefern/schemas";
+import { estimateSentence, fertileSentence } from "@/lib/prediction-copy";
+import { formatDaySpan } from "./marks-format";
 import {
   arcPath,
   clockwiseTangent,
@@ -29,8 +28,11 @@ import styles from "./cycle-ring.module.css";
  * dashed, the fertile window dotted, ovulation an outlined dot inside a
  * lighter dotted band, the progress arc ending in the frond curl and today
  * as an action dot. The ring is an image; every fact it draws is also a
- * sentence beside it, using the templates from architecture 13.10 word for
- * word. All cycle math comes from @tidefern/core.
+ * sentence beside it, from lib/prediction-copy (architecture 13.10 word for
+ * word). It draws exactly what the API returned: the prediction from GET
+ * /v1/cycle/predictions and the latest period start from GET
+ * /v1/cycle/status, never a recomputation from period starts, because the
+ * grouping of bleeding days and the pregnancy boundary are the server's.
  */
 
 const VIEW = 260;
@@ -43,14 +45,21 @@ const TODAY_RADIUS = 3.5;
 const OVULATION_RADIUS = 3.5;
 
 export interface CycleRingProps {
-  /** Today's calendar date in the profile's time zone; never read from the machine. */
+  /** Today's calendar date in the profile's time zone, from the API (the status `date`); never read from the machine. */
   today: CalendarDate;
-  /** Every logged period start the estimate may use; an empty list is the empty state. */
-  periodStarts: PeriodStart[];
+  /**
+   * The API's prediction (GET /v1/cycle/predictions), drawn as it is. Null,
+   * or basis `none`, draws the empty state: a page whose stage pauses
+   * predictions shows its own quiet card instead of the ring.
+   */
+  prediction: CyclePrediction | null;
+  /**
+   * The latest period start: the status `date` minus `cycleDay` plus one
+   * (`latestStartFrom`); null when no period is logged.
+   */
+  latestStart: CalendarDate | null;
   /** The logged days of the current period, YYYY-MM-DD each, drawn as the solid arc. */
   loggedDays?: CalendarDate[];
-  /** Period starts on or before this date are ignored, for example the date a pregnancy ended. */
-  since?: CalendarDate;
   /** Where the empty state's one action leads. */
   logHref?: string;
   /** The values are on their way; the ring keeps its size and says so. */
@@ -67,34 +76,16 @@ interface RingFacts {
   day: number;
 }
 
-function pluralCycles(count: number): string {
-  return count === 1 ? "cycle" : `${count} cycles`;
-}
-
-/** The estimate sentence from architecture 13.10, chosen by the prediction's basis. */
-export function estimateSentence(prediction: CyclePrediction): string {
-  const { basis, nextPeriodStart, uncertaintyDays, sampleSize } = prediction;
-  if (basis === "not_enough_regular_cycles" || !nextPeriodStart) {
-    return "Your recent cycles have been too different from each other to estimate a date. Keep logging and this will update.";
-  }
-  if (basis === "first_guess") {
-    return `Log 3 periods and Tidefern can start estimating. For now this is a rough guess: around ${formatDay(nextPeriodStart)}, give or take ${uncertaintyDays} days.`;
-  }
-  const from = formatDay(addDays(nextPeriodStart, -uncertaintyDays));
-  const to = formatDay(addDays(nextPeriodStart, uncertaintyDays));
-  return `Based on your last ${pluralCycles(sampleSize)}, your next period will likely start between ${from} and ${to}.`;
-}
-
-/** The ovulation and fertile days sentence from architecture 13.10, or null when nothing is estimated. */
-export function ovulationSentence(prediction: CyclePrediction): string | null {
-  const { ovulation, fertileWindow, ovulationBandDays } = prediction;
-  if (!ovulation || !fertileWindow) return null;
-  const band = formatDaySpan(
-    addDays(ovulation, -ovulationBandDays),
-    addDays(ovulation, ovulationBandDays),
-  );
-  const window = formatDaySpan(fertileWindow.start, fertileWindow.end);
-  return `Ovulation is estimated around ${formatDay(ovulation)} (${band}). ${window} are the days pregnancy is most likely. An estimate from your logged dates. Not a form of contraception.`;
+/**
+ * The latest period start from GET /v1/cycle/status: the status date minus
+ * the cycle day plus one, or null while no period is logged (cycle day null).
+ */
+export function latestStartFrom(status: {
+  date: CalendarDate;
+  cycleDay: number | null;
+}): CalendarDate | null {
+  if (status.cycleDay === null || !isCalendarDate(status.date)) return null;
+  return addDays(status.date, 1 - status.cycleDay);
 }
 
 /** "Cycle day 12 of about 28", the ring's accessible name. */
@@ -103,17 +94,12 @@ export function cycleDaySentence(day: number, length: number | null): string {
 }
 
 function facts(props: CycleRingProps): RingFacts | null {
-  const { periodStarts, since, today } = props;
-  const prediction = predictCycle(periodStarts, since ? { since } : {});
-  if (!prediction) return null;
-  const counted = since
-    ? periodStarts.filter((start) => compareDates(start.date, since) > 0)
-    : periodStarts;
-  const latest = [...counted].sort((a, b) => compareDates(a.date, b.date)).at(-1);
-  if (!latest) return null;
+  const { prediction, latestStart, today } = props;
+  if (prediction === null || prediction.basis === "none" || latestStart === null) return null;
+  // The ring stands for the estimated cycle; without one it keeps the 28 day default for its geometry.
   const length = prediction.cycleLength ?? DEFAULT_CYCLE_LENGTH;
-  const day = Math.max(1, cycleDay(latest.date, today));
-  return { prediction, latest: latest.date, length, day };
+  const day = Math.max(1, diffDays(latestStart, today) + 1);
+  return { prediction, latest: latestStart, length, day };
 }
 
 /** One-based day of the current cycle for a date. */
@@ -123,7 +109,9 @@ function dayOf(latest: CalendarDate, date: CalendarDate): number {
 
 function Marks({ ring, loggedDays }: { ring: RingFacts; loggedDays: CalendarDate[] }) {
   const { prediction, latest, length, day } = ring;
-  const offered = prediction.basis !== "not_enough_regular_cycles";
+  // DESIGN.md 6.1: a first guess draws the dashed and dotted arcs only; not
+  // enough regular cycles draws the track and the logged arcs only.
+  const offered = prediction.basis === "estimate" || prediction.basis === "first_guess";
   const firstGuess = prediction.basis === "first_guess";
   const todayTurn = dayMidTurn(day, length);
   const progressEnd = polarPoint(CENTER, PROGRESS_RADIUS, todayTurn);
@@ -143,11 +131,9 @@ function Marks({ ring, loggedDays }: { ring: RingFacts; loggedDays: CalendarDate
   let fertile: string | null = null;
   let band: string | null = null;
   let ovulation: { x: number; y: number } | null = null;
-  if (offered && prediction.nextPeriodStart) {
-    const predictedStart = dayOf(
-      latest,
-      addDays(prediction.nextPeriodStart, -prediction.uncertaintyDays),
-    );
+  if (offered && prediction.nextPeriod) {
+    // The next period from the start of the API's band to the ring's end.
+    const predictedStart = dayOf(latest, prediction.nextPeriod.start);
     predicted = arcPath(CENTER, TRACK_RADIUS, dayStartTurn(predictedStart, length), 1);
   }
   if (offered && prediction.fertileWindow) {
@@ -159,14 +145,17 @@ function Marks({ ring, loggedDays }: { ring: RingFacts; loggedDays: CalendarDate
     );
   }
   if (offered && prediction.ovulation) {
-    const ovulationDay = dayOf(latest, prediction.ovulation);
     band = arcPath(
       CENTER,
       BAND_RADIUS,
-      dayStartTurn(ovulationDay - prediction.ovulationBandDays, length),
-      dayEndTurn(ovulationDay + prediction.ovulationBandDays, length),
+      dayStartTurn(dayOf(latest, prediction.ovulation.start), length),
+      dayEndTurn(dayOf(latest, prediction.ovulation.end), length),
     );
-    ovulation = polarPoint(CENTER, TRACK_RADIUS, dayMidTurn(ovulationDay, length));
+    ovulation = polarPoint(
+      CENTER,
+      TRACK_RADIUS,
+      dayMidTurn(dayOf(latest, prediction.ovulation.expected), length),
+    );
   }
 
   return (
@@ -221,7 +210,8 @@ export function CycleRing(props: CycleRingProps) {
   const loggedSpan = [...loggedDays]
     .sort(compareDates)
     .filter((date) => compareDates(date, today) <= 0);
-  const ovulation = ring ? ovulationSentence(ring.prediction) : null;
+  const estimate = ring ? estimateSentence(ring.prediction) : null;
+  const ovulation = ring ? fertileSentence(ring.prediction) : null;
 
   return (
     <figure className={rootClass} aria-busy={loading || undefined}>
@@ -270,7 +260,7 @@ export function CycleRing(props: CycleRingProps) {
                 </>
               ) : null}
             </p>
-            <p className={`estimate ${styles.estimateLine}`}>{estimateSentence(ring.prediction)}</p>
+            {estimate ? <p className={`estimate ${styles.estimateLine}`}>{estimate}</p> : null}
             {ovulation ? <p className={styles.fact}>{ovulation}</p> : null}
           </>
         ) : null}

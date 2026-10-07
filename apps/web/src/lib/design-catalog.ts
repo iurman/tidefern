@@ -433,6 +433,52 @@ export const specimenGroups: readonly CatalogGroup[] = [
         description:
           "The quick-log sheet for one day: flow, symptoms, mood and a note, from the shared parts.",
       },
+      {
+        name: "Day sheet, spotting day",
+        source: `${ui}day-sheet.tsx`,
+        description: "Spotting is not a period: the switch stays off and the scale keeps Spotting.",
+      },
+      {
+        name: "Day sheet, saving",
+        source: `${ui}day-sheet.tsx`,
+        description: "Save reads Saving at the same width while the answer is on its way.",
+      },
+      {
+        name: "Day sheet, saved",
+        source: `${ui}day-sheet.tsx`,
+        description: "The saved line beside Save, with Undo for ten seconds.",
+      },
+      {
+        name: "Day sheet, a part failed",
+        source: `${ui}day-sheet.tsx`,
+        description: "Each failure under the part that failed, each with its own Try again.",
+      },
+      {
+        name: "Day sheet, shared note",
+        source: `${ui}day-sheet.tsx`,
+        description: "A note already shared, read-only and labelled by who can read it.",
+      },
+      {
+        name: "Day sheet, sharing a note",
+        source: `${ui}day-sheet.tsx`,
+        description: "The confirm step that says where the note goes and that sharing is one way.",
+      },
+      {
+        name: "Day sheet, pregnancy",
+        source: `${ui}day-sheet.tsx`,
+        description: "No Period switch and no flow scale: symptoms, mood and the note.",
+      },
+      {
+        name: "Day sheet, as a page",
+        source: `${ui}day-sheet.tsx`,
+        description:
+          "The page at /log/[date]: the date as the heading, the days and Close as links.",
+      },
+      {
+        name: "Day log form",
+        source: `${ui}day-sheet.tsx`,
+        description: "The sheet's form on its own, for the open card on Today.",
+      },
     ],
   },
 ];
