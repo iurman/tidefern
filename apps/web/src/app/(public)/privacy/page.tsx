@@ -111,7 +111,7 @@ export default function PrivacyPage() {
             {
               term: THEME_KEY,
               detail:
-                "Appearance: stored only when you pick light or dark with the theme control, so the choice holds across visits. Leave it unset and the site follows your system. To stop storing it, clear this site's data in your browser.",
+                "Appearance: stored only when you pick light or dark with the theme control, so the choice holds across visits. Leave it unset and the site follows your system. To stop storing it, choose Follow system under Theme in Settings.",
             },
             {
               term: SOUND_KEY,
