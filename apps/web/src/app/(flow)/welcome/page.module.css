@@ -1,22 +1,28 @@
-/* The placeholder's one statement; task H1 replaces the page and this module with it. */
+/* The page's one H1 names it quietly, as an eyebrow, so the step's own question (an H2) is what the
+   eye lands on; DESIGN.md 3.2 draws the steps and nothing above them. */
 .page {
   display: grid;
-  justify-items: start;
+  gap: var(--space-6);
+  min-width: 0;
 }
 
 .heading {
-  font-size: var(--type-heading);
-  line-height: 1.15;
-  margin-bottom: var(--space-4);
-  text-wrap: balance;
+  margin: 0;
+  font-family: var(--font-figtree), Arial, sans-serif;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  letter-spacing: var(--tracking-eyebrow);
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .lede {
+  margin: 0;
+  max-width: 40ch;
   font-size: var(--type-intro);
   line-height: 1.5;
   color: var(--muted);
-  max-width: 40ch;
-  margin-bottom: var(--space-8);
 }
 
 .tide {
