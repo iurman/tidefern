@@ -32,6 +32,17 @@ then the SQL goes into the file it created. Commit the SQL together with
 `drizzle/meta/_journal.json` and the snapshot exactly as drizzle-kit wrote
 them; never edit the journal by hand and never run `drizzle-kit up`.
 
+When another migration reaches main first, generate yours again on top of
+it rather than renaming your files onto the next number: start from main's
+journal, delete your SQL file and snapshot, run the same command, paste the
+SQL back in, and run `pnpm --filter @tidefern/db exec drizzle-kit check`.
+A renamed migration keeps a snapshot whose parent is now another
+migration's parent (the next `drizzle-kit generate` reports a collision
+and writes nothing), and it can keep a `when` older than the entry above
+it, which the migrator then skips on every database that already has that
+entry while a fresh test database applies it anyway. `src/schema.test.ts`
+fails on both.
+
 The Vercel build command runs `pnpm -w db:migrate` before `next build`, so
 every environment migrates itself. Migrations are expand then contract: a
 migration must run correctly under the previous deployment's code. The
@@ -90,6 +101,15 @@ is rejected before the transaction opens.
 seeds, sweeps and backfills. The policy helpers (task B8) honour
 `app.system` only when `current_user` is not `tidefern_app`, so an app
 connection can never claim system context.
+
+That is also why no request path uses `withSystem`: the request pool is
+`tidefern_app` on CI and in production, where it gets neither system
+context nor an actor, so it reads nothing under RLS and every guarded
+write is refused. A request runs as the person
+inside `withActor`, and a step her own policies refuse goes through a
+narrow `SECURITY DEFINER` function that re-checks the actor itself, as
+`cycle_status_for()` and `refresh_cycle_prediction()` (task B14) and
+`revoke_closure_grants()` (task E10) do.
 
 Both helpers take the database as their last argument, defaulting to the
 production client, so tests pass the PGlite instance.
@@ -244,6 +264,7 @@ behaviour on PGlite inside `withActor`, which drops to `tidefern_app`.
 | `accept_invitation(invitation_id)` | definer, writes | sets `accepted_at` on an open invitation to the actor's verified email and nothing else; true when it closed one |
 | `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise. Since migration `0011` (task E11) "today" is the instant in `app.calendar_now` when the transaction carries one, else `now()` |
 | `refresh_cycle_prediction(subject)` | definer, writes | migration `0010`, task B14: when `can_write(subject, 'cycle.history')` holds, keeps the live `cycle_predictions` row equal to the entries and pregnancies and answers true; false and nothing written otherwise |
+| `revoke_closure_grants(closing_at)` | definer, writes | migration `0013`, task E10: when the current actor has an open closure, revokes every live grant she owns or holds at `closing_at`, files one `grant.revoke` audit row per grant in her name (the child as subject for a child grant, the owner otherwise) and answers true; false and nothing written with no actor, no instant or no open closure. It takes no person, so it acts on nobody else |
 
 The `category` argument is text and the policies pass the literal they file
 under, so a row never spans categories except `cycle_entries`, where either
@@ -253,13 +274,13 @@ a child record is the child (architecture record 8.3). `journal.private`
 is never granted: both helpers return false for it unless the actor is the
 subject. A grant is active while `revoked_at` is null; there is no expiry
 column, as in `can()`. Every helper is `STABLE` with `SET search_path =
-pg_catalog, public`, except `accept_invitation()`, which is `VOLATILE`
-because it writes. `current_actor()`, `is_system()` and
+pg_catalog, public, pg_temp`, except `accept_invitation()`, which is
+`VOLATILE` because it writes. `current_actor()`, `is_system()` and
 `in_policy_helper()` carry `COST 1` so they stay the cheapest arm of every
 policy; Postgres keeps the written order only among terms of equal cost,
 and the lookup helpers keep the default cost of 100.
 
-Two rules the SQL has to keep that `can()` never faces:
+Three rules the SQL has to keep that `can()` never faces:
 
 - `is_system()` appears only in policy expressions, never inside a helper.
   Inside a `SECURITY DEFINER` body `current_user` is the function owner, so
@@ -276,12 +297,24 @@ Two rules the SQL has to keep that `can()` never faces:
   and `invitations_update` does too, for the one write a helper makes
   (`accept_invitation()`). Migration `0010` adds the marker to
   `cycle_entries_select` and `pregnancies_select` for the two cycle
-  functions below.
+  functions below. Migration `0013` adds it to `grants_update` and
+  `audit_events_insert` for `revoke_closure_grants()`, and there only for
+  the current actor's own rows: a grant she is a party to, an audit row in
+  her own name.
   The marker counts only when `current_user` is not `tidefern_app`, so the
   app role setting it by hand changes nothing. `src/rls.test.ts` proves
   that from both roles, and its last block re-owns the helpers to a role
   that cannot bypass RLS (the shape of a Neon owner) and runs the scenarios
   again; task B10 repeats the check on a real Neon branch.
+- Every function's `search_path` ends with `pg_temp`. Left out of the
+  path, the session's temporary schema is searched first for tables and
+  types, and the app role may create temporary tables, so it could hand a
+  helper its own `child_guardians` or `grants` and be told it guards a
+  child or holds a grant. Migrations `0007`, `0010` and `0011` wrote
+  `pg_catalog, public`; migration `0013` (task E10) moved `pg_temp` to the
+  end of every path, and `src/e10-closure-grants.test.ts` fails on any
+  function in `public` whose path does not end that way, and shows four
+  such attempts failing.
 
 #### The policies
 
@@ -323,8 +356,10 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   shows nothing about another member's records (architecture record 8.1).
 - `grants`: both parties see a grant; only the owner makes one, and a child
   grant only by a guardian of that child; the owner or a co-guardian
-  revokes (an update); the owner removes the row. `consents`: the subject,
-  or a guardian consenting on a child's behalf and recorded as such.
+  revokes (an update), and a person closing her account revokes the grants
+  she holds as well through `revoke_closure_grants()`; the owner removes
+  the row. `consents`: the subject, or a guardian consenting on a child's
+  behalf and recorded as such.
 - `children` and `child_guardians`: a child is visible through
   `can_read(id, 'child')`, so a household partner without guardianship or a
   grant sees none; an active member of the household creates a child and
@@ -337,7 +372,9 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   an actor appends only as herself and only about a subject she holds a
   key relationship to (`can_use_key`: herself, a child she guards, a person
   who granted to her, or that child), so nobody files a read that could not
-  have happened; nothing edits the log and only the system removes. `data_requests`: hers to read, file and cancel; the
+  have happened; the one exception is `revoke_closure_grants()`, which
+  files a closing person's revocations in her name even for a child she no
+  longer guards; nothing edits the log and only the system removes. `data_requests`: hers to read, file and cancel; the
   system closes. `disclosures`: hers to read, the product's to write.
 
 #### The derived cycle status and the prediction refresh
@@ -661,6 +698,18 @@ a step that already ran finds nothing the second time.
 | `in_progress` | `rows` | One table of `closureDeletions`, in foreign key order |
 | `in_progress` | `tombstone` | `user_id` set to null and `email_hmac` to the HMAC of her email, then the `user` row deleted and her id stripped from the closure's own jobs (`forgetClosureJobs`), in one transaction |
 | `in_progress`, no user left | `done` | The content-free processor notice to the owner, then `completed` |
+
+Both ways into a closure, `POST /v1/me/close` and the consent withdrawal
+(`POST /v1/me/consents/{id}/withdraw`), run as the person inside
+`withActor` on the request pool (task E10): they take the closure's
+advisory lock, write the request row first, then call
+`revoke_closure_grants()` for the grants and end every other session
+(`session` sits outside RLS and the app role may write it). The undo, the
+state read and the export were always `withActor` paths.
+`src/e10-closure-grants.test.ts` proves the function's checks, its
+privileges and the two marker terms, and re-owns it to a role that cannot
+bypass RLS to prove the Neon path, including that each marker term is
+needed there.
 
 What this package holds for it, in `src/closure.ts`:
 

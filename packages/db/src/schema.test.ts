@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { eq, sql } from "drizzle-orm";
@@ -131,6 +131,9 @@ describe("the journal", () => {
       "0010_cycle_status_functions",
       "0011_cycle_status_calendar_clock",
       "0012_child_event_feed_method_and_diaper_contents",
+      // Task E10: the closure's grant revocation for the app role, and
+      // pg_temp last on every function's search_path.
+      "0013_closure_grant_revocation_and_search_path",
     ]);
 
     const files = readMigrationFiles(migrationConfig);
@@ -140,6 +143,47 @@ describe("the journal", () => {
       ),
     );
     expect(applied.map((row) => row.hash)).toEqual(files.map((file) => file.hash));
+  });
+
+  test("chains each snapshot to the one before it and stamps each entry later than the last", () => {
+    // The migrator applies an entry only when its `when` is newer than the
+    // newest applied row (drizzle-orm's pg migrator, and readLastApplied in
+    // src/migrate.ts), so an entry stamped before its predecessor is skipped
+    // on every database that already has the predecessor, while a fresh
+    // test database applies it anyway. Two snapshots naming one parent make
+    // the next drizzle-kit generate report a collision and write nothing. A
+    // migration moved onto a new number by renaming its files, instead of
+    // regenerated on top of main, does both.
+    const meta = join(migrationConfig.migrationsFolder, "meta");
+    const journal = JSON.parse(readFileSync(join(meta, "_journal.json"), "utf8")) as {
+      entries: { idx: number; tag: string; when: number }[];
+    };
+    const names = journal.entries.map(
+      (entry) => `${String(entry.idx).padStart(4, "0")}_snapshot.json`,
+    );
+    expect(
+      readdirSync(meta)
+        .filter((name) => name.endsWith("_snapshot.json"))
+        .sort(),
+    ).toEqual(names);
+
+    let parent = "00000000-0000-0000-0000-000000000000";
+    let stamped = 0;
+    journal.entries.forEach((entry, index) => {
+      expect(entry.idx, entry.tag).toBe(index);
+      expect(entry.when, `${entry.tag} is stamped after the entry before it`).toBeGreaterThan(
+        stamped,
+      );
+      const snapshot = JSON.parse(readFileSync(join(meta, names[index] as string), "utf8")) as {
+        id: string;
+        prevId: string;
+      };
+      expect(snapshot.prevId, `${entry.tag} names the snapshot before it as its parent`).toBe(
+        parent,
+      );
+      parent = snapshot.id;
+      stamped = entry.when;
+    });
   });
 
   test("creates the Better Auth tables with uuid ids and the two profile tables", async () => {

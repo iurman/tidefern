@@ -134,7 +134,11 @@ describe("migration 0011", () => {
           "TABLE(today date, cycle_day integer, period_day integer, in_fertile_window boolean)",
         definer: true,
         volatility: "s",
-        config: ["search_path=pg_catalog, public", "app.policy_helper=on"],
+        // 0011 restates the function with pg_catalog, public; task E10's
+        // migration (0013) then moves pg_temp to the end of every
+        // function's search_path, this one included, so a temporary table
+        // can never stand in for a real one. The marker stays as it was.
+        config: ["search_path=pg_catalog, public, pg_temp", "app.policy_helper=on"],
       },
     ]);
   });
