@@ -304,7 +304,10 @@ waiting for review, one line each:
   (no seeded case; a `summary` child grant); the line under Growth when the
   child's sex is not set, which also needs a place to set it (no edit screen
   exists yet); and the range context lines, which wait on the approval of
-  "Context ranges on `/family`".
+  "Context ranges on `/family`" and show meanwhile as "[OWNER] range line
+  feed-newborn, with its source line (American Academy of Pediatrics)" beside
+  the count they are context for, with one "[OWNER] attribution under the
+  cards for the published ranges" below the cards.
 - `[OWNER]` the growth attribution as the Growth tab shows it:
   `packages/core/data/SOURCES.md` "Attribution", the CDC sentence word for
   word, and the WHO sentence with the repository's "the files under `who/`"

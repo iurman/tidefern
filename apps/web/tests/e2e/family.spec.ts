@@ -239,7 +239,19 @@ test("Mira sees both children with their guardians, today's counts and the one w
   await expect(rows.filter({ hasText: "Last diaper" })).toContainText(
     `Today: ${diapers.length} (${wet} wet, ${dirty} dirty)`,
   );
-  await expect(page.getByText(/\[OWNER\]/)).toHaveCount(0);
+
+  // Published ranges (task F6) by age, as marked owner placeholders until their words are
+  // approved: none for Ilo (past a month, under four), a sleep range for Sol, and no figure.
+  await expect(ilo.getByText(/\[OWNER\]/)).toHaveCount(0);
+  const sol = page.getByRole("article", { name: "Sol" });
+  await expect(
+    sol
+      .locator("dl > div")
+      .filter({ hasText: "Last sleep" })
+      .getByText(/^\[OWNER\] range line sleep-1-to-2-years/),
+  ).toBeVisible();
+  await expect(sol.getByText(/\[OWNER\] range line (feed|wet-diaper)/)).toHaveCount(0);
+  await expect(page.getByText(/^\[OWNER\] attribution under the cards/)).toHaveCount(1);
   await expectNoOverflow(page, "/family as Mira");
 });
 
@@ -568,6 +580,16 @@ test("adding a child: the consent in full, the checks, a failure, then the child
   // The line outlives the page reading again: the control keeps its place in the tree.
   await expect(page.getByText("Ada was added.")).toBeVisible();
   await expect(page.getByRole("region", { name: "No child added yet" })).toHaveCount(0);
+  // Ten days old: the newborn feed and wet diaper ranges stand beside their counts, as marked
+  // owner placeholders, and no sleep range is shown before four months.
+  const rows = card.locator("dl > div");
+  await expect(rows.filter({ hasText: "Last feed" })).toContainText(
+    "[OWNER] range line feed-newborn",
+  );
+  await expect(rows.filter({ hasText: "Last diaper" })).toContainText(
+    "[OWNER] range line wet-diaper-after-first-days",
+  );
+  await expect(card.getByText(/range line sleep/)).toHaveCount(0);
   const href = await card
     .getByRole("link", { name: "Timeline, growth and milestones for Ada" })
     .getAttribute("href");
