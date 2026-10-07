@@ -7,6 +7,7 @@ import {
   decryptFieldFor,
   unwrapForSubject,
 } from "@tidefern/crypto";
+import { CHILD_CONSENT_DISCLOSURES } from "@tidefern/schemas";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { withActor, withSystem } from "../actor";
@@ -358,6 +359,57 @@ describe("the first run", () => {
       ),
     );
     expect(others).toEqual([{ n: 0 }]);
+  });
+
+  test("gives every feed its method and every diaper its contents (task E12)", async () => {
+    const logged = rows(
+      await harness.db.execute(
+        sql`select id::text as id, child_id::text as child, kind::text as kind, feed_method::text as method, side::text as side, quantity_ml as ml, diaper_contents::text as contents from child_events where kind in ('feed', 'diaper') order by id`,
+      ),
+    );
+    expect(logged).toEqual([
+      {
+        id: seedId(BLOCK.childEvents, 1),
+        child: ILO,
+        kind: "feed",
+        method: "bottle",
+        side: null,
+        ml: 90,
+        contents: null,
+      },
+      {
+        id: ILO_FEED_NOTE.id,
+        child: ILO,
+        kind: "feed",
+        method: "breast",
+        side: null,
+        ml: null,
+        contents: null,
+      },
+      {
+        id: seedId(BLOCK.childEvents, 4),
+        child: ILO,
+        kind: "diaper",
+        method: null,
+        side: null,
+        ml: null,
+        contents: "mixed",
+      },
+    ]);
+  });
+
+  test("records each child's consent, given by Mira, in the guardian's consent wording", async () => {
+    const disclosure = CHILD_CONSENT_DISCLOSURES["2026-10"];
+    const given = rows(
+      await harness.db.execute(
+        sql`select subject_id::text as subject, consenting_guardian_id::text as guardian, category::text as category, basis::text as basis, purpose, policy_version as version from consents where consenting_guardian_id is not null order by subject_id`,
+      ),
+    );
+    const expected = { guardian: MIRA.id, category: "child", version: "2026-10" };
+    expect(given).toEqual([
+      { subject: ILO, ...expected, basis: disclosure.basis, purpose: disclosure.purpose },
+      { subject: SOL, ...expected, basis: disclosure.basis, purpose: disclosure.purpose },
+    ]);
   });
 });
 

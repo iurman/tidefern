@@ -206,6 +206,71 @@ export const CONSENT_DISCLOSURES: Readonly<Record<ConsentTextVersion, ConsentDis
   },
 };
 
+/**
+ * The guardian's consent on a child's behalf (architecture record 8.4,
+ * "Children's records", and 7.4). A child's data is the child's consumer
+ * health data, so `POST /v1/children` writes one `consents` row in the same
+ * transaction as the child and its key: the child is the subject and the
+ * guardian adding the child is recorded as the one who consented. It keeps a
+ * version line of its own because it is a disclosure of its own, about
+ * another subject, given by another person at another moment than the
+ * collection consent. The add-a-child form shows the last version's `text`
+ * in full before an unchecked box; the client sends only that version, and
+ * the server writes the catalog's category, basis and purpose into the row
+ * and hashes the whole disclosure. A changed sentence is a new version; a
+ * version, once shipped, is never edited.
+ *
+ * The 2026-10 wording is a draft [OWNER]: the owner's attorney reviews it
+ * with the other consent texts before anyone outside the household signs
+ * up, a Phase 2 gate (docs/design/CONTENT.md). Withdrawing it is the child's
+ * closure path, which is not built yet, so the text does not describe it.
+ */
+export const childConsentTextVersions = ["2026-10"] as const;
+export type ChildConsentTextVersion = (typeof childConsentTextVersions)[number];
+
+/** One version of the guardian's consent on a child's behalf. */
+export interface ChildConsentDisclosure {
+  /** What the row files under: the child's own category. */
+  category: "child";
+  basis: ConsentBasis;
+  /** The sentence the row's `purpose` column holds, in the product's own words. */
+  purpose: string;
+  /** The disclosure the form shows in full before the box. */
+  text: string;
+}
+
+export const CHILD_CONSENT_DISCLOSURES: Readonly<
+  Record<ChildConsentTextVersion, ChildConsentDisclosure>
+> = {
+  "2026-10": {
+    category: "child",
+    basis: "necessary",
+    purpose: "Keep this child's feeds, sleep, diapers, growth and milestones.",
+    text: "You are adding this child as their parent or guardian. On the child's behalf, you agree that Tidefern keeps what is logged for them: feeds, sleep, diapers, growth, milestones and notes. Notes are stored encrypted. Every guardian of this child sees all of it, and anyone else only when a guardian shares this child with them.",
+  },
+};
+
+/**
+ * The guardian's consent as the add-a-child form collected it: the box the
+ * guardian checked (never pre-checked) and the version of the text the form
+ * showed. As with the collection consent, the client sends no sentence.
+ */
+export const GuardianConsentInput = z
+  .object({
+    given: z
+      .literal(true)
+      .describe("Set only by the guardian's own check of the box; the form never pre-checks it"),
+    textVersion: z
+      .enum(childConsentTextVersions)
+      .describe("The version of the guardian's consent text the form showed"),
+  })
+  .meta({
+    id: "GuardianConsentInput",
+    description:
+      "The guardian's consent on the child's behalf; a child is never created without it",
+  });
+export type GuardianConsentInput = z.infer<typeof GuardianConsentInput>;
+
 /** A version label such as `2026-10`: letters, digits, dots and hyphens only, never prose. */
 const versionLabel = z
   .string()

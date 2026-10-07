@@ -15,6 +15,8 @@ const CURSOR = /^[A-Za-z0-9_-]{1,200}={0,2}$/;
 const INTEGER = /^\d{1,4}$/;
 // Child event kinds. A vocabulary code, not a health word (lead ruling on E5).
 const CHILD_EVENT_KIND = /^(milestone|feed|sleep|diaper)$/;
+// A list's direction (task E12, the events list): says nothing about anyone.
+const ORDER = /^(asc|desc)$/;
 
 export const allowedQuery: Readonly<Record<string, RegExp>> = {
   subject: UUID,
@@ -26,6 +28,7 @@ export const allowedQuery: Readonly<Record<string, RegExp>> = {
   limit: INTEGER,
   age: INTEGER,
   kind: CHILD_EVENT_KIND,
+  order: ORDER,
 };
 
 /** Thrown, before any network call, for a query string the contract never carries. */

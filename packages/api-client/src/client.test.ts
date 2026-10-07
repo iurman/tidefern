@@ -117,6 +117,26 @@ describe("createApiClient", () => {
     expect(seen).toHaveLength(0);
   });
 
+  it("sends the events list's direction, and refuses any word in its place", async () => {
+    const { seen, fetch } = recorder(() => Response.json({ items: [], nextCursor: null }));
+    const client = createApiClient({ baseUrl: ORIGIN, fetch });
+    const id = "018bcfe5-6800-7000-8000-000000000002";
+
+    await client.GET("/api/v1/children/{id}/events", {
+      params: { path: { id }, query: { kind: "feed", order: "desc", limit: 1 } },
+    });
+    const url = new URL(seen[0]!.url);
+    expect(url.pathname).toBe(`/api/v1/children/${id}/events`);
+    expect(url.searchParams.get("order")).toBe("desc");
+    expect(url.searchParams.get("kind")).toBe("feed");
+
+    const call = client.GET("/api/v1/children/{id}/events", {
+      params: { path: { id }, query: { order: "newest" as never } },
+    });
+    await expect(call).rejects.toThrow(QueryNotAllowedError);
+    expect(seen).toHaveLength(1);
+  });
+
   it("refuses a known parameter whose value is not in its shape", async () => {
     const { seen, fetch } = recorder();
     const client = createApiClient({ baseUrl: ORIGIN, fetch });
