@@ -655,6 +655,9 @@ response contains no field outside the granted categories.
 6. Write an audit event for every partner read of a shared category
    (summarized per day), every partner write, and every grant change. Invitations write
    `invitation.create`, `invitation.withdraw` and `invitation.accept`.
+   Better Auth's hooks write `session.sign_in` when a request hands a person a
+   session she did not already hold, and `session.revoke` once per action that
+   signs out another of her devices; signing out the device in hand writes nothing.
 
 The scaffold already ships `can()` with tests for owner, guardian, summary
 versus read, revoked grants, per-child scoping, the private journal and the

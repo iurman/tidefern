@@ -5,6 +5,7 @@ import type { BetterAuthOptions } from "better-auth";
 import { twoFactor } from "better-auth/plugins";
 
 import { EnvKeyProvider } from "@tidefern/crypto";
+import type { ActorDatabase } from "@tidefern/db";
 // This package and withActor()/withSystem() inside packages/db are the only
 // importers of the raw client: Better Auth owns its tables and reads them as
 // the connection's own role. Importing it builds a pg Pool; nothing connects
@@ -19,12 +20,17 @@ import { chooseMailer } from "./mail/choose";
 import { passwordResetEmail, verificationEmail } from "./mail/templates";
 import { ConsoleMailer } from "./mailer";
 import type { Mailer } from "./mailer";
+import { sessionAudit } from "./sessions";
 
 const DAY = 60 * 60 * 24;
 
 export interface CreateAuthOptions {
-  /** A drizzle database; the pooled production client by default. */
-  database?: object | undefined;
+  /**
+   * A drizzle database; the pooled production client by default. The
+   * session audit writes `audit_events` through the same one, so the rows
+   * land beside the sessions they record.
+   */
+  database?: ActorDatabase | undefined;
   /** The drizzle schema the adapter maps models onto; the db package's by default. */
   schema?: Record<string, unknown> | undefined;
   /** Where verification and reset mail goes; stdout by default. */
@@ -36,7 +42,9 @@ export interface CreateAuthOptions {
   /**
    * Lifecycle hooks on the identity tables. The module-scope instance passes
    * `userKeyDatabaseHooks()` so every new user gets a wrapped DEK (task D2);
-   * tests pass the same factory with a fixed provider, or nothing.
+   * tests pass the same factory with a fixed provider, or nothing. The
+   * session audit's own hook arrives through its plugin, and Better Auth
+   * runs both.
    */
   databaseHooks?: BetterAuthOptions["databaseHooks"] | undefined;
 }
@@ -44,11 +52,13 @@ export interface CreateAuthOptions {
 /**
  * The Better Auth server, configured exactly as architecture section 6.1.
  * Everything that varies by environment arrives through `options`, so a test
- * builds one with fixed facts and an in-memory mailer.
+ * builds one with fixed facts and an in-memory mailer. Every instance audits
+ * sign-ins and device sign-outs (task C7); there is no switch for it.
  */
 export function createAuth(options: CreateAuthOptions) {
   const hosts = resolveHosts(options.hosts);
   const mailer = options.mailer ?? new ConsoleMailer();
+  const database = options.database ?? productionDb;
 
   return betterAuth({
     appName: "Tidefern",
@@ -62,7 +72,7 @@ export function createAuth(options: CreateAuthOptions) {
     basePath: "/api/auth",
     trustedOrigins: hosts.trustedOrigins,
 
-    database: drizzleAdapter(options.database ?? productionDb, {
+    database: drizzleAdapter(database, {
       provider: "pg",
       schema: options.schema ?? productionSchema,
     }),
@@ -115,6 +125,10 @@ export function createAuth(options: CreateAuthOptions) {
       // (architecture 6.1). Passkeys are the convenient path instead.
       twoFactor({ issuer: "Tidefern" }),
       passkey({ rpID: hosts.rpID, rpName: "Tidefern", origin: hosts.passkeyOrigin }),
+      // Last on purpose: plugin after-hooks run in this order, and two-factor's
+      // deletes the session a password sign-in makes while the second factor
+      // is still owed, so the audit sees only the sessions that stand.
+      sessionAudit({ database }),
     ],
   });
 }
@@ -149,3 +163,5 @@ export const auth: Auth = createAuth({
 
 export { createUserKeyHook, userKeyDatabaseHooks } from "./keys";
 export type { DatabaseHooks, UserCreatedHook, UserKeyHookOptions } from "./keys";
+export { REVOKE_PATHS, SESSION_AUDIT_PLUGIN_ID, sessionAudit } from "./sessions";
+export type { SessionAuditOptions } from "./sessions";
