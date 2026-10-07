@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { addDays, diffDays } from "./dates";
+import { addDays } from "./dates";
+import { DAYS_PER_MONTH } from "./growth";
 import {
   INFANT_CONTEXT_RANGES,
   INFANT_CONTEXT_SOURCES,
@@ -86,14 +87,17 @@ describe("infantContext sleep bands", () => {
     expect(at("2033-01-15")).toMatchObject({ low: 8, high: 10, includesNaps: false });
   });
   it("never gives a sleep range on any day before 4 months", () => {
+    const found: string[] = [];
     for (const born of ["2026-01-31", "2026-02-01", "2025-10-31", "2024-02-29"]) {
       let today = born;
       while (completedMonths(born, today) < 4) {
-        expect(infantContext("sleep", born, today)).toBeNull();
+        const id = idOn("sleep", born, today);
+        if (id) found.push(`${id} on ${today} from ${born}`);
         today = addDays(today, 1);
       }
-      expect(infantContext("sleep", born, today)).not.toBeNull();
+      expect(idOn("sleep", born, today)).toBe("sleep-4-to-12-months");
     }
+    expect(found).toEqual([]);
   });
 });
 
@@ -138,12 +142,14 @@ describe("infantContext newborn bands", () => {
   });
   it("never gives a feed or wet diaper range after the first month", () => {
     const born = "2026-03-15";
-    let today = "2026-04-15";
-    while (today < "2032-03-15") {
-      expect(infantContext("feed", born, today)).toBeNull();
-      expect(infantContext("wetDiaper", born, today)).toBeNull();
-      today = addDays(today, 1);
+    const found: string[] = [];
+    for (let today = "2026-04-15"; today < "2032-03-15"; today = addDays(today, 1)) {
+      for (const kind of ["feed", "wetDiaper"] as const) {
+        const id = idOn(kind, born, today);
+        if (id) found.push(`${id} on ${today}`);
+      }
     }
+    expect(found).toEqual([]);
   });
 });
 
@@ -184,32 +190,61 @@ describe("infant context data", () => {
       expect((range.band.from as { months: number }).months).toBeGreaterThanOrEqual(4);
     }
   });
-  it("lets no two bands of a kind overlap and leaves no gap inside a run of bands", () => {
+  it("keeps each kind's bands in order, none empty, each ending where the next begins", () => {
+    for (const kind of KINDS) {
+      const bands = INFANT_CONTEXT_RANGES.filter((range) => range.kind === kind).map(
+        (range) => range.band,
+      );
+      bands.forEach(({ from, until }, index) => {
+        if ("days" in from && "days" in until) expect(from.days).toBeLessThan(until.days);
+        else if ("months" in from && "months" in until)
+          expect(from.months).toBeLessThan(until.months);
+        // A day edge before a month edge: no month is shorter than 28 days.
+        else
+          expect("days" in from && "months" in until && from.days < 28 * until.months).toBe(true);
+        if (index > 0) expect(from).toEqual(bands[index - 1]?.until);
+      });
+    }
+  });
+  it("agrees with an oracle on real calendars around every edge", () => {
     // An oracle written apart from the module: a band holds the days from its
-    // `from` edge up to, not including, its `until` edge.
+    // `from` edge up to, not including, its `until` edge. It is checked on
+    // every day of the first 15 months (the day, 1 month, 4 month and 1 year
+    // edges) and on the days around the 3, 6, 13 and 19 year birthdays.
     const reachedOn = (edge: AgeEdge, days: number, months: number) =>
       "days" in edge ? days >= edge.days : months >= edge.months;
-    for (const born of ["2024-02-29", "2025-10-31", "2026-01-31"]) {
-      const covered: Record<InfantContextKind, string[]> = { feed: [], wetDiaper: [], sleep: [] };
-      for (let day = 0; day < 20 * 366; day += 1) {
+    const problems: string[] = [];
+    for (const born of ["2024-02-29", "2025-10-31", "2026-01-31", "2026-02-01"]) {
+      const days = new Set<number>();
+      for (let day = 0; day < 460; day += 1) days.add(day);
+      for (const months of [36, 72, 156, 228]) {
+        const centre = Math.round(months * DAYS_PER_MONTH);
+        const before = completedMonths(born, addDays(born, centre - 5));
+        const after = completedMonths(born, addDays(born, centre + 5));
+        if (before >= months || after < months)
+          problems.push(`no ${months} month edge near day ${centre}`);
+        for (let day = centre - 5; day <= centre + 5; day += 1) days.add(day);
+      }
+      for (const day of days) {
         const today = addDays(born, day);
         const months = completedMonths(born, today);
-        expect(diffDays(born, today)).toBe(day);
         for (const kind of KINDS) {
           const holding = INFANT_CONTEXT_RANGES.filter(
-            ({ kind: rangeKind, band }) =>
-              rangeKind === kind &&
-              reachedOn(band.from, day, months) &&
-              !reachedOn(band.until, day, months),
-          );
-          expect(holding.length, `${kind} on day ${day} from ${born}`).toBeLessThanOrEqual(1);
-          expect(infantContext(kind, born, today)?.id ?? null).toBe(holding[0]?.id ?? null);
-          covered[kind].push(holding.length === 1 ? "1" : "0");
+            (range) =>
+              range.kind === kind &&
+              reachedOn(range.band.from, day, months) &&
+              !reachedOn(range.band.until, day, months),
+          ).map((range) => range.id);
+          const found = idOn(kind, born, today);
+          if (holding.length > 1 || found !== (holding[0] ?? null)) {
+            problems.push(
+              `${kind} on ${today} from ${born}: oracle ${holding.join(" and ")}, got ${found}`,
+            );
+          }
         }
       }
-      // Each kind is covered in one unbroken stretch of days.
-      for (const kind of KINDS) expect(covered[kind].join("").match(/1+/g)).toHaveLength(1);
     }
+    expect(problems).toEqual([]);
   });
   it("labels bands in plain words with no verdict in them", () => {
     // "too" covers "too few" and "too many"; AAP's "the first few days" is a time, not a verdict.
