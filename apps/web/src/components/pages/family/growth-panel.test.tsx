@@ -3,10 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ILO_ID, SOL_ID, measurement } from "./fixtures";
 import { GrowthPanel, chartSeries } from "./growth-panel";
-import { fakeApi, json, openDialogs, problem, words } from "./test-api";
+import { fakeApi, json, openDialogs, problem, scrollSpy, words } from "./test-api";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+const play = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sound", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sound")>()),
+  play,
+}));
 
 const CARE = "This is worth mentioning to your doctor or midwife.";
 let api: ReturnType<typeof fakeApi>;
@@ -15,6 +20,7 @@ beforeAll(openDialogs);
 
 beforeEach(() => {
   refresh.mockClear();
+  play.mockReset();
   api = fakeApi();
 });
 
@@ -189,6 +195,9 @@ describe("GrowthPanel", () => {
     const sheet = screen.getByRole("dialog", { name: "Add a measurement for Sol" });
     await user.click(within(sheet).getByRole("button", { name: "Save" }));
     expect(within(sheet).getByText("Enter at least one measurement.")).toBeInTheDocument();
+    expect(within(sheet).getByRole("textbox", { name: "Weight" })).toHaveFocus();
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledWith("error");
     expect(api.calls).toEqual([]);
     await user.click(within(sheet).getByRole("radio", { name: "lb and in" }));
     expect(
@@ -200,6 +209,8 @@ describe("GrowthPanel", () => {
     expect(
       await within(sheet).findByText("That date is before Sol was born. Check the date."),
     ).toBeInTheDocument();
+    expect(within(sheet).getByRole("textbox", { name: "Month" })).toHaveFocus();
+    expect(play).toHaveBeenCalledTimes(2);
     await user.click(within(sheet).getByRole("button", { name: "Save" }));
     expect(await screen.findByText("Measurement added.")).toBeInTheDocument();
     expect(screen.queryByRole("dialog")).toBeNull();
@@ -207,5 +218,27 @@ describe("GrowthPanel", () => {
     expect(body).toMatchObject({ date: "2026-10-04", weightGrams: 13608, lengthMillimetres: 919 });
     expect(body).not.toHaveProperty("headMillimetres");
     expect(refresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps Save in view when a failure line lands above it", async () => {
+    const spy = scrollSpy();
+    try {
+      const user = userEvent.setup();
+      api.route(`POST /api/v1/children/${SOL_ID}/measurements`, problem(500));
+      sol();
+      await user.click(screen.getByRole("button", { name: "Add a measurement" }));
+      const sheet = screen.getByRole("dialog", { name: "Add a measurement for Sol" });
+      await user.type(within(sheet).getByRole("textbox", { name: "Weight" }), "13.9");
+      await user.click(within(sheet).getByRole("button", { name: "Save" }));
+      expect(
+        await within(sheet).findByText("We could not save this measurement. Try again."),
+      ).toBeInTheDocument();
+      expect(spy.scroll).toHaveBeenLastCalledWith({ block: "nearest" });
+      expect(spy.targets().at(-1)).toContainElement(
+        within(sheet).getByRole("button", { name: "Save" }),
+      );
+    } finally {
+      spy.restore();
+    }
   });
 });

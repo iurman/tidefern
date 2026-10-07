@@ -3,10 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ILO_ID, event } from "./fixtures";
 import { QuickLog, UNDO_WINDOW_MS } from "./quick-log";
-import { fakeApi, json, openDialogs, problem, type Call } from "./test-api";
+import { fakeApi, json, openDialogs, problem, scrollSpy, type Call } from "./test-api";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+const play = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sound", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sound")>()),
+  play,
+}));
 
 const today = "2026-10-04";
 let api: ReturnType<typeof fakeApi>;
@@ -15,6 +20,7 @@ beforeAll(openDialogs);
 
 beforeEach(() => {
   refresh.mockClear();
+  play.mockReset();
   api = fakeApi();
 });
 
@@ -110,6 +116,28 @@ describe("QuickLog", () => {
     expect((second?.body as { id: string }).id).toBe((first?.body as { id: string }).id);
   });
 
+  it("keeps Save in view when a failure line lands above it", async () => {
+    const spy = scrollSpy();
+    try {
+      const user = userEvent.setup();
+      api.route(`POST /api/v1/children/${ILO_ID}/events`, problem(503));
+      quickLog();
+      await user.click(screen.getByRole("button", { name: "Diaper for Ilo" }));
+      const sheet = screen.getByRole("dialog", { name: "Log a diaper for Ilo" });
+      expect(spy.scroll).not.toHaveBeenCalled();
+      await user.click(within(sheet).getByRole("button", { name: "Save" }));
+      expect(
+        await within(sheet).findByText("We could not save this diaper. Try again."),
+      ).toBeInTheDocument();
+      expect(spy.scroll).toHaveBeenLastCalledWith({ block: "nearest" });
+      expect(spy.targets().at(-1)).toContainElement(
+        within(sheet).getByRole("button", { name: "Save" }),
+      );
+    } finally {
+      spy.restore();
+    }
+  });
+
   it("asks how a feed was given before it sends anything, and stores a bottle in millilitres", async () => {
     const user = userEvent.setup();
     api.route(`POST /api/v1/children/${ILO_ID}/events`, json({ id: "x" }, 201));
@@ -130,6 +158,26 @@ describe("QuickLog", () => {
       feedMethod: "bottle",
       quantityMl: 89,
     });
+  });
+
+  it("says a failed check out loud: the error cue once, and focus on the field to fix", async () => {
+    const user = userEvent.setup();
+    quickLog();
+    await user.click(screen.getByRole("button", { name: "Feed for Ilo" }));
+    const sheet = screen.getByRole("dialog", { name: "Log a feed for Ilo" });
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    expect(within(sheet).getByRole("radio", { name: "Breast" })).toHaveFocus();
+    expect(within(sheet).getByRole("radio", { name: "Breast" })).not.toBeChecked();
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledWith("error");
+    await user.click(within(sheet).getByRole("radio", { name: "Bottle" }));
+    await user.type(within(sheet).getByRole("textbox", { name: "Amount" }), "2500");
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    const amount = within(sheet).getByRole("textbox", { name: "Amount" });
+    expect(amount).toHaveFocus();
+    expect(amount).toHaveAttribute("aria-invalid", "true");
+    expect(play).toHaveBeenCalledTimes(2);
+    expect(api.calls).toEqual([]);
   });
 
   it("times a breast feed on the client and posts it once, at Stop, with both instants", async () => {

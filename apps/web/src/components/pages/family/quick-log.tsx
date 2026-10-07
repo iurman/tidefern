@@ -21,6 +21,7 @@ import {
   type Result,
 } from "./mutations";
 import type { ChildEvent, DiaperContents, FeedMethod, FeedSide, UnitSystem } from "./types";
+import { useActionsInView, useInvalidFields } from "./form-feedback";
 import styles from "./family.module.css";
 
 const copy = familyCopy.log;
@@ -117,6 +118,10 @@ export function QuickLog({
   /** One write at a time; a ref, because a second press can land before React re-renders. */
   const busy = useRef(false);
   const lines = useRef(0);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const flagInvalid = useInvalidFields(formRef);
+  /** One form is open at a time, so its Save row is the one this keeps in view. */
+  const actions = useActionsInView(error?.id ?? null);
 
   useEffect(() => {
     // An Undo she started keeps its control until it answers, even past the window.
@@ -200,12 +205,14 @@ export function QuickLog({
     event.preventDefault();
     if (method === null) {
       setFieldError({ method: copy.chooseMethod });
+      flagInvalid();
       return;
     }
     if (method === "bottle" && volume !== null && (volume < 1 || volume > MAX_ML)) {
       setFieldError({
         amount: units === "imperial" ? copy.amountTooMuchImperial : copy.amountTooMuch,
       });
+      flagInvalid();
       return;
     }
     setFieldError({});
@@ -343,7 +350,7 @@ export function QuickLog({
       ) : null}
       <BottomSheet open={sheet !== null} onClose={close} title={title}>
         {sheet === "feed" ? (
-          <form className={styles.sheetForm} onSubmit={saveFeed} noValidate>
+          <form ref={formRef} className={styles.sheetForm} onSubmit={saveFeed} noValidate>
             <SegmentedControl<FeedMethod | "">
               label={copy.method}
               options={methodOptions}
@@ -408,7 +415,7 @@ export function QuickLog({
               />
             ) : null}
             {failure}
-            <div className={styles.sheetActions}>
+            <div ref={actions} className={styles.sheetActions}>
               <Button
                 type="submit"
                 className={styles.steady}
@@ -430,7 +437,7 @@ export function QuickLog({
             />
             <p className={styles.help}>{copy.contentsHelp}</p>
             {failure}
-            <div className={styles.sheetActions}>
+            <div ref={actions} className={styles.sheetActions}>
               <Button
                 type="submit"
                 className={styles.steady}
@@ -450,7 +457,7 @@ export function QuickLog({
                 : copy.sleepStarts(childName)}
             </p>
             {failure}
-            <div className={styles.sheetActions}>
+            <div ref={actions} className={styles.sheetActions}>
               <Button
                 type="submit"
                 className={styles.steady}

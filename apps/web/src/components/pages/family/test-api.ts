@@ -66,6 +66,27 @@ export function openDialogs() {
   };
 }
 
+/**
+ * jsdom has no `scrollIntoView`; this lends every element one that records
+ * which element asked and how, until `restore()` takes it away again.
+ */
+export function scrollSpy() {
+  const scroll = vi.fn<(this: Element, options?: ScrollIntoViewOptions) => void>();
+  Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+    value: scroll,
+    configurable: true,
+    writable: true,
+  });
+  return {
+    scroll,
+    /** The elements that were scrolled into view, in order. */
+    targets: () => scroll.mock.contexts as Element[],
+    restore() {
+      delete (HTMLElement.prototype as { scrollIntoView?: unknown }).scrollIntoView;
+    },
+  };
+}
+
 /** Collapses every run of white space, the no-break spaces between numbers and units included. */
 export function words(text: string | null | undefined): string {
   return (text ?? "").replace(/\s+/g, " ").trim();

@@ -3,10 +3,15 @@ import userEvent from "@testing-library/user-event";
 import { CHILD_CONSENT_DISCLOSURES } from "@tidefern/schemas";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddChild } from "./add-child";
-import { fakeApi, json, openDialogs, problem } from "./test-api";
+import { fakeApi, json, openDialogs, problem, scrollSpy } from "./test-api";
 
 const refresh = vi.fn();
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh }) }));
+const play = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sound", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sound")>()),
+  play,
+}));
 
 const today = "2026-10-04";
 let api: ReturnType<typeof fakeApi>;
@@ -15,6 +20,7 @@ beforeAll(openDialogs);
 
 beforeEach(() => {
   refresh.mockClear();
+  play.mockReset();
   api = fakeApi();
 });
 
@@ -63,6 +69,26 @@ describe("AddChild", () => {
     expect(api.calls).toEqual([]);
   });
 
+  it("says a failed check out loud: the error cue once, and focus on the first field marked", async () => {
+    const { user, sheet } = await openSheet();
+    await user.click(within(sheet).getByRole("button", { name: "Add the child" }));
+    const name = within(sheet).getByRole("textbox", { name: /^Name/ });
+    expect(name).toHaveFocus();
+    expect(name).toHaveAccessibleDescription(/Enter the child's name\./);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(play).toHaveBeenCalledWith("error");
+    await fill(user, sheet, "2026-10-05");
+    await user.click(within(sheet).getByRole("button", { name: "Add the child" }));
+    expect(within(sheet).getByRole("textbox", { name: "Month" })).toHaveFocus();
+    expect(play).toHaveBeenCalledTimes(2);
+    await user.clear(within(sheet).getByRole("textbox", { name: "Day" }));
+    await user.type(within(sheet).getByRole("textbox", { name: "Day" }), "01");
+    await user.click(within(sheet).getByRole("button", { name: "Add the child" }));
+    expect(within(sheet).getByRole("checkbox", { name: /I agree/ })).toHaveFocus();
+    expect(play).toHaveBeenCalledTimes(3);
+    expect(api.calls).toEqual([]);
+  });
+
   it("sends the child with the consent version, says so, and reads the page again", async () => {
     api.route("POST /api/v1/children", json({ id: "x" }, 201));
     const { user, sheet } = await openSheet();
@@ -96,10 +122,32 @@ describe("AddChild", () => {
     await user.click(within(sheet).getByRole("checkbox", { name: /I agree/ }));
     await user.click(within(sheet).getByRole("button", { name: "Add the child" }));
     expect(await within(sheet).findByText("Enter the date of birth.")).toBeInTheDocument();
+    expect(within(sheet).getByRole("textbox", { name: "Month" })).toHaveFocus();
+    expect(play).toHaveBeenCalledWith("error");
     await user.click(within(sheet).getByRole("button", { name: "Add the child" }));
     expect(
       await within(sheet).findByText("We could not add the child. Try again."),
     ).toBeInTheDocument();
     expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("keeps Add the child in view when a failure line lands above it", async () => {
+    const spy = scrollSpy();
+    try {
+      api.route("POST /api/v1/children", problem(500));
+      const { user, sheet } = await openSheet();
+      await fill(user, sheet, "2026-09-24");
+      await user.click(within(sheet).getByRole("checkbox", { name: /I agree/ }));
+      await user.click(within(sheet).getByRole("button", { name: "Add the child" }));
+      expect(
+        await within(sheet).findByText("We could not add the child. Try again."),
+      ).toBeInTheDocument();
+      expect(spy.scroll).toHaveBeenLastCalledWith({ block: "nearest" });
+      expect(spy.targets().at(-1)).toContainElement(
+        within(sheet).getByRole("button", { name: "Add the child" }),
+      );
+    } finally {
+      spy.restore();
+    }
   });
 });

@@ -533,6 +533,8 @@ test("adding a child: the consent in full, the checks, a failure, then the child
   await expect(sheet.getByText("Enter the child's name.")).toBeVisible();
   await expect(sheet.getByText("Enter the date of birth.")).toBeVisible();
   await expect(sheet.getByText("Tick the box to add the child.")).toBeVisible();
+  // Focus goes to the first field marked, so a screen reader hears its label and error together.
+  await expect(sheet.getByRole("textbox", { name: /^Name/ })).toBeFocused();
 
   await sheet.getByRole("textbox", { name: /^Name/ }).fill("Ada");
   await typeDate(sheet, family.dateOfBirth);
@@ -793,6 +795,7 @@ test("growth on a fresh child: a measurement refused before birth, one added, th
   await sheet.getByRole("textbox", { name: "Weight", exact: true }).fill("3.6");
   await sheet.getByRole("button", { name: "Save" }).click();
   await expect(sheet.getByText("That date is before Ada was born. Check the date.")).toBeVisible();
+  await expect(sheet.getByRole("textbox", { name: "Month" })).toBeFocused();
 
   await typeDate(sheet, family.me.today);
   await sheet.getByRole("button", { name: "Save" }).click();

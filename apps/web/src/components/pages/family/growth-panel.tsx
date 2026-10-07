@@ -27,6 +27,7 @@ import {
   type NewMeasurement,
 } from "./mutations";
 import type { ChildMeasurement, UnitSystem } from "./types";
+import { useActionsInView, useInvalidFields } from "./form-feedback";
 import styles from "./child.module.css";
 
 const copy = familyCopy.growth;
@@ -133,6 +134,9 @@ export function GrowthPanel({
   const attempt = useRef<Attempt | null>(null);
   const busy = useRef(false);
   const lines = useRef(0);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const flagInvalid = useInvalidFields(formRef);
+  const actions = useActionsInView(failure?.id ?? null);
 
   function nextId(): number {
     lines.current += 1;
@@ -159,7 +163,10 @@ export function GrowthPanel({
     if (weight === null && length === null && head === null) found.weight = copy.nothing;
     setErrors(found);
     setFailure(null);
-    if (Object.keys(found).length > 0 || date === null) return;
+    if (Object.keys(found).length > 0 || date === null) {
+      flagInvalid();
+      return;
+    }
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       setFailure({ text: familyCopy.failure.offline, id: nextId() });
       return;
@@ -196,6 +203,7 @@ export function GrowthPanel({
       }
       if (Object.keys(fields).length > 0) {
         setErrors(fields);
+        flagInvalid();
         return;
       }
     }
@@ -327,7 +335,7 @@ export function GrowthPanel({
           }}
           title={copy.addTitle(childName)}
         >
-          <form key={form} className={styles.sheetForm} onSubmit={submit} noValidate>
+          <form key={form} ref={formRef} className={styles.sheetForm} onSubmit={submit} noValidate>
             <SegmentedDateInput
               label={copy.date}
               order="mdy"
@@ -376,7 +384,7 @@ export function GrowthPanel({
                 {failure.text}
               </InlineFeedback>
             ) : null}
-            <div className={styles.actions}>
+            <div ref={actions} className={styles.actions}>
               <Button
                 type="submit"
                 className={styles.steady}

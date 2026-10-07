@@ -19,6 +19,7 @@ import {
   keepsAttempt,
   type Attempt,
 } from "./mutations";
+import { useActionsInView, useInvalidFields } from "./form-feedback";
 import styles from "./family.module.css";
 
 const copy = familyCopy.addChild;
@@ -81,6 +82,9 @@ export function AddChild({
   const attempt = useRef<Attempt | null>(null);
   const busy = useRef(false);
   const lines = useRef(0);
+  const formRef = useRef<HTMLFormElement | null>(null);
+  const flagInvalid = useInvalidFields(formRef);
+  const actions = useActionsInView(failure?.id ?? null);
   const disclosure = CHILD_CONSENT_VERSION
     ? CHILD_CONSENT_DISCLOSURES[CHILD_CONSENT_VERSION]
     : undefined;
@@ -113,7 +117,10 @@ export function AddChild({
     if (!consent) found.consent = copy.consentMissing;
     setErrors(found);
     setFailure(null);
-    if (Object.keys(found).length > 0 || dateOfBirth === null) return;
+    if (Object.keys(found).length > 0 || dateOfBirth === null) {
+      flagInvalid();
+      return;
+    }
     if (typeof navigator !== "undefined" && navigator.onLine === false) {
       setFailure({ text: familyCopy.failure.offline, id: nextId() });
       return;
@@ -138,7 +145,10 @@ export function AddChild({
     if (result.kind === "invalid") {
       const { fields, other } = fieldErrors(result.errors);
       setErrors(fields);
-      if (!other && Object.keys(fields).length > 0) return;
+      if (!other && Object.keys(fields).length > 0) {
+        flagInvalid();
+        return;
+      }
     }
     setFailure({ text: failureLine(result, copy.failed), id: nextId() });
   }
@@ -168,7 +178,7 @@ export function AddChild({
         }}
         title={copy.title}
       >
-        <form key={form} className={styles.sheetForm} onSubmit={submit} noValidate>
+        <form key={form} ref={formRef} className={styles.sheetForm} onSubmit={submit} noValidate>
           <FormField label={copy.name} help={copy.nameHelp} error={errors.name} required>
             <TextInput
               autoComplete="off"
@@ -218,7 +228,7 @@ export function AddChild({
               {failure.text}
             </InlineFeedback>
           ) : null}
-          <div className={styles.sheetActions}>
+          <div ref={actions} className={styles.sheetActions}>
             <Button type="submit" loading={pending} loadingText={copy.pending}>
               {copy.submit}
             </Button>
