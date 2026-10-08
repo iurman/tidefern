@@ -198,7 +198,7 @@ neither is repeated below.
   note?", "It is removed for you and for everyone who can read it, and it
   cannot be brought back.", "Delete note", "Keep it", "Deleting", "Note
   deleted."
-- `[OWNER]` undoing a save: "Changes undone for Monday, Oct 5.", "We could
+- `[OWNER]` undoing a save: "Changes undone for Sunday, Oct 5.", "We could
   not undo every change. Check this day and change it back.", "Undoing".
 - `[OWNER]` the failures: "We could not load this day. Try again.", "Your
   session has ended. Sign in again, then come back to this day.", "This day
