@@ -116,6 +116,14 @@
   visibility: hidden;
 }
 
+/* The loading text's width, held in the same cell and never seen or read. */
+.stack::after {
+  content: attr(data-loading-text);
+  grid-area: text;
+  white-space: nowrap;
+  visibility: hidden;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .button {
     transition-duration: 0ms;
