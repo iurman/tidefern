@@ -94,6 +94,31 @@ async function expectNoOverflow(page: Page, label: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
+/**
+ * The overflow check for an open dialog. A modal <dialog> sits in the top layer, outside the
+ * document's scroll width, so expectNoOverflow cannot see it: this measures the dialog itself,
+ * which must stay inside the viewport and must not scroll sideways, at 390 and 320.
+ */
+async function expectDialogFits(page: Page, name: string, label: string) {
+  const dialog = page.getByRole("dialog", { name });
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 800 });
+    const fit = await dialog.evaluate((element) => {
+      const box = element.getBoundingClientRect();
+      return {
+        left: box.left,
+        right: box.right,
+        viewport: document.documentElement.clientWidth,
+        inner: element.scrollWidth - element.clientWidth,
+      };
+    });
+    expect(fit.left, `${label} at ${width}: left edge`).toBeGreaterThanOrEqual(0);
+    expect(fit.right, `${label} at ${width}: right edge`).toBeLessThanOrEqual(fit.viewport);
+    expect(fit.inner, `${label} at ${width}: sideways scroll inside`).toBeLessThanOrEqual(0);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
 function group(page: Page, name: string) {
   return page.getByRole("region", { name, exact: true });
 }
@@ -525,6 +550,7 @@ test("closing with the undo window on a fresh account locks it, the locked view 
   for (const theme of themes) {
     await expectNoAxeViolationsHere(page, theme, "the close dialog at 390");
   }
+  await expectDialogFits(page, "Close your account?", "the close dialog");
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/settings");
   await group(page, "Close account").getByRole("button", { name: "Close my account" }).click();
@@ -664,6 +690,7 @@ test("withdrawing consent on a fresh account closes it; after the undo the recor
   for (const theme of themes) {
     await expectNoAxeViolationsHere(page, theme, "the withdraw dialog at 1440");
   }
+  await expectDialogFits(page, "Withdraw your consent?", "the withdraw dialog");
   await dialog.getByRole("button", { name: "Withdraw and close my account" }).click();
   await page.waitForURL(/\/closing$/);
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your account is closing");
@@ -678,7 +705,7 @@ test("withdrawing consent on a fresh account closes it; after the undo the recor
   await expect(page.getByRole("button", { name: "Withdraw consent" })).toHaveCount(0);
 });
 
-test("on phones each group opens its own screen with the way back, and every screen passes axe without overflow", async ({
+test("on phones each group opens its own screen with the way back, and every screen passes axe at both widths without overflow", async ({
   page,
 }) => {
   test.setTimeout(180_000);
@@ -728,7 +755,9 @@ test("on phones each group opens its own screen with the way back, and every scr
     await page.setViewportSize({ width: 390, height: 844 });
   }
   await page.setViewportSize({ width: 1440, height: 900 });
-  for (const theme of themes) await expectNoAxeViolations(page, "/settings", theme);
+  for (const path of ["/settings", ...screens.map(([, screen]) => screen)]) {
+    for (const theme of themes) await expectNoAxeViolations(page, path, theme);
+  }
 });
 
 test("Pia's imperial units, her empty consent record, and Mira's children's consents without an action", async ({
