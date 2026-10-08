@@ -180,6 +180,12 @@ lines without touching another's.
   someone else" records no consent at all, because nothing about her own
   body is collected (the seed gives Theo and Pia none either), and she
   still accepts the terms and attests her age on that step, named "Terms".
+  Her acceptance is not recorded yet: the terms version reaches the server
+  only inside `POST /v1/me/consents`, and `PUT /v1/me/profile` has no terms
+  field, so the other three stages store the version they accepted and this
+  one stores nothing. Either an API field that records the terms version
+  without a health consent, or a ruling that this path records a minimal
+  consent, closes the gap.
 - `[OWNER]` "weeks and days as of a date" is not offered as a dating
   method: no method stores it honestly. The transfer wording waits on the
   clinician review with the other transfer copy.
@@ -191,6 +197,12 @@ lines without touching another's.
   live (architecture 6.1): the step offers one wherever the browser has
   WebAuthn, and no Settings page adds one later yet, so "Not now" has no
   way back.
+- `[OWNER]` "You can add your baby later from Family." names `/family`,
+  where this file puts adding a child, but the shell shows Family only once
+  a child exists, so a postpartum newcomer who skipped a failed child write
+  has no Family entry to follow. The line stays until the shell shows
+  Family to a postpartum profile without a child, or the owner names
+  another place.
 
 ### `/today` (H2)
 
