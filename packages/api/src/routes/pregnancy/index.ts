@@ -675,6 +675,9 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
     const actor = actorOn(c);
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
+    // A day that is not on the calendar is named as such, as the event routes do,
+    // so the "early" refusal below only ever means a day before day 0.
+    if (!isCalendarDate(body.endedAt)) return notADay(c, "endedAt");
     const now = new Date();
     const outcome = await withActor(
       actor.id,

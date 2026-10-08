@@ -542,6 +542,13 @@ test.describe("on a fresh account", () => {
     await dialog.getByRole("radio", { name: "Baby" }).click();
     await dialog.getByRole("button", { name: "Record the ending" }).click();
     await expect(page).toHaveURL(/\/today$/);
+    // Today is quiet after an ending (architecture 8.4 rule 5): no fertile window,
+    // no estimate, no week and none of the words of the ending. Task H2 builds the
+    // quiet card itself; this guard holds before and after it lands.
+    await expect(page.locator("main h1").first()).toBeVisible();
+    expect(await page.locator("main").innerText()).not.toMatch(
+      /fertile|ovulation|contraception|most likely|\bWeek \d|loss|baby/i,
+    );
 
     const current = await api<{ status: string; endedAt: string; endedReason: string }>(
       page,
