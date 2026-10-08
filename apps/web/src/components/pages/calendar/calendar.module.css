@@ -84,11 +84,16 @@
   max-width: 42rem;
 }
 
-/* An empty live region takes no room, but stays in place so a new line is announced. */
+/* An empty live region stays in place so a new line is announced. */
 .notice {
   margin: 0;
   font-size: var(--type-small);
   color: var(--text);
+}
+
+/* In the list it sits in the rows' own block, so it takes room only when it says something. */
+.listNotice:not(:empty) {
+  margin-block-end: var(--space-3);
 }
 
 .listHead {

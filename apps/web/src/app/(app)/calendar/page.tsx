@@ -3,9 +3,10 @@ import type { WeekStart } from "@/components/ui/calendar-dates";
 import { Button } from "@/components/ui/button";
 import {
   calendarHref,
+  calendarHrefFromQuery,
   childAgeLine,
-  gridRange,
   monthFromParam,
+  readRange,
   viewFromParam,
 } from "@/components/pages/calendar/calendar-model";
 import { CalendarView } from "@/components/pages/calendar/calendar-view";
@@ -30,23 +31,25 @@ export const dynamic = "force-dynamic";
  * nothing from here. A read that failed says so and offers to try again.
  *
  * `?month=YYYY-MM` picks the month, a date and nothing more; `?view=list`
- * opens the list. The none stage is never asked a body question, so its
- * calendar reads nothing and shows the empty state without a log action.
+ * opens the list, and the view reads the address itself so it follows a
+ * link, Back and Forward. The none stage is never asked a body question,
+ * so its calendar reads nothing and shows the empty state without a log
+ * action.
  */
 export default async function CalendarPage({
   searchParams,
 }: {
   searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const query = await searchParams;
   const lookup = await sessionMe();
-  if (lookup.kind === "failed") return <CalendarFailure href="/calendar" />;
+  // Today is not known yet, so Try again keeps the month and the view as the address gave them.
+  if (lookup.kind === "failed") return <CalendarFailure href={calendarHrefFromQuery(query)} />;
   if (lookup.kind !== "ok") return null;
   const { profile, today, guardianOf } = lookup.me;
   if (profile === null || today === null) return null;
 
-  const query = await searchParams;
   const month = monthFromParam(query.month, today);
-  const view = viewFromParam(query.view);
   const weekStart = profile.weekStart as WeekStart;
   const stage = profile.stage;
 
@@ -55,7 +58,6 @@ export default async function CalendarPage({
       <CalendarView
         today={today}
         month={month}
-        initialView={view}
         weekStart={weekStart}
         stage={stage}
         days={[]}
@@ -64,16 +66,19 @@ export default async function CalendarPage({
     );
   }
 
-  const load = await loadCalendar(serverApiClient(await headers()), gridRange(month, weekStart), {
+  const load = await loadCalendar(serverApiClient(await headers()), readRange(month, weekStart), {
     children: stage === "postpartum",
   });
-  if (!load.ok) return <CalendarFailure href={calendarHref({ month, view, today })} />;
+  if (!load.ok) {
+    return (
+      <CalendarFailure href={calendarHref({ month, view: viewFromParam(query.view), today })} />
+    );
+  }
 
   return (
     <CalendarView
       today={today}
       month={month}
-      initialView={view}
       weekStart={weekStart}
       stage={stage}
       days={load.days}

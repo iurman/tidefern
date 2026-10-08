@@ -10,8 +10,9 @@ import {
 
 /**
  * The calendar's reads, on the server client (architecture 5.2): the day
- * entries and the notes over the grid's dates, the prediction, and for the
- * postpartum card the children. The queries carry dates, a cursor and a
+ * entries and the notes over the dates the page reads (`readRange`: the
+ * grid's and a day either side), the prediction, and for the postpartum
+ * card the children. The queries carry dates, a cursor and a
  * page size only (architecture 9.1). Only the fact that a note sits on a
  * day leaves this module; note bodies never reach the page.
  */

@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { CyclePrediction } from "@tidefern/schemas";
+import { Suspense, use, useState } from "react";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONTRACEPTION_LINE,
@@ -12,7 +13,12 @@ import { CalendarView, type CalendarViewProps } from "./calendar-view";
 
 const push = vi.fn();
 const refresh = vi.fn();
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push, refresh }) }));
+/** The page's address as `useSearchParams` reads it; Next keeps it in step with replaceState. */
+const address = { search: "" };
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push, refresh }),
+  useSearchParams: () => new URLSearchParams(address.search),
+}));
 
 const today = "2026-10-05";
 const subjectId = "018f5e7a-5eed-7000-8000-000000000001";
@@ -61,20 +67,27 @@ const none: CyclePrediction = {
   daysLate: null,
 };
 
-function renderCalendar(props: Partial<CalendarViewProps> = {}) {
-  return render(
+function calendar(props: Partial<CalendarViewProps> = {}) {
+  return (
     <CalendarView
       today={today}
       month="2026-10-01"
-      initialView="month"
       weekStart={1}
       stage="cycle"
       days={october}
       prediction={estimate}
       {...props}
-    />,
+    />
   );
 }
+
+/** The calendar on an address: "" is /calendar, "view=list" is /calendar?view=list. */
+function renderCalendar(props: Partial<CalendarViewProps> = {}, search = "") {
+  address.search = search;
+  return render(calendar(props));
+}
+
+const todayButton = () => screen.getByRole("button", { name: /^Today, Monday, October 5, 2026/ });
 
 let fetches: string[] = [];
 
@@ -89,8 +102,9 @@ beforeAll(() => {
 });
 
 beforeEach(() => {
-  push.mockClear();
+  push.mockReset();
   refresh.mockClear();
+  address.search = "";
   fetches = [];
   // The sheet loads the day it opens on: an empty day, answered for any date.
   vi.spyOn(window, "fetch").mockImplementation(async (input) => {
@@ -123,9 +137,11 @@ describe("the month view", () => {
       name: `Monday, October 12, 2026, fertile window estimated. ${CONTRACEPTION_LINE}`,
     });
     expect(fertile.closest("td")).toHaveClass("estimated");
-    expect(
-      screen.getByRole("button", { name: /^Saturday, October 17, 2026, .*ovulation estimated$/ }),
-    ).toBeInTheDocument();
+    // The ovulation day says so first; the contraception line still ends its name.
+    const ovulation = screen.getByRole("button", {
+      name: `Saturday, October 17, 2026, ovulation estimated, fertile window estimated. ${CONTRACEPTION_LINE}`,
+    });
+    expect(ovulation.closest("td")).toHaveClass("estimated");
     expect(
       screen.getByRole("button", {
         name: "Today, Monday, October 5, 2026, period logged, medium flow, steady mood, note",
@@ -262,43 +278,248 @@ describe("the list view", () => {
 
   it("opens a row's day in the sheet instead of leaving the calendar", async () => {
     const user = userEvent.setup();
-    renderCalendar({ initialView: "list" });
+    renderCalendar({}, "view=list");
     const row = screen.getByRole("link", { name: /^Sun, Oct 4/ });
     await user.click(row);
     expect(await screen.findByRole("dialog", { name: "Sunday, Oct 4" })).toBeInTheDocument();
     expect(push).not.toHaveBeenCalled();
   });
 
+  it("says why a row for a day that has not come opens nothing, right above the rows", async () => {
+    // A day after today can hold an entry once her time zone moves west (today moves back a day).
+    const user = userEvent.setup();
+    renderCalendar({ days: [...october, day("2026-10-07", { mood: "low" })] }, "view=list");
+    await user.click(screen.getByRole("link", { name: /^Wed, Oct 7/ }));
+    const notice = screen.getByText("You can log a day once it has come.");
+    const list = screen.getByRole("list", { name: "Days logged in October 2026" });
+    expect(notice.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(fetches).toEqual([]);
+  });
+
   it("moves by month with the view kept, and never past today's month", async () => {
     const user = userEvent.setup();
-    renderCalendar({ initialView: "list" });
+    renderCalendar({}, "view=list");
     expect(screen.getByRole("heading", { level: 2, name: "October 2026" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
     await user.click(screen.getByRole("button", { name: "Previous month" }));
     expect(push).toHaveBeenLastCalledWith("/calendar?month=2026-09&view=list", { scroll: false });
   });
 
-  it("shows the list's own empty state and no week strip for another month", () => {
-    renderCalendar({ initialView: "list", month: "2026-07-01", days: [] });
+  it("shows the list's own empty state, with the tide line, and no week strip for another month", () => {
+    renderCalendar({ month: "2026-07-01", days: [] }, "view=list");
     expect(screen.queryByRole("list", { name: "This week" })).toBeNull();
-    expect(screen.getByText("Nothing logged yet")).toBeInTheDocument();
+    const empty = screen.getByRole("region", { name: "Nothing logged yet" });
+    expect(within(empty).getByRole("heading", { level: 3 })).toHaveTextContent(
+      "Nothing logged yet",
+    );
+    expect(empty).toHaveTextContent("Days you log show up here as a list you can scan.");
+    expect(empty.querySelector("svg")).not.toBeNull();
+    expect(within(empty).getByRole("button", { name: "Log today" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "Days logged in July 2026" })).toBeNull();
+  });
+});
+
+describe("the view follows the address", () => {
+  it("goes back to the month when a link to /calendar lands while the list is showing", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderCalendar();
+    await user.click(screen.getByRole("radio", { name: "List" }));
+    // Next's replaceState updates useSearchParams, as a real switch does.
+    address.search = "view=list";
+    rerender(calendar());
+    expect(screen.getByRole("radio", { name: "List" })).toBeChecked();
+    expect(screen.getByRole("list", { name: "This week" })).toBeInTheDocument();
+
+    // The shell's Calendar link (or Back) lands on /calendar: the month view, as a reload would show.
+    address.search = "";
+    rerender(calendar());
+    expect(screen.getByRole("radio", { name: "Month" })).toBeChecked();
+    expect(screen.getByRole("grid", { name: "October 2026" })).toBeInTheDocument();
+    expect(screen.queryByRole("list", { name: "This week" })).toBeNull();
+  });
+
+  it("opens on the list for an address that names it, and Forward to it brings it back", () => {
+    const { rerender } = renderCalendar({}, "view=list");
+    expect(screen.getByRole("radio", { name: "List" })).toBeChecked();
+    address.search = "month=2026-09";
+    rerender(calendar({ month: "2026-09-01" }));
+    expect(screen.getByRole("grid", { name: "September 2026" })).toBeInTheDocument();
+    address.search = "view=list";
+    rerender(calendar());
+    expect(screen.getByRole("heading", { level: 2, name: "October 2026" })).toBeInTheDocument();
+  });
+});
+
+describe("moving between months while one is still loading", () => {
+  const never = new Promise<never>(() => {});
+
+  /**
+   * A navigation the server has not answered: push sets state inside the
+   * calendar's transition and that state suspends, so the transition stays
+   * pending and the server's month prop stays put, as it does while Next.js
+   * waits for the next month's render.
+   */
+  function renderStalled(props: Partial<CalendarViewProps> = {}, search = "") {
+    let stall: () => void = () => {};
+    push.mockImplementation(() => stall());
+    function Stall() {
+      const [stalled, setStalled] = useState(false);
+      stall = () => setStalled(true);
+      if (stalled) use(never);
+      return null;
+    }
+    address.search = search;
+    render(
+      <Suspense fallback={<p>fallback</p>}>
+        {calendar(props)}
+        <Stall />
+      </Suspense>,
+    );
+  }
+
+  const pushed = () => push.mock.calls.map((call) => call[0]);
+
+  it("shows the month asked for at once with Loading, so Next twice lands two months on", async () => {
+    const user = userEvent.setup();
+    renderStalled();
+    await user.click(screen.getByRole("button", { name: "Next month" }));
+    expect(await screen.findByRole("grid", { name: "November 2026" })).toBeInTheDocument();
+    expect(screen.getAllByText("Loading").length).toBeGreaterThan(0);
+    // Only part of November has been read, so it is not called empty yet.
+    expect(screen.queryByRole("region", { name: "Nothing logged this month" })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "Next month" }));
+    expect(await screen.findByRole("grid", { name: "December 2026" })).toBeInTheDocument();
+    expect(pushed()).toEqual(["/calendar?month=2026-11", "/calendar?month=2026-12"]);
+    expect(screen.queryByText("fallback")).toBeNull();
+  });
+
+  it("comes back to October for Next then Previous, and Today returns at once", async () => {
+    const user = userEvent.setup();
+    renderStalled();
+    await user.click(screen.getByRole("button", { name: "Next month" }));
+    await screen.findByRole("grid", { name: "November 2026" });
+    expect(screen.getByRole("button", { name: "Today" })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Previous month" }));
+    expect(await screen.findByRole("grid", { name: "October 2026" })).toBeInTheDocument();
+    expect(pushed()).toEqual(["/calendar?month=2026-11", "/calendar"]);
+  });
+
+  it("steps the list on from the month asked for, and stops at today's month", async () => {
+    const user = userEvent.setup();
+    renderStalled({ month: "2026-08-01", days: [] }, "view=list");
+    await user.click(screen.getByRole("button", { name: "Next month" }));
     expect(
-      screen.getByText("Days you log show up here as a list you can scan."),
+      await screen.findByRole("heading", { level: 2, name: "September 2026" }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Log today" })).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Next month" }));
+    expect(
+      await screen.findByRole("heading", { level: 2, name: "October 2026" }),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
+    expect(pushed()).toEqual(["/calendar?month=2026-09&view=list", "/calendar?view=list"]);
+    // The list is loading, not empty.
+    expect(screen.queryByRole("region", { name: "Nothing logged yet" })).toBeNull();
+  });
+});
+
+describe("where focus goes when the sheet closes", () => {
+  /** The browser's dialog gives focus back to whatever had it, but only while that is still in the page. */
+  function dialogFocusAsBrowsersDo() {
+    let before: Element | null = null;
+    const showModal = HTMLDialogElement.prototype.showModal;
+    const close = HTMLDialogElement.prototype.close;
+    vi.spyOn(HTMLDialogElement.prototype, "showModal").mockImplementation(function open(
+      this: HTMLDialogElement,
+    ) {
+      before = document.activeElement;
+      showModal.call(this);
+    });
+    vi.spyOn(HTMLDialogElement.prototype, "close").mockImplementation(function shut(
+      this: HTMLDialogElement,
+    ) {
+      close.call(this);
+      if (before instanceof HTMLElement && before.isConnected) before.focus();
+      else if (document.activeElement instanceof HTMLElement) document.activeElement.blur();
+    });
+  }
+
+  it("lands on the day when Log today went away with the save while the sheet was open", async () => {
+    const user = userEvent.setup();
+    dialogFocusAsBrowsersDo();
+    const { rerender } = renderCalendar({ days: [] });
+    const logToday = screen.getByRole("button", { name: "Log today" });
+    await user.click(logToday);
+    const sheet = await screen.findByRole("dialog", { name: "Monday, Oct 5" });
+    // The save's refresh lands with the sheet still open: the month is no longer empty.
+    rerender(calendar({ days: [day(today, { mood: "low" })] }));
+    expect(logToday).not.toBeInTheDocument();
+    await user.click(within(sheet).getAllByRole("button", { name: "Close" })[0]!);
+    await waitFor(() => expect(todayButton()).toHaveFocus());
+  });
+
+  it("lands on the day when the refresh takes Log today away after the sheet closed", async () => {
+    const user = userEvent.setup();
+    dialogFocusAsBrowsersDo();
+    const { rerender } = renderCalendar({ days: [] });
+    const logToday = screen.getByRole("button", { name: "Log today" });
+    await user.click(logToday);
+    const sheet = await screen.findByRole("dialog", { name: "Monday, Oct 5" });
+    await user.click(within(sheet).getAllByRole("button", { name: "Close" })[0]!);
+    await waitFor(() => expect(logToday).toHaveFocus());
+    rerender(calendar({ days: [day(today, { mood: "low" })] }));
+    await waitFor(() => expect(todayButton()).toHaveFocus());
+  });
+
+  it("lands on the heading when the day is not in the view either", async () => {
+    const user = userEvent.setup();
+    dialogFocusAsBrowsersDo();
+    // November's grid has no Oct 5; the first log of the month removes its empty state.
+    const { rerender } = renderCalendar({ month: "2026-11-01", days: [] });
+    await user.click(screen.getByRole("button", { name: "Log today" }));
+    const sheet = await screen.findByRole("dialog", { name: "Monday, Oct 5" });
+    rerender(calendar({ month: "2026-11-01", days: [day("2026-11-01", { mood: "low" })] }));
+    await user.click(within(sheet).getAllByRole("button", { name: "Close" })[0]!);
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { level: 1, name: "Calendar" })).toHaveFocus(),
+    );
+  });
+
+  it("leaves focus on the day that opened the sheet when it is still there", async () => {
+    const user = userEvent.setup();
+    dialogFocusAsBrowsersDo();
+    renderCalendar();
+    const oct4 = screen.getByRole("button", { name: /^Sunday, October 4, 2026/ });
+    await user.click(oct4);
+    const sheet = await screen.findByRole("dialog", { name: "Sunday, Oct 4" });
+    await user.click(within(sheet).getAllByRole("button", { name: "Close" })[0]!);
+    await waitFor(() => expect(oct4).toHaveFocus());
   });
 });
 
 describe("by stage", () => {
-  it("asks the none stage no body question: the empty state without a log action, and no sheet", async () => {
+  it("asks the none stage no body question: an empty state without a log action, and nothing to press", async () => {
     const user = userEvent.setup();
     renderCalendar({ stage: "none", days: [], prediction: null });
     expect(screen.getByRole("region", { name: "Nothing logged this month" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Log today" })).toBeNull();
-    await user.click(screen.getByRole("button", { name: /^Thursday, October 1, 2026/ }));
+    // The grid shows the dates without a control on any of them.
+    const oct1 = screen.getByRole("button", { name: /^Thursday, October 1, 2026/ });
+    expect(oct1).toBeDisabled();
+    expect(todayButton()).toBeDisabled();
+    await user.click(oct1);
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByText("You can log a day once it has come.")).toBeNull();
     expect(screen.queryByText(PREDICTION_FOOTER)).toBeNull();
     expect(fetches).toEqual([]);
+  });
+
+  it("gives the none stage's list nothing to press either", () => {
+    renderCalendar({ stage: "none", days: [], prediction: null }, "view=list");
+    expect(screen.getByRole("region", { name: "Nothing logged yet" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Log today" })).toBeNull();
+    expect(screen.getByRole("button", { name: "Previous month" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Next month" })).toBeDisabled();
   });
 
   it("shows no prediction during a pregnancy", () => {
@@ -331,7 +552,30 @@ describe("by stage", () => {
     expect(screen.queryByText(/fertile/i)).toBeNull();
   });
 
-  // Escape and the return of focus are the browser's dialog behavior: calendar.spec.ts proves them.
+  it("keeps the quiet card's button the one action when the month is empty too", () => {
+    const quiet = {
+      stage: "postpartum" as const,
+      today: "2026-10-04",
+      weekStart: 7 as const,
+      month: "2026-11-01",
+      days: [],
+      prediction: none,
+    };
+    const { unmount } = renderCalendar(quiet);
+    const empty = screen.getByRole("region", { name: "Nothing logged this month" });
+    expect(within(empty).queryByRole("button")).toBeNull();
+    expect(screen.getAllByRole("button", { name: /^Log/ }).map((b) => b.textContent)).toEqual([
+      "Log a period when it comes",
+    ]);
+    unmount();
+
+    renderCalendar(quiet, "month=2026-11&view=list");
+    const listEmpty = screen.getByRole("region", { name: "Nothing logged yet" });
+    expect(within(listEmpty).queryByRole("button")).toBeNull();
+    expect(screen.getByRole("button", { name: "Log a period when it comes" })).toBeInTheDocument();
+  });
+
+  // Escape and the browser's own return of focus are calendar.spec.ts's to prove.
   it("closes the sheet from its close button and keeps the calendar", async () => {
     const user = userEvent.setup();
     renderCalendar();

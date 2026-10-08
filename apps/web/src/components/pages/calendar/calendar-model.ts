@@ -60,11 +60,8 @@ const MONTH_PARAM = /^(\d{4})-(\d{2})$/;
 const FIRST_YEAR = 1900;
 const LAST_YEAR = 2999;
 
-/** The first day of the month `?month=YYYY-MM` names, or of today's month when it names none. */
-export function monthFromParam(
-  value: string | string[] | undefined,
-  today: CalendarDate,
-): CalendarDate {
+/** The `YYYY-MM` that `?month=` names, or null when it names no month the calendar reads. */
+export function monthParam(value: string | string[] | undefined): string | null {
   const raw = Array.isArray(value) ? value[0] : value;
   const year = Number(raw?.slice(0, 4));
   if (
@@ -74,9 +71,18 @@ export function monthFromParam(
     year <= LAST_YEAR &&
     isCalendarDate(`${raw}-01`)
   ) {
-    return `${raw}-01`;
+    return raw;
   }
-  return firstOfMonth(today);
+  return null;
+}
+
+/** The first day of the month `?month=YYYY-MM` names, or of today's month when it names none. */
+export function monthFromParam(
+  value: string | string[] | undefined,
+  today: CalendarDate,
+): CalendarDate {
+  const named = monthParam(value);
+  return named === null ? firstOfMonth(today) : `${named}-01`;
 }
 
 /** `?view=list` opens the list; anything else, or nothing, the month. */
@@ -119,6 +125,22 @@ export function gridRange(
 }
 
 /**
+ * The dates the calendar reads for a month: the grid's, and one day either
+ * side. A pill rounds where its run of days ends, so the day past each edge
+ * tells whether a period logged across the edge runs on there or starts
+ * (or ends) on the grid's first (or last) day. The extra days are never
+ * drawn, listed or counted: the grid stops at its own range and every list
+ * keeps to the month.
+ */
+export function readRange(
+  month: CalendarDate,
+  weekStart: WeekStart,
+): { from: CalendarDate; to: CalendarDate } {
+  const grid = gridRange(month, weekStart);
+  return { from: addDays(grid.from, -1), to: addDays(grid.to, 1) };
+}
+
+/**
  * The calendar's address for a month and a view: `/calendar` for today's
  * month in the month view, with `month=YYYY-MM` and `view=list` only when
  * they differ. A month is a date, never a health fact, so it may ride in
@@ -134,6 +156,23 @@ export function calendarHref(input: {
   if (input.view === "list") query.set("view", "list");
   const search = query.toString();
   return search === "" ? "/calendar" : `/calendar?${search}`;
+}
+
+/**
+ * The calendar's address from a request's own query, for when today is not
+ * known (the session read failed): a month the calendar reads and the list
+ * view are kept as the address gave them, anything else is dropped.
+ */
+export function calendarHrefFromQuery(query: {
+  month?: string | string[] | undefined;
+  view?: string | string[] | undefined;
+}): string {
+  const search = new URLSearchParams();
+  const month = monthParam(query.month);
+  if (month !== null) search.set("month", month);
+  if (viewFromParam(query.view) === "list") search.set("view", "list");
+  const text = search.toString();
+  return text === "" ? "/calendar" : `/calendar?${text}`;
 }
 
 /** The day sheet's page for a date. */
@@ -270,6 +309,14 @@ export function loggedWindows(days: readonly CalendarDay[]): DayWindow[] {
  * point on its expected day. Only an estimate or a first guess offers dates.
  * Not enough regular cycles and basis none draw nothing, whatever else the
  * answer carries.
+ *
+ * The contraception line ends every fertile day's name, the ovulation day's
+ * too: "..., ovulation estimated, fertile window estimated. An estimate from
+ * your logged dates. Not a form of contraception." `dayFacts` draws a day
+ * from the first window of its texture and keeps every window's words in
+ * order, so a window without words draws the band (its rounding follows the
+ * whole window), a one-day window puts the ovulation words next, and the
+ * window that carries the fertile words comes last.
  */
 export function predictionMarks(prediction: CyclePrediction | null): {
   windows: DayWindow[];
@@ -289,16 +336,35 @@ export function predictionMarks(prediction: CyclePrediction | null): {
       words: EXPECTED_PERIOD_WORDS,
     });
   }
-  if (prediction.fertileWindow !== null) {
+  const fertile = prediction.fertileWindow;
+  const ovulationDay = prediction.ovulation?.expected ?? null;
+  const ovulationInWindow =
+    fertile !== null &&
+    ovulationDay !== null &&
+    compareDates(ovulationDay, fertile.start) >= 0 &&
+    compareDates(ovulationDay, fertile.end) <= 0;
+  if (fertile !== null) {
+    windows.push({ start: fertile.start, end: fertile.end, texture: "estimated" });
+    if (ovulationInWindow) {
+      windows.push({
+        start: ovulationDay,
+        end: ovulationDay,
+        texture: "estimated",
+        words: OVULATION_WORDS,
+      });
+    }
     windows.push({
-      start: prediction.fertileWindow.start,
-      end: prediction.fertileWindow.end,
+      start: fertile.start,
+      end: fertile.end,
       texture: "estimated",
       words: FERTILE_WORDS,
     });
   }
-  if (prediction.ovulation !== null) {
-    points.push({ date: prediction.ovulation.expected, words: OVULATION_WORDS });
+  if (ovulationDay !== null) {
+    // The point is the outlined dot; inside the window its words already came with the window's.
+    points.push(
+      ovulationInWindow ? { date: ovulationDay } : { date: ovulationDay, words: OVULATION_WORDS },
+    );
   }
   return { windows, points };
 }

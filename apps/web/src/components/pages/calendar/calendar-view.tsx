@@ -1,6 +1,6 @@
 "use client";
-import { useRouter } from "next/navigation";
-import { useMemo, useState, useTransition, type MouseEvent } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useEffect, useMemo, useRef, useState, useTransition, type MouseEvent } from "react";
 import { compareDates, type CalendarDate } from "@tidefern/core";
 import type { CyclePrediction, Stage } from "@tidefern/schemas";
 import { DayLogSheet } from "@/components/day-log/day-log-sheet";
@@ -21,7 +21,9 @@ import {
   hasLoggedDayIn,
   inMonth,
   listItems,
+  logHref,
   shiftMonth,
+  viewFromParam,
   type CalendarDay,
   type CalendarViewName,
 } from "./calendar-model";
@@ -31,13 +33,11 @@ import styles from "./calendar.module.css";
 export interface CalendarViewProps {
   /** Today in her time zone, from the API (GET /v1/me). */
   today: CalendarDate;
-  /** The first day of the month shown. */
+  /** The first day of the month the server read. */
   month: CalendarDate;
-  /** The view the address asked for; the switch changes it in place afterwards. */
-  initialView: CalendarViewName;
   weekStart: WeekStart;
   stage: Stage;
-  /** The grid's days from the server's reads: entries and the dates notes sit on. */
+  /** The days the server read (the grid's and one either side): entries and the dates notes sit on. */
   days: CalendarDay[];
   /** The API's prediction, or null when nothing was read (the none stage). */
   prediction: CyclePrediction | null;
@@ -50,6 +50,12 @@ const viewOptions = [
   { value: "list", label: copy.views.list },
 ] as const;
 
+/** The control that opened the sheet and the day the sheet showed last. */
+interface ReturnTarget {
+  opener: HTMLElement | null;
+  date: CalendarDate;
+}
+
 /**
  * The calendar (DESIGN.md 3.4, 6.2 and 6.3): Month and List as a segmented
  * control that swaps the view in place, the month grid with the legend and
@@ -59,15 +65,16 @@ const viewOptions = [
  * calendar (a dialog from 1024 px, a bottom sheet below), which loads the
  * day itself; a save there refreshes this page from the server.
  *
- * Months are addresses (`?month=YYYY-MM`), read on the server; moving
- * between them is a navigation whose wait the grid and the list show. The
- * view rides along in the address (`?view=list`) so a reload keeps it; no
- * browser storage holds it.
+ * Months are addresses (`?month=YYYY-MM`), read on the server. A move shows
+ * the month asked for at once, drawn with what has been read so far while
+ * the grid and the list say "Loading", so a second press steps on from it.
+ * The view is part of the address too (`?view=list`): the switch writes it
+ * with `replaceState`, and the view follows the address when a link, Back
+ * or Forward changes it. No browser storage holds either.
  */
 export function CalendarView({
   today,
   month,
-  initialView,
   weekStart,
   stage,
   days,
@@ -75,22 +82,67 @@ export function CalendarView({
   childLine = null,
 }: CalendarViewProps) {
   const router = useRouter();
-  const [view, setView] = useState<CalendarViewName>(initialView);
+  const search = useSearchParams();
+  const addressView = viewFromParam(search.get("view") ?? undefined);
+  const [view, setView] = useState<CalendarViewName>(addressView);
+  const [followedView, setFollowedView] = useState<CalendarViewName>(addressView);
   const [openDate, setOpenDate] = useState<CalendarDate | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  const [requested, setRequested] = useState<CalendarDate | null>(null);
   const [pending, startTransition] = useTransition();
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const returnTo = useRef<ReturnTarget | null>(null);
+
+  if (followedView !== addressView) {
+    // The address changed without the switch (a link to the calendar, Back, Forward): follow it.
+    setFollowedView(addressView);
+    setView(addressView);
+    setNotice(null);
+  }
+
   const logging = isLoggingStage(stage) ? stage : null;
   const todayMonth = firstOfMonth(today);
-  const showingToday = inMonth(today, month);
+  // The month on its way while a move is pending, the server's month once it lands.
+  const shown = pending && requested !== null ? requested : month;
+  const showingToday = inMonth(today, shown);
 
   const marks = useMemo(() => calendarMarks(days, prediction), [days, prediction]);
-  const range = gridRange(month, weekStart);
+  const range = gridRange(shown, weekStart);
   const drawsTexture = marks.windows.some(
     (window) =>
       compareDates(window.end, range.from) >= 0 && compareDates(window.start, range.to) <= 0,
   );
   const sentences = prediction === null ? null : predictionCopy(prediction);
   const quiet = stage === "postpartum" && prediction !== null && prediction.basis === "none";
+  const items = listItems(days, shown);
+
+  /** That day's cell in the grid or its row in the list, else the heading. */
+  function landingFor(date: CalendarDate): HTMLElement | null {
+    const body = bodyRef.current;
+    return (
+      body?.querySelector<HTMLElement>(`td[data-day="${date}"] button:not(:disabled)`) ??
+      body?.querySelector<HTMLElement>(`a[href="${logHref(date)}"]`) ??
+      titleRef.current
+    );
+  }
+
+  useEffect(() => {
+    // The dialog gives focus back to the control that opened it, which a save can take away
+    // (a first log removes the empty state and its Log today, before or after the sheet closes).
+    // Focus then lands on the day in the view, or on the heading, never on the page's body.
+    const target = returnTo.current;
+    if (openDate !== null || target === null) return;
+    if (target.opener?.isConnected) {
+      // Still there; a refresh that lands later can still remove it, so watch while focus stays.
+      if (document.activeElement !== target.opener) returnTo.current = null;
+      return;
+    }
+    returnTo.current = null;
+    const active = document.activeElement;
+    if (active !== null && active !== document.body) return;
+    landingFor(target.date)?.focus();
+  });
 
   function switchView(next: CalendarViewName) {
     setView(next);
@@ -101,6 +153,7 @@ export function CalendarView({
 
   function goToMonth(target: CalendarDate) {
     setNotice(null);
+    setRequested(target);
     startTransition(() => {
       router.push(calendarHref({ month: target, view, today }), { scroll: false });
     });
@@ -114,6 +167,16 @@ export function CalendarView({
       return;
     }
     setNotice(null);
+    const active = document.activeElement;
+    returnTo.current = {
+      opener: active instanceof HTMLElement && active !== document.body ? active : null,
+      date,
+    };
+    setOpenDate(date);
+  }
+
+  function moveSheet(date: CalendarDate) {
+    if (returnTo.current !== null) returnTo.current.date = date;
     setOpenDate(date);
   }
 
@@ -134,40 +197,50 @@ export function CalendarView({
     openDay(date);
   }
 
-  // The empty states' one action; the none stage is never asked a body question, so it has none.
+  // The empty states' one action. The none stage is never asked a body question, and while the
+  // postpartum card shows, its own button is the page's one way to log.
   const logToday =
-    logging === null ? undefined : (
+    logging === null || quiet ? undefined : (
       <Button variant="primary" onClick={() => openDay(today)}>
         {copy.monthEmpty.action}
       </Button>
     );
 
+  /** What a press said, in whichever view took it. */
+  const noticeLine = (className: string | undefined) => (
+    <p className={className} aria-live="polite">
+      {notice}
+    </p>
+  );
+
   const monthView = (
     <div className={styles.view}>
       <div className={styles.grid}>
+        {/* The none stage's grid shows the dates and nothing to press. */}
         <MonthGrid
           today={today}
-          month={month}
+          month={shown}
           onMonthChange={goToMonth}
           weekStart={weekStart}
           windows={marks.windows}
           points={marks.points}
           noted={marks.noted}
-          onDaySelect={openDay}
+          onDaySelect={logging === null ? undefined : openDay}
           showLegend={drawsTexture}
           loading={pending}
+          disabled={logging === null}
         />
       </div>
-      <p className={styles.notice} aria-live="polite">
-        {notice}
-      </p>
+      {noticeLine(styles.notice)}
     </div>
   );
 
-  // Outside the grid, after what the prediction says: a month can be empty and still hold predictions.
-  const monthEmpty = hasLoggedDayIn(days, month) ? null : (
-    <EmptyState heading={copy.monthEmpty.heading} why={copy.monthEmpty.why} action={logToday} />
-  );
+  // Outside the grid, after what the prediction says: a month can be empty and still hold
+  // predictions. Not while a month is on its way, when only part of it has been read.
+  const monthEmpty =
+    pending || hasLoggedDayIn(days, shown) ? null : (
+      <EmptyState heading={copy.monthEmpty.heading} why={copy.monthEmpty.why} action={logToday} />
+    );
 
   const listView = (
     <div className={styles.view}>
@@ -182,38 +255,40 @@ export function CalendarView({
         />
       ) : null}
       <div className={styles.listHead}>
-        <h2 className={styles.listMonth}>{monthCaption(month, "en-US")}</h2>
+        <h2 className={styles.listMonth}>{monthCaption(shown, "en-US")}</h2>
         <div className={styles.listNav}>
           <Button
             variant="quiet"
             icon="chevron-left"
-            onClick={() => goToMonth(shiftMonth(month, -1))}
+            onClick={() => goToMonth(shiftMonth(shown, -1))}
+            disabled={logging === null}
           >
             {copy.previousMonth}
           </Button>
           <Button
             variant="quiet"
             icon="chevron-right"
-            onClick={() => goToMonth(shiftMonth(month, 1))}
-            disabled={compareDates(month, todayMonth) >= 0}
+            onClick={() => goToMonth(shiftMonth(shown, 1))}
+            disabled={logging === null || compareDates(shown, todayMonth) >= 0}
           >
             {copy.nextMonth}
           </Button>
         </div>
       </div>
-      <div onClickCapture={openFromRow}>
-        <DayList
-          today={today}
-          items={listItems(days, month)}
-          label={copy.listLabel(month)}
-          loading={pending}
-          empty={{
-            heading: copy.listEmpty.heading,
-            why: copy.listEmpty.why,
-            action: logToday,
-          }}
+      {items.length === 0 && !pending ? (
+        <EmptyState
+          heading={copy.listEmpty.heading}
+          why={copy.listEmpty.why}
+          action={logToday}
+          level={3}
         />
-      </div>
+      ) : (
+        <div onClickCapture={openFromRow}>
+          {/* Right above the rows a press can reach, so a row that cannot open says why there. */}
+          {noticeLine(`${styles.notice} ${styles.listNotice}`)}
+          <DayList today={today} items={items} label={copy.listLabel(shown)} loading={pending} />
+        </div>
+      )}
     </div>
   );
 
@@ -252,7 +327,10 @@ export function CalendarView({
   return (
     <div className={styles.calendar}>
       <div className={styles.top}>
-        <h1 className={styles.title}>{copy.heading}</h1>
+        {/* Focus can land here when the control that opened the sheet is gone and so is the day. */}
+        <h1 ref={titleRef} className={styles.title} tabIndex={-1}>
+          {copy.heading}
+        </h1>
         <SegmentedControl<CalendarViewName>
           label={copy.viewLabel}
           hideLabel
@@ -262,7 +340,10 @@ export function CalendarView({
         />
       </div>
       {/* The sentences sit beside the view on a wide page and straight under it on a narrow one. */}
-      <div className={aside === null ? styles.body : `${styles.body} ${styles.withAside}`}>
+      <div
+        ref={bodyRef}
+        className={aside === null ? styles.body : `${styles.body} ${styles.withAside}`}
+      >
         {view === "month" ? monthView : listView}
         {aside}
         <div className={styles.extras}>
@@ -285,7 +366,7 @@ export function CalendarView({
           today={today}
           date={openDate}
           onClose={() => setOpenDate(null)}
-          onDateChange={setOpenDate}
+          onDateChange={moveSheet}
         />
       )}
     </div>

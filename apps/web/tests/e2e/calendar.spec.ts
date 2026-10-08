@@ -277,7 +277,10 @@ test("Noor's October: the logged period, the expected band and the fertile windo
     );
     await expect(dayButton(page, date).locator("xpath=ancestor::td")).toHaveClass(/estimated/);
   }
-  await expect(dayButton(page, "2026-10-17")).toHaveAccessibleName(/ovulation estimated$/);
+  // The ovulation day is the fertile window's last day, so its name ends with the contraception line too.
+  await expect(dayButton(page, "2026-10-17")).toHaveAccessibleName(
+    `${longDate("2026-10-17")}, ovulation estimated, fertile window estimated. ${CONTRACEPTION}`,
+  );
   await expect(dayButton(page, me.today)).toHaveAccessibleName(
     new RegExp(`^Today, ${escapeRegExp(longDate(me.today))}`),
   );
@@ -431,6 +434,33 @@ test("a day's sheet over the calendar: focus moves in, Escape closes it and focu
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(trigger).toBeFocused();
+});
+
+test("the view follows the address: the shell's Calendar link from the list lands on the month", async ({
+  page,
+}) => {
+  const session = await signInAs(page, "noor");
+  await page.goto("/calendar?view=list");
+  if (session === null) {
+    await expectCalendarFailure(page);
+    return;
+  }
+  await expect(page.getByRole("radio", { name: "List" })).toBeChecked();
+  await expect(page.getByRole("list", { name: "This week" })).toBeVisible();
+  // A soft navigation to the same route: the page stays mounted and must follow the address.
+  await page
+    .getByRole("navigation", { name: "Main" })
+    .getByRole("link", { name: "Calendar" })
+    .click();
+  await expect(page).toHaveURL(/\/calendar$/);
+  await expect(page.getByRole("radio", { name: "Month" })).toBeChecked();
+  await expect(page.getByRole("grid")).toBeVisible();
+  await expect(page.getByRole("list", { name: "This week" })).toHaveCount(0);
+  // Back to the list address brings the list back.
+  await page.goBack();
+  await expect(page).toHaveURL(/\/calendar\?view=list$/);
+  await expect(page.getByRole("radio", { name: "List" })).toBeChecked();
+  await expect(page.getByRole("grid")).toHaveCount(0);
 });
 
 test("a list row opens its day in the sheet instead of leaving the calendar", async ({ page }) => {
@@ -788,7 +818,9 @@ test("the none stage is never asked a body question: Theo's calendar is empty, w
   await expect(
     page.getByRole("grid").getByRole("button", { name: /period|fertile|flow|mood|note/ }),
   ).toHaveCount(0);
-  await dayButton(page, "2026-10-04").click();
+  // The grid shows his dates with nothing to press: no day opens a sheet or says anything.
+  await expect(dayButton(page, "2026-10-04")).toBeDisabled();
+  await expect(page.getByRole("grid").getByRole("button", { disabled: false })).toHaveCount(0);
   await expect(page.getByRole("dialog")).toHaveCount(0);
   await expect(page.getByText(FOOTER)).toHaveCount(0);
 

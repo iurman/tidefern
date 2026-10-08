@@ -8,9 +8,14 @@ const state = vi.hoisted(() => ({
   lookup: { kind: "anonymous" } as unknown,
   load: { ok: false } as unknown,
   loads: [] as unknown[][],
+  /** The browser's address for the same request, which the view reads with useSearchParams. */
+  search: "",
 }));
 
-vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }) }));
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ push: vi.fn(), refresh: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(state.search),
+}));
 vi.mock("next/headers", () => ({ headers: async () => new Headers({ cookie: "session=1" }) }));
 vi.mock("@/lib/api-server", () => ({
   sessionMe: async () => state.lookup,
@@ -63,12 +68,14 @@ function given(lookup: MeLookup, load: CalendarLoad = { ok: false }) {
 }
 
 async function renderPage(query: Record<string, string> = {}) {
+  state.search = new URLSearchParams(query).toString();
   const page = await CalendarPage({ searchParams: Promise.resolve(query) });
   return page === null ? null : render(page);
 }
 
 beforeEach(() => {
   state.loads = [];
+  state.search = "";
   given({ kind: "anonymous" });
 });
 
@@ -94,11 +101,22 @@ describe("the calendar page", () => {
     expect(state.loads).toEqual([]);
   });
 
-  it("reads the month the address names over the whole grid, in her week start", async () => {
+  it("keeps the month and the view in Try again when the session read fails", async () => {
+    given({ kind: "failed" });
+    await renderPage({ month: "2026-09", view: "list" });
+    expect(screen.getByRole("link", { name: "Try again" })).toHaveAttribute(
+      "href",
+      "/calendar?month=2026-09&view=list",
+    );
+    expect(state.loads).toEqual([]);
+  });
+
+  it("reads the month the address names over the whole grid and a day either side, in her week start", async () => {
     given({ kind: "ok", me }, { ok: true, days: [], prediction: estimate, children: null });
     await renderPage({ month: "2026-09", view: "list" });
+    // The grid runs Aug 31 to Oct 4; the day past each edge tells whether a period runs on there.
     expect(state.loads).toEqual([
-      ["the server client", { from: "2026-08-31", to: "2026-10-04" }, { children: false }],
+      ["the server client", { from: "2026-08-30", to: "2026-10-05" }, { children: false }],
     ]);
     expect(screen.getByRole("radio", { name: "List" })).toBeChecked();
     expect(screen.getByRole("heading", { level: 2, name: "September 2026" })).toBeInTheDocument();
@@ -156,7 +174,8 @@ describe("the calendar page", () => {
   it("draws today's month by default with the API's prediction", async () => {
     given({ kind: "ok", me }, { ok: true, days: [], prediction: estimate, children: null });
     await renderPage();
-    expect(state.loads[0]?.[1]).toEqual({ from: "2026-09-28", to: "2026-11-01" });
+    // October's grid (Sep 28 to Nov 1) and a day either side.
+    expect(state.loads[0]?.[1]).toEqual({ from: "2026-09-27", to: "2026-11-02" });
     expect(screen.getByRole("grid", { name: "October 2026" })).toBeInTheDocument();
     expect(
       screen.getByText(

@@ -1,5 +1,6 @@
 import type { CycleEntry, CyclePrediction, Note } from "@tidefern/schemas";
 import { describe, expect, it } from "vitest";
+import { dayFacts } from "@/components/ui/calendar-dates";
 import { CONTRACEPTION_LINE } from "@/lib/prediction-copy";
 import {
   EXPECTED_PERIOD_WORDS,
@@ -8,6 +9,7 @@ import {
   OVULATION_WORDS,
   calendarDaysFrom,
   calendarHref,
+  calendarHrefFromQuery,
   calendarMarks,
   childAgeLine,
   dateFromLogHref,
@@ -20,8 +22,10 @@ import {
   listItems,
   loggedWindows,
   monthFromParam,
+  monthParam,
   notedMarks,
   predictionMarks,
+  readRange,
   shiftMonth,
   viewFromParam,
   type CalendarDay,
@@ -99,7 +103,21 @@ describe("the month the page shows", () => {
     // Date.UTC reads a year under 100 as 19xx, so 0001-01 would ask the API for 1901.
     for (const far of ["0001-01", "0099-12", "1899-12", "3000-01"]) {
       expect(monthFromParam(far, today), far).toBe("2026-10-01");
+      expect(monthParam(far), far).toBeNull();
     }
+    expect(monthParam("2026-09")).toBe("2026-09");
+    expect(monthParam(undefined)).toBeNull();
+  });
+
+  it("keeps the asked month and view in the address to read again when today is not known", () => {
+    expect(calendarHrefFromQuery({ month: "2026-09", view: "list" })).toBe(
+      "/calendar?month=2026-09&view=list",
+    );
+    expect(calendarHrefFromQuery({ month: "2026-09" })).toBe("/calendar?month=2026-09");
+    expect(calendarHrefFromQuery({ view: ["list"] })).toBe("/calendar?view=list");
+    // Anything the calendar would not read is dropped rather than echoed back.
+    expect(calendarHrefFromQuery({ month: "2026-13", view: "grid" })).toBe("/calendar");
+    expect(calendarHrefFromQuery({})).toBe("/calendar");
   });
 
   it("opens the list only for ?view=list", () => {
@@ -124,6 +142,11 @@ describe("the month the page shows", () => {
     expect(gridRange("2026-10-01", 1)).toEqual({ from: "2026-09-28", to: "2026-11-01" });
     expect(gridRange("2026-10-01", 7)).toEqual({ from: "2026-09-27", to: "2026-10-31" });
     expect(gridRange("2026-02-01", 1)).toEqual({ from: "2026-01-26", to: "2026-03-01" });
+  });
+
+  it("reads one day past each edge of the grid, so a period across an edge is known to run on", () => {
+    expect(readRange("2026-10-01", 1)).toEqual({ from: "2026-09-27", to: "2026-11-02" });
+    expect(readRange("2026-10-01", 7)).toEqual({ from: "2026-09-26", to: "2026-11-01" });
   });
 
   it("keeps the address short: the month only when it is not today's, the view only for the list", () => {
@@ -220,25 +243,53 @@ describe("drawing", () => {
   });
 
   it("draws the next period's whole band dashed, the fertile window dotted and ovulation as a point", () => {
-    expect(predictionMarks(estimate)).toEqual({
-      windows: [
-        {
-          start: "2026-10-28",
-          end: "2026-11-03",
-          texture: "predicted",
-          words: EXPECTED_PERIOD_WORDS,
-        },
-        { start: "2026-10-12", end: "2026-10-17", texture: "estimated", words: FERTILE_WORDS },
-      ],
-      points: [{ date: "2026-10-17", words: OVULATION_WORDS }],
+    const facts = dayFacts(predictionMarks(estimate));
+    for (const [date, edge] of [
+      ["2026-10-28", "start"],
+      ["2026-10-31", "middle"],
+      ["2026-11-03", "end"],
+    ] as const) {
+      expect(facts.get(date), date).toEqual({
+        texture: "predicted",
+        edge,
+        words: [EXPECTED_PERIOD_WORDS],
+      });
+    }
+    expect(facts.get("2026-10-12")).toEqual({
+      texture: "estimated",
+      edge: "start",
+      words: [FERTILE_WORDS],
     });
+    expect(facts.get("2026-10-14")).toMatchObject({ texture: "estimated", edge: "middle" });
+    // The band rounds only at its own ends, the ovulation day included.
+    expect(facts.get("2026-10-17")).toEqual({
+      texture: "estimated",
+      edge: "end",
+      point: true,
+      words: [OVULATION_WORDS, FERTILE_WORDS],
+    });
+    expect(facts.has("2026-10-11")).toBe(false);
+    expect(facts.has("2026-10-18")).toBe(false);
   });
 
-  it("puts the contraception line, word for word, in every fertile day's name", () => {
+  it("puts the contraception line, word for word, last in every fertile day's name, the ovulation day's too", () => {
     expect(FERTILE_WORDS).toBe(
       "fertile window estimated. An estimate from your logged dates. Not a form of contraception.",
     );
     expect(FERTILE_WORDS.endsWith(CONTRACEPTION_LINE)).toBe(true);
+    const facts = dayFacts(predictionMarks(estimate));
+    for (const [date, day] of facts) {
+      if (day.texture === "estimated") expect(day.words.at(-1), date).toBe(FERTILE_WORDS);
+    }
+  });
+
+  it("keeps the ovulation words on the point when the API puts ovulation outside the window", () => {
+    const apart = predictionMarks({
+      ...estimate,
+      ovulation: { expected: "2026-10-20", start: "2026-10-18", end: "2026-10-22" },
+    });
+    expect(apart.points).toEqual([{ date: "2026-10-20", words: OVULATION_WORDS }]);
+    expect(dayFacts(apart).get("2026-10-20")).toEqual({ point: true, words: [OVULATION_WORDS] });
   });
 
   it("draws a first guess the same way, with its wider band", () => {
@@ -252,11 +303,24 @@ describe("drawing", () => {
       uncertaintyDays: 4,
     };
     const marks = predictionMarks(firstGuess);
+    // The fertile window comes as three windows (drawn, then the ovulation day's words, then the
+    // fertile words) so the contraception line ends the ovulation day's name; see predictionMarks.
     expect(marks.windows.map((window) => [window.texture, window.start, window.end])).toEqual([
       ["predicted", "2026-10-19", "2026-10-27"],
       ["estimated", "2026-10-04", "2026-10-09"],
+      ["estimated", "2026-10-09", "2026-10-09"],
+      ["estimated", "2026-10-04", "2026-10-09"],
     ]);
-    expect(marks.points).toEqual([{ date: "2026-10-09", words: OVULATION_WORDS }]);
+    expect(marks.points).toEqual([{ date: "2026-10-09" }]);
+    const facts = dayFacts(marks);
+    expect(facts.get("2026-10-19")).toMatchObject({ texture: "predicted", edge: "start" });
+    expect(facts.get("2026-10-27")).toMatchObject({ texture: "predicted", edge: "end" });
+    expect(facts.get("2026-10-09")).toEqual({
+      texture: "estimated",
+      edge: "end",
+      point: true,
+      words: [OVULATION_WORDS, FERTILE_WORDS],
+    });
   });
 
   it("draws nothing for not enough regular cycles or basis none, whatever else the answer holds", () => {
@@ -275,12 +339,31 @@ describe("drawing", () => {
       { date: "2026-10-04", words: "note" },
     ]);
     const marks = calendarMarks(days, estimate);
+    // Three estimated windows draw and name the one fertile window (predictionMarks says why).
     expect(marks.windows.map((window) => window.texture)).toEqual([
       "logged",
       "predicted",
       "estimated",
+      "estimated",
+      "estimated",
     ]);
     expect(marks.noted).toHaveLength(2);
+  });
+
+  it("draws a period logged across the grid's first day as running on there, not starting", () => {
+    // October's grid starts on Monday Sep 28; the read reaches Sep 27 (readRange), which holds the
+    // period that began on Sep 26, so Sep 28 sits in the middle of its pill.
+    const days = [
+      day("2026-09-27", { flow: "heavy" }),
+      day("2026-09-28", { flow: "medium" }),
+      day("2026-09-29", { flow: "light" }),
+    ];
+    const facts = dayFacts({ windows: loggedWindows(days) });
+    expect(facts.get("2026-09-28")).toMatchObject({ texture: "logged", edge: "middle" });
+    expect(facts.get("2026-09-29")).toMatchObject({ texture: "logged", edge: "end" });
+    // Read from the grid's first day alone, the same days would round there as if they began on it.
+    const cut = dayFacts({ windows: loggedWindows(days.slice(1)) });
+    expect(cut.get("2026-09-28")).toMatchObject({ edge: "start" });
   });
 });
 
