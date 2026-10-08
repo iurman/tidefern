@@ -14,6 +14,13 @@ vi.mock("./problems", async (importOriginal) => ({
   goTo,
 }));
 
+// The success and error cues, observed; every other export of the sound module stays real.
+const play = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/sound", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/sound")>()),
+  play,
+}));
+
 const { SharingBoard } = await import("./sharing-board");
 
 type SharingPerson = components["schemas"]["SharingPerson"];
@@ -169,6 +176,7 @@ beforeEach(() => {
   answers = [];
   refresh.mockClear();
   goTo.mockClear();
+  play.mockClear();
   vi.spyOn(window, "fetch").mockImplementation(async (input) => {
     const request = input as Request;
     const url = new URL(request.url);
@@ -298,6 +306,26 @@ describe("SharingBoard: turning categories on and off", () => {
     expect(await within(dialog).findByText(copy.failure.server)).toBeVisible();
     expect(dialog).toHaveAttribute("open");
     expect(refresh).not.toHaveBeenCalled();
+    // The failure plays the error cue with its text (DESIGN.md 7).
+    expect(play).toHaveBeenCalledWith("error");
+  });
+
+  it("plays the error cue with a revoke that got no answer, and the success cue with one that did", async () => {
+    const user = userEvent.setup();
+    render(<SharingBoard view={noorView()} />);
+    answers.push(() => {
+      throw new TypeError("Failed to fetch");
+    });
+    await user.click(within(card("Theo")).getByRole("switch", { name: "Symptoms" }));
+    expect(await within(card("Theo")).findByText(copy.failure.offline)).toBeVisible();
+    expect(play).toHaveBeenCalledWith("error");
+    expect(play).not.toHaveBeenCalledWith("success");
+    play.mockClear();
+    answers.push(() => new Response(null, { status: 204 }));
+    await user.click(within(card("Theo")).getByRole("switch", { name: "Symptoms" }));
+    expect(await screen.findByText("Theo can no longer see your symptoms.")).toBeVisible();
+    expect(play).toHaveBeenCalledWith("success");
+    expect(play).not.toHaveBeenCalledWith("error");
   });
 
   it("reads the page again when the person's sharing changed somewhere else", async () => {
@@ -349,6 +377,47 @@ describe("SharingBoard: the notify switch and removal", () => {
     );
   });
 
+  it("keeps a notice left on with no period category pressable, and says nothing goes out", async () => {
+    const user = userEvent.setup();
+    const symptomsOnly: SharingPerson = {
+      ...theo,
+      grants: [
+        {
+          ...grantBase,
+          id: "018f5e7a-5eed-7004-8000-000000000002",
+          category: "cycle.symptoms",
+          level: "read",
+          notify: true,
+        },
+      ],
+    };
+    render(
+      <SharingBoard
+        view={buildSharingView({
+          me: me(NOOR, "cycle"),
+          people: [symptomsOnly],
+          invitations: [],
+          children: [],
+        })}
+      />,
+    );
+    const notify = within(card("Theo")).getByRole("switch", {
+      name: "Tell Theo when my period starts",
+    });
+    expect(notify).toBeEnabled();
+    expect(notify).toHaveAttribute("aria-checked", "true");
+    expect(notify).toHaveAccessibleDescription(
+      `The message says only that there is something new in Tidefern. ${copy.notify.unsent("Theo")}`,
+    );
+    answers.push(() => Response.json({ ...symptomsOnly, notify: false, version: 4 }));
+    await user.click(notify);
+    expect(await screen.findByText(copy.notify.off("Theo"))).toBeVisible();
+    expect(calls[0]).toMatchObject({
+      path: "PUT /api/v1/sharing/notify",
+      body: { personId: THEO, notify: false },
+    });
+  });
+
   it("shows a co-guardian's refusal honestly, with the way to Family", async () => {
     const user = userEvent.setup();
     render(<SharingBoard view={miraView()} />);
@@ -371,6 +440,8 @@ describe("SharingBoard: the notify switch and removal", () => {
     );
     expect(calls[0]?.path).toBe(`DELETE /api/v1/sharing/people/${LENA}`);
     expect(refresh).not.toHaveBeenCalled();
+    // The refusal plays the error cue with its text, as every failure does (DESIGN.md 7).
+    expect(play).toHaveBeenCalledWith("error");
   });
 
   it("keeps the outcome of removing the last person after the page reads the empty list", async () => {
@@ -444,6 +515,13 @@ describe("SharingBoard: the notify switch and removal", () => {
     expect(screen.getByRole("dialog", { name: "Remove Noor?" })).toHaveTextContent(
       copy.remove.owner("Noor"),
     );
+    // Only Noor can invite into her household, so he gets her name instead of a form.
+    const invitations = screen.getByRole("region", { name: copy.invitations });
+    expect(invitations).toHaveTextContent(copy.invite.ownerOnly("Noor"));
+    expect(within(invitations).queryByRole("textbox")).not.toBeInTheDocument();
+    expect(
+      within(invitations).queryByRole("button", { name: copy.invite.submit }),
+    ).not.toBeInTheDocument();
   });
 });
 
@@ -503,7 +581,14 @@ describe("SharingBoard: empty, invitations and the page's own lines", () => {
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 
-  it("says an invitation that is no longer open has expired, and reads the list again", async () => {
+  it("offers the owner the invite form", () => {
+    render(<SharingBoard view={noorView()} />);
+    const invitations = screen.getByRole("region", { name: copy.invitations });
+    expect(within(invitations).getByRole("textbox", { name: /Their email/ })).toBeVisible();
+    expect(invitations).not.toHaveTextContent(copy.invite.ownerOnly("Noor"));
+  });
+
+  it("says an invitation that is no longer open was already closed, and reads the list again", async () => {
     const user = userEvent.setup();
     render(
       <SharingBoard
@@ -521,7 +606,10 @@ describe("SharingBoard: empty, invitations and the page's own lines", () => {
     );
     answers.push(problem(404, undefined, "not_found"));
     await user.click(screen.getByRole("button", { name: "Withdraw" }));
-    expect(await screen.findByText("The invitation has expired. Send a new one.")).toBeVisible();
+    // Changed on purpose (review of PR #83): the 404 comes for an accepted, withdrawn or
+    // expired invitation alike, so the sentence no longer says expired or asks for a new one.
+    expect(await screen.findByText(copy.withdraw.closed)).toBeVisible();
+    expect(screen.queryByText("The invitation has expired. Send a new one.")).toBeNull();
     expect(refresh).toHaveBeenCalledTimes(1);
   });
 });

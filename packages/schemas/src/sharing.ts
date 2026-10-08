@@ -30,7 +30,8 @@ const GrantLevel = z.enum(["summary", "read", "contribute"]);
  * category can be turned on, oldest first; the last is what the screen
  * shows now. A grant records the version it was made under
  * (`GrantSetInput.descriptionVersion`, the `grants.description_version`
- * column), so a version names exactly the text the owner read. A changed
+ * column), so a version names exactly the text the owner read: every row's
+ * words, a child's own row included, and the notify switch's. A changed
  * sentence is a new version; a version, once shipped, is never edited.
  */
 export const sharingDescriptionVersions = ["2026-10"] as const;
@@ -48,14 +49,29 @@ export interface SharingDescription {
 /** One version of the sharing screen's plain words. */
 export interface SharingDescriptions {
   categories: Readonly<Record<z.infer<typeof GrantCategory>, SharingDescription>>;
+  /**
+   * The words on one child's own row, `[child]` standing for her name: the
+   * `child` category's sentence with the name in it. The screen gives each
+   * child one switch, so the row leaves that sentence out.
+   */
+  childRow: string;
+  /** The notify switch: its label, `[name]` standing for the person told, and its one sentence. */
+  notify: SharingDescription;
   /** The private journal, which has no switch and never will. */
   privateNotes: SharingDescription;
 }
 
+/** A catalog sentence with its `[child]` or `[name]` placeholder filled in. */
+export function fillSharingWords(template: string, value: string): string {
+  return template.replace(/\[(?:child|name)\]/g, value);
+}
+
 /**
  * The catalog of the plain words, keyed by version. The 2026-10 sentences
- * are docs/design/CONTENT.md's sharing descriptions word for word; a web
- * test compares the two, so neither can change without the other.
+ * are docs/design/CONTENT.md's sharing descriptions word for word (the
+ * table, the notify switch under it and the child's row in the `/sharing`
+ * subsection); a web test compares the two, so neither can change without
+ * the other.
  */
 export const SHARING_DESCRIPTIONS: Readonly<
   Record<SharingDescriptionVersion, SharingDescriptions>
@@ -89,6 +105,11 @@ export const SHARING_DESCRIPTIONS: Readonly<
         description:
           "Everything logged for that child: feeds, sleep, growth, milestones and photos. One switch per child.",
       },
+    },
+    childRow: "Everything logged for [child]: feeds, sleep, growth, milestones and photos.",
+    notify: {
+      label: "Tell [name] when my period starts",
+      description: "The message says only that there is something new in Tidefern.",
     },
     privateNotes: { label: "Private notes", description: "Never shared. There is no switch." },
   },

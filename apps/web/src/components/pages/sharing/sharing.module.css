@@ -153,10 +153,24 @@
   font-weight: var(--weight-sans-strong);
 }
 
+/* A failed save in the confirm step, under the level it was for. */
+.confirmError {
+  margin-top: var(--space-2);
+}
+
 @media (max-width: 600px) {
   .accept,
   .invite,
   .sharedCard {
+    padding: var(--space-4);
+  }
+
+  /*
+   * The person cards on this page: on a phone the switches keep their width,
+   * so less padding gives the words more room. Two classes outrank the
+   * card's own one, whatever order the stylesheets load in.
+   */
+  .people .personCard {
     padding: var(--space-4);
   }
 }

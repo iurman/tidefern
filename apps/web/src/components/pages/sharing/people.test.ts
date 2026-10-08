@@ -171,6 +171,9 @@ describe("buildSharingView for an owner in the cycle stage (Noor)", () => {
       ],
     });
     expect(symptomsOnly.people[0]?.notifyMode).toBe("disabled");
+    // Changed on purpose (review of PR #83): a switch left on with no period category shared
+    // tells nobody, since the reminder job hears only period categories, so the row stays
+    // pressable to turn it off and says that nothing goes out; it used to read "enabled".
     const stillOn = view({
       me: me(NOOR, "cycle", "Europe/Berlin"),
       people: [
@@ -181,7 +184,54 @@ describe("buildSharingView for an owner in the cycle stage (Noor)", () => {
         }),
       ],
     });
-    expect(stillOn.people[0]?.notifyMode).toBe("enabled");
+    expect(stillOn.people[0]?.notifyMode).toBe("unsent");
+  });
+
+  it("counts a notice as sent only through a period category that carries it, as the reminder job does", () => {
+    const carried = view({
+      me: me(NOOR, "cycle", "Europe/Berlin"),
+      people: [
+        person({
+          id: THEO,
+          notify: true,
+          grants: [
+            grant({ category: "cycle.history", level: "read", notify: true }),
+            grant({ category: "cycle.symptoms", level: "read", notify: true }),
+          ],
+        }),
+      ],
+    });
+    expect(carried.people[0]?.notifyMode).toBe("enabled");
+    const notCarried = view({
+      me: me(NOOR, "cycle", "Europe/Berlin"),
+      people: [
+        person({
+          id: THEO,
+          notify: true,
+          grants: [
+            grant({ category: "cycle.status", level: "summary", notify: false }),
+            grant({ category: "cycle.symptoms", level: "read", notify: true }),
+          ],
+        }),
+      ],
+    });
+    expect(notCarried.people[0]?.notifyMode).toBe("unsent");
+    // Whatever the stage: a switch that is on is never hidden, so it can be turned off.
+    const pregnant = view({
+      me: me(NOOR, "pregnancy", "Europe/Berlin"),
+      people: [
+        person({
+          id: THEO,
+          notify: true,
+          grants: [grant({ category: "pregnancy.overview", level: "read", notify: true })],
+        }),
+      ],
+    });
+    expect(pregnant.people[0]?.notifyMode).toBe("unsent");
+  });
+
+  it("offers her the invite form: she owns household A", () => {
+    expect(sharing.invite).toEqual({ by: "self" });
   });
 });
 
@@ -226,6 +276,10 @@ describe("buildSharingView for a partner who tracks nothing (Theo)", () => {
       removal: "owner",
     });
     expect(sharing.householdOwners).toEqual({ [HOUSEHOLD_A]: "Noor" });
+  });
+
+  it("offers him no invite form: only Noor, who owns household A, can invite into it", () => {
+    expect(sharing.invite).toEqual({ by: "owner", owner: "Noor" });
   });
 
   it("still lists a grant he made before, so he can turn it off", () => {
@@ -333,6 +387,10 @@ describe("buildSharingView for a guardian with a co-guardian and someone outside
     expect(lena?.notifyMode).toBe("disabled");
     expect(pia?.notifyMode).toBe("disabled");
   });
+
+  it("offers her the invite form: she owns household B, and Pia outside it changes nothing", () => {
+    expect(sharing.invite).toEqual({ by: "self" });
+  });
 });
 
 describe("buildSharingView for a pregnant partner (Lena)", () => {
@@ -361,6 +419,10 @@ describe("buildSharingView for a pregnant partner (Lena)", () => {
       "contribute",
     );
   });
+
+  it("names Mira as the one who can invite into household B", () => {
+    expect(sharing.invite).toEqual({ by: "owner", owner: "Mira" });
+  });
 });
 
 describe("buildSharingView for someone sharing with nobody (Pia)", () => {
@@ -386,6 +448,10 @@ describe("buildSharingView for someone sharing with nobody (Pia)", () => {
       { key: "018f5e7a-5eed-7004-8000-000000000005", label: "Sol", level: "read" },
     ]);
   });
+
+  it("offers her the invite form: she belongs to no household, and her first invitation starts one", () => {
+    expect(sharing.invite).toEqual({ by: "self" });
+  });
 });
 
 describe("buildSharingView edges", () => {
@@ -400,6 +466,24 @@ describe("buildSharingView edges", () => {
     const other = sharing.people.find((entry) => entry.id === PIA);
     expect(other?.name).toBe("Someone");
     expect(other?.removal).toBe("grants");
+    expect(sharing.invite).toEqual({ by: "owner", owner: "Noor" });
+  });
+
+  it("names no one as the inviter while the household's owner has no name yet", () => {
+    const sharing = view({
+      me: me(THEO, "cycle", "Europe/Berlin"),
+      people: [person({ id: NOOR, displayName: null, role: "owner", householdId: HOUSEHOLD_A })],
+    });
+    expect(sharing.invite).toEqual({ by: "owner", owner: null });
+  });
+
+  it("offers the form in a household nobody listed owns, and leaves the refusal to the API", () => {
+    // The owner's account closed: her membership went, the household stayed with its members.
+    const sharing = view({
+      me: me(THEO, "cycle", "Europe/Berlin"),
+      people: [person({ id: PIA, displayName: "Pia", role: "partner", householdId: HOUSEHOLD_A })],
+    });
+    expect(sharing.invite).toEqual({ by: "self" });
   });
 
   it("offers cycle status as a summary and everything else to read", () => {

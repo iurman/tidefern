@@ -142,13 +142,6 @@
   visibility: hidden;
 }
 
-/* On a phone the switches keep their width, so the card's own padding gives the words more room. */
-@media (max-width: 600px) {
-  .card {
-    padding: var(--space-4);
-  }
-}
-
 @media (prefers-reduced-motion: reduce) {
   .card,
   .remove {

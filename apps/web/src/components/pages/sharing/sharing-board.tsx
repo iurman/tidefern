@@ -29,11 +29,12 @@ import styles from "./sharing.module.css";
 
 /**
  * The version of the sharing policy a grant records (`GrantSetInput.policyVersion`).
- * The words the owner reads on this screen before she chooses (the
- * descriptions, the private-notes sentence, the notify sentence) are that
- * policy, and they are versioned in the descriptions catalog, so the two
- * versions are one until a sharing policy text of its own exists; the
- * seed records the same value.
+ * The words the owner reads on a card before she chooses (each category's
+ * description, a child's own row, the notify switch's label and sentence)
+ * are that policy, and the descriptions catalog versions all of them, so
+ * the two versions are one until a sharing policy text of its own exists;
+ * the seed records the same value. The page's closing line, "Private notes
+ * are never shared." (DESIGN.md 3.7), names what no grant can reach.
  */
 export const SHARING_POLICY_VERSION = CURRENT_SHARING_DESCRIPTION_VERSION;
 
@@ -54,6 +55,13 @@ function removalText(person: PersonView): string {
   if (person.removal === "owner") return copy.remove.owner(person.name);
   if (person.removal === "member") return copy.remove.member(person.name);
   return copy.remove.grants(person.name);
+}
+
+/** The line under the notify switch: why it cannot be pressed, or why it tells nobody yet. */
+function notifyNoteFor(person: PersonView): string | undefined {
+  if (person.notifyMode === "disabled") return copy.notify.needsCycle(person.name);
+  if (person.notifyMode === "unsent") return copy.notify.unsent(person.name);
+  return undefined;
 }
 
 function Received({ name, rows }: { name: string; rows: readonly ReceivedView[] }) {
@@ -86,6 +94,8 @@ function Received({ name, rows }: { name: string; rows: readonly ReceivedView[] 
  * the page reads again (`router.refresh()`), so nothing on screen is a
  * value the API did not return. All of it runs in the browser through the
  * typed client: the API refuses a mutation without the browser's origin.
+ * The invite form shows only to someone the API lets invite; a member of a
+ * household someone else owns is told who can instead.
  */
 export function SharingBoard({ view }: { view: SharingView }) {
   const router = useRouter();
@@ -357,9 +367,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
                 notify={person.notify}
                 notifyHidden={person.notifyMode === "hidden"}
                 notifyDisabled={person.notifyMode === "disabled"}
-                notifyNote={
-                  person.notifyMode === "disabled" ? copy.notify.needsCycle(person.name) : undefined
-                }
+                notifyNote={notifyNoteFor(person)}
                 notifyLoading={pending(person.id, "notify")}
                 notifyError={said(person.id, "notify", "error")}
                 notifyDone={said(person.id, "notify", "done")}
@@ -371,8 +379,10 @@ export function SharingBoard({ view }: { view: SharingView }) {
                 onRemove={() => void remove(person)}
                 removeConsequence={<p>{removalText(person)}</p>}
                 removeError={removeError(person)}
+                errorCue
                 loading={pending(person.id, "remove")}
                 showPrivateNotes={false}
+                className={styles.personCard}
               >
                 {freshAuthFor === person.id ? (
                   <FreshSignIn sentence={copy.freshAuth.grant} />
@@ -410,7 +420,11 @@ export function SharingBoard({ view }: { view: SharingView }) {
           {copy.invitations}
         </h2>
         <InvitationList invitations={view.invitations} />
-        <InviteForm />
+        {view.invite.by === "self" ? (
+          <InviteForm />
+        ) : (
+          <p className={styles.lede}>{copy.invite.ownerOnly(view.invite.owner)}</p>
+        )}
       </section>
 
       <p className={styles.privateNotes}>{copy.privateNotes}</p>

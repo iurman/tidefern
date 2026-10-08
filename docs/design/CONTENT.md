@@ -253,9 +253,10 @@ owner approves them there.
   "Cancel". The outcome of turning one off: "Alex can no longer see your
   cycle status."
 - `[OWNER]` The notify switch: "Share your cycle status or cycle history
-  with Alex first." while it is held back, "Tidefern will tell Alex when
-  your period starts." and "Tidefern will no longer tell Alex when your
-  period starts."
+  with Alex first." while it is held back, "No message goes out until you
+  share your cycle status or cycle history with Alex." while it is on with
+  neither shared, "Tidefern will tell Alex when your period starts." and
+  "Tidefern will no longer tell Alex when your period starts."
 - `[OWNER]` What someone shares with you: "Alex shares with you", "Only
   Alex can change this.", the "Shared with you" heading and "Only the
   person who shares it with you can change it."
@@ -264,7 +265,9 @@ owner approves them there.
   record stays with you." (Alex is in your household); "You leave Alex's
   household, and Alex loses access to everything you share, right now.
   What Alex shares with you stays until Alex turns it off." (Alex owns it);
-  the component's own sentence otherwise. Outcomes: "Alex no longer sees
+  otherwise the component's own sentence, "Alex loses access to everything
+  you share, right now. What Alex added to your record stays with you."
+  Outcomes: "Alex no longer sees
   anything you share." and "You left Alex's household. Alex no longer sees
   anything you share." The co-guardian refusal: "Alex also guards Ilo and
   Sol. Change who guards Ilo and Sol in Family first, then remove Alex."
@@ -275,16 +278,23 @@ owner approves them there.
   invitation", "Invitation sent to jo@example.com.", and the refusals
   "Enter their email address, like name@example.com.", "An invitation to
   this address is already waiting. Withdraw it to send a new one.", "Only
-  the person who started your household can invite people into it.",
-  "Tidefern cannot send email right now, so nothing was sent. Try again
-  later."
-- `[OWNER]` Withdrawing: "The invitation to jo@example.com is withdrawn."
-  and "We could not withdraw the invitation. Try again."
+  the person who started your household can invite people into it. Ask
+  them to send the invitation.", "Tidefern cannot send email right now, so
+  nothing was sent. Try again later." A member of a household someone else
+  owns sees, in place of the form, "Only Alex can invite people into your
+  household. Ask Alex to send the invitation." (or the nameless sentence
+  above when the owner has no name yet).
+- `[OWNER]` Withdrawing: "The invitation to jo@example.com is withdrawn.",
+  "This invitation was already closed, so there is nothing to withdraw.
+  The page now shows the latest." (accepted, withdrawn elsewhere or
+  expired; the API does not say which) and "We could not withdraw the
+  invitation. Try again."
 - `[OWNER]` The acceptance panel: "An invitation for you", "Someone you
   know invited you to share with them on Tidefern. Accepting adds you to
   their household. Nothing is shared either way until someone turns a
   category on.", "Accept the invitation", "Accepting the invitation", "You
-  joined Alex's household.", the household choice ("You already belong to
+  joined Alex's household." ("You joined the household." when the owner's
+  name is not known), the household choice ("You already belong to
   a household. Accepting moves you into the new one and out of the one you
   are in now.", "Move to the new household", "Stay where I am"), "You
   stayed in your household. The invitation stays open until it expires, if
@@ -298,10 +308,15 @@ owner approves them there.
   email again." and "We could not accept the invitation. Try again."
 - `[OWNER]` The next steps after a refusal: "For safety, turning on a
   category needs a sign-in from the last ten minutes. Sign in again, then
-  come back here.", the same for sending an invitation, "This changed
+  come back here.", the same for sending an invitation ("For safety,
+  sending an invitation needs a sign-in from the last ten minutes. Sign in
+  again, then come back here."), "This changed
   somewhere else, and the page now shows the latest. Try again.", "Too
-  many changes in a row. Wait a minute and try again.", and "We could not
-  load who you share with just now. Reload the page to try again."
+  many changes in a row. Wait a minute and try again.", "We could not
+  load who you share with just now. Reload the page to try again.", and,
+  while the acceptance panel holds an invitation a reload would lose, "We
+  could not load who you share with just now. Accept the invitation above
+  first, then reload the page."
 
 ### `/settings` (H7)
 

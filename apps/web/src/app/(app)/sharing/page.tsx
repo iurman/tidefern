@@ -5,7 +5,6 @@ import { loadSharing } from "@/components/pages/sharing/load";
 import { buildSharingView } from "@/components/pages/sharing/people";
 import { SharingBoard } from "@/components/pages/sharing/sharing-board";
 import styles from "@/components/pages/sharing/sharing.module.css";
-import { InlineFeedback } from "@/components/ui/inline-feedback";
 import { serverApiClient, sessionMe } from "@/lib/api-server";
 import { pageMetadata } from "@/lib/site";
 
@@ -27,7 +26,8 @@ export const dynamic = "force-dynamic";
  * session, a closing account or a person without a profile gets nothing
  * here while the layout redirects them. A read that failed says so, and
  * the acceptance panel still takes an invitation fragment out of the
- * address bar.
+ * address bar; the panel words that failure itself, because while it holds
+ * a token the next step is to accept before reloading.
  */
 export default async function SharingPage() {
   const lookup = await sessionMe();
@@ -53,8 +53,7 @@ function Unavailable() {
       <h1 id="sharing-title" className={styles.heading}>
         {copy.heading}
       </h1>
-      <AcceptInvitation householdOwners={{}} />
-      <InlineFeedback tone="error">{copy.loadFailed}</InlineFeedback>
+      <AcceptInvitation householdOwners={{}} readFailed />
     </section>
   );
 }

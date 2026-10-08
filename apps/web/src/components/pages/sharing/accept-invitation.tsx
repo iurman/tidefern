@@ -8,7 +8,7 @@ import { browserApiClient } from "@/lib/api-browser";
 import { SIGN_IN_PATH } from "@/lib/auth-client";
 import { takeInvitationFragment } from "@/lib/invitation-fragment";
 import { sharingCopy } from "./copy";
-import { attempt, describeAcceptRefusal, goTo, leaveFor } from "./problems";
+import { attempt, describeAcceptRefusal, goTo, leaveFor, settledByServer } from "./problems";
 import styles from "./sharing.module.css";
 
 const copy = sharingCopy.accept;
@@ -38,6 +38,13 @@ type Step = "first" | HouseholdChoice;
 export interface AcceptInvitationProps {
   /** The owner's name for each household the people list shows, to say whose household was joined. */
   householdOwners: Readonly<Record<string, string>>;
+  /**
+   * The page could not read its lists. The panel then says so itself,
+   * under it, because the next step depends on the panel: while it holds a
+   * token, a reload would lose the invitation (the fragment is already out
+   * of the address bar), so the sentence asks for the acceptance first.
+   */
+  readFailed?: boolean;
 }
 
 /**
@@ -50,14 +57,15 @@ export interface AcceptInvitationProps {
  * and it never says which of expired, withdrawn or sent to another address
  * an invitation that cannot be used is, as the API never does. An invitee
  * who already belongs to a household chooses to move or to stay. Renders
- * nothing when the page was not opened from a link.
+ * nothing when the page was not opened from a link, except the failed
+ * read's sentence when `readFailed` asks for it.
  */
-export function AcceptInvitation({ householdOwners }: AcceptInvitationProps) {
+export function AcceptInvitation({ householdOwners, readFailed = false }: AcceptInvitationProps) {
   const router = useRouter();
   const headingId = useId();
   const token = useRef<string | null>(null);
-  // One Idempotency-Key per step, reused when the same press is retried after a lost answer,
-  // so the server replays its first outcome instead of answering 404 for a used invitation.
+  // One Idempotency-Key per step, kept only while the step's last answer was lost, so a retry
+  // replays an acceptance that went through instead of meeting the closed invitation's 404.
   const keys = useRef<Partial<Record<Step, string>>>({});
   const [panel, setPanel] = useState<Panel>({ kind: "none" });
   const [busy, setBusy] = useState<Step | null>(null);
@@ -84,10 +92,8 @@ export function AcceptInvitation({ householdOwners }: AcceptInvitationProps) {
     };
   }, []);
 
-  async function accept(step: Step) {
-    const held = token.current;
-    if (held === null || busy !== null) return;
-    setBusy(step);
+  /** One POST for a step, under the step's key; a key the server settled is dropped after. */
+  async function send(step: Step, held: string) {
     const key = (keys.current[step] ??= browserApiClient().newId());
     const result = await attempt(() =>
       browserApiClient().POST("/api/v1/sharing/invitations/accept", {
@@ -95,6 +101,21 @@ export function AcceptInvitation({ householdOwners }: AcceptInvitationProps) {
         headers: { "Idempotency-Key": key },
       }),
     );
+    if (!result.ok && settledByServer(result)) delete keys.current[step];
+    return result;
+  }
+
+  async function accept(step: Step) {
+    const held = token.current;
+    if (held === null || busy !== null) return;
+    setBusy(step);
+    let result = await send(step, held);
+    if (!result.ok && result.replayed && result.status < 500) {
+      // A refusal stored under this key by an earlier press whose answer was lost. A replay
+      // carries no detail, so a choice to make would read as a plain failure; a refusal
+      // changed nothing, so asking again under a new key gets the refusal itself.
+      result = await send(step, held);
+    }
     setBusy(null);
     if (result.ok) {
       // A replayed answer carries no body; the step says what it was.
@@ -129,7 +150,16 @@ export function AcceptInvitation({ householdOwners }: AcceptInvitationProps) {
     }
   }
 
-  if (panel.kind === "none") return null;
+  // Shown on load, not after a press, so it plays no cue (DESIGN.md 7: cues answer actions).
+  const failure = readFailed ? (
+    <InlineFeedback tone="error">
+      {panel.kind === "ready" || panel.kind === "choose"
+        ? sharingCopy.loadFailedHolding
+        : sharingCopy.loadFailed}
+    </InlineFeedback>
+  ) : null;
+
+  if (panel.kind === "none") return failure;
 
   const owner =
     panel.kind === "joined" && panel.householdId !== null
@@ -137,78 +167,83 @@ export function AcceptInvitation({ householdOwners }: AcceptInvitationProps) {
       : null;
 
   return (
-    <section className={styles.accept} aria-labelledby={headingId}>
-      <h2 id={headingId} className={styles.sectionHeading}>
-        {copy.heading}
-      </h2>
-      {panel.kind === "ready" ? (
-        <>
-          <p className={styles.lede}>{copy.lede}</p>
-          {panel.error ? (
-            <InlineFeedback tone="error" cue>
-              {panel.error}
-            </InlineFeedback>
-          ) : null}
-          <div className={styles.actions}>
-            <Button
-              onClick={() => void accept("first")}
-              loading={busy === "first"}
-              loadingText={copy.pending}
-            >
-              {copy.action}
-            </Button>
-          </div>
-        </>
-      ) : null}
-      {panel.kind === "choose" ? (
-        <>
-          <p className={styles.lede}>{copy.choice}</p>
-          {panel.handOver ? (
-            <InlineFeedback tone="error" cue>
-              {copy.handOver}
-            </InlineFeedback>
-          ) : null}
-          {panel.error ? (
-            <InlineFeedback tone="error" cue>
-              {panel.error}
-            </InlineFeedback>
-          ) : null}
-          <div className={styles.actions}>
-            {panel.handOver ? null : (
+    <>
+      <section className={styles.accept} aria-labelledby={headingId}>
+        <h2 id={headingId} className={styles.sectionHeading}>
+          {copy.heading}
+        </h2>
+        {panel.kind === "ready" ? (
+          <>
+            <p className={styles.lede}>{copy.lede}</p>
+            {panel.error ? (
+              <InlineFeedback tone="error" cue>
+                {panel.error}
+              </InlineFeedback>
+            ) : null}
+            <div className={styles.actions}>
               <Button
-                onClick={() => void accept("move")}
-                loading={busy === "move"}
+                onClick={() => void accept("first")}
+                loading={busy === "first"}
                 loadingText={copy.pending}
               >
-                {copy.move}
+                {copy.action}
               </Button>
-            )}
-            <Button
-              variant={panel.handOver ? "primary" : "secondary"}
-              onClick={() => void accept("stay")}
-              loading={busy === "stay"}
-              loadingText={copy.pending}
-            >
-              {copy.stay}
-            </Button>
-          </div>
-        </>
-      ) : null}
-      {panel.kind === "joined" ? (
-        <InlineFeedback tone="success" cue>
-          {copy.joined(owner)}
-        </InlineFeedback>
-      ) : null}
-      {panel.kind === "stayed" ? <InlineFeedback tone="info">{copy.stayed}</InlineFeedback> : null}
-      {panel.kind === "not-open" ? (
-        <InlineFeedback tone="error" cue>
-          {copy.notOpen}
-        </InlineFeedback>
-      ) : null}
-      {panel.kind === "incomplete" ? (
-        // Shown on load, not after a press, so it plays no cue (DESIGN.md 7: cues answer actions).
-        <InlineFeedback tone="error">{copy.incomplete}</InlineFeedback>
-      ) : null}
-    </section>
+            </div>
+          </>
+        ) : null}
+        {panel.kind === "choose" ? (
+          <>
+            <p className={styles.lede}>{copy.choice}</p>
+            {panel.handOver ? (
+              <InlineFeedback tone="error" cue>
+                {copy.handOver}
+              </InlineFeedback>
+            ) : null}
+            {panel.error ? (
+              <InlineFeedback tone="error" cue>
+                {panel.error}
+              </InlineFeedback>
+            ) : null}
+            <div className={styles.actions}>
+              {panel.handOver ? null : (
+                <Button
+                  onClick={() => void accept("move")}
+                  loading={busy === "move"}
+                  loadingText={copy.pending}
+                >
+                  {copy.move}
+                </Button>
+              )}
+              <Button
+                variant={panel.handOver ? "primary" : "secondary"}
+                onClick={() => void accept("stay")}
+                loading={busy === "stay"}
+                loadingText={copy.pending}
+              >
+                {copy.stay}
+              </Button>
+            </div>
+          </>
+        ) : null}
+        {panel.kind === "joined" ? (
+          <InlineFeedback tone="success" cue>
+            {copy.joined(owner)}
+          </InlineFeedback>
+        ) : null}
+        {panel.kind === "stayed" ? (
+          <InlineFeedback tone="info">{copy.stayed}</InlineFeedback>
+        ) : null}
+        {panel.kind === "not-open" ? (
+          <InlineFeedback tone="error" cue>
+            {copy.notOpen}
+          </InlineFeedback>
+        ) : null}
+        {panel.kind === "incomplete" ? (
+          // Shown on load, not after a press, so it plays no cue (DESIGN.md 7: cues answer actions).
+          <InlineFeedback tone="error">{copy.incomplete}</InlineFeedback>
+        ) : null}
+      </section>
+      {failure}
+    </>
   );
 }

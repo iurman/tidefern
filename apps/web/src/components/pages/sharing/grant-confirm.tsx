@@ -1,6 +1,7 @@
 "use client";
 import { Dialog } from "@/components/ui/dialog";
 import { grantLevelText } from "@/components/ui/grant-row";
+import { InlineFeedback } from "@/components/ui/inline-feedback";
 import { personGrantCopy } from "@/components/ui/person-card";
 import { grantPhrase, sharingCopy } from "./copy";
 import type { GrantView } from "./people";
@@ -28,7 +29,9 @@ export interface GrantConfirmProps {
  * The confirm step before a category is turned on (DESIGN.md 5.2): the
  * person it is for, the category's plain description word for word, and
  * the level it grants. Turning a category off never comes here: that is one
- * step on the switch itself.
+ * step on the switch itself. A failed save is said in the body through
+ * InlineFeedback, which plays the error cue with it (DESIGN.md 7); the
+ * dialog's own error line has no cue.
  */
 export function GrantConfirm({
   open,
@@ -53,13 +56,17 @@ export function GrantConfirm({
       pendingLabel={copy.pending}
       onConfirm={onConfirm}
       loading={loading}
-      error={error}
     >
       {target && words ? (
         <>
           <p className={styles.quoted}>{words.description}</p>
           <p className={styles.levelLine}>{grantLevelText(target.row.offer)}</p>
         </>
+      ) : null}
+      {error ? (
+        <InlineFeedback tone="error" cue className={styles.confirmError}>
+          {error}
+        </InlineFeedback>
       ) : null}
     </Dialog>
   );

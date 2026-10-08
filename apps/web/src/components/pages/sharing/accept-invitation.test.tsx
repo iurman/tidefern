@@ -66,6 +66,16 @@ const problem = (status: number, detail?: string) => () =>
     { status, headers: { "content-type": "application/problem+json" } },
   );
 
+/** What the API answers from a stored idempotency row: the status and code, never the detail. */
+const replayed = (status: number) => () =>
+  Response.json(
+    { type: "urn:tidefern:problem:conflict", title: "Conflict", status, code: "conflict" },
+    {
+      status,
+      headers: { "content-type": "application/problem+json", "Idempotency-Replayed": "true" },
+    },
+  );
+
 describe("AcceptInvitation", () => {
   it("renders nothing and calls nothing when the page was not opened from a link", async () => {
     openedAt("");
@@ -161,6 +171,64 @@ describe("AcceptInvitation", () => {
     await user.click(screen.getByRole("button", { name: copy.action }));
     expect(await screen.findByText("You joined the household.")).toBeVisible();
     expect(calls[0]?.key).toBe(calls[1]?.key);
+  });
+
+  it("asks again under a new key when a lost answer's refusal comes back as a replay without its detail", async () => {
+    const user = userEvent.setup();
+    openedAt(`#invitation=${token}`);
+    render(<AcceptInvitation householdOwners={{}} />);
+    // The server stored a household choice for the first press, and the answer never arrived.
+    answers.push(() => {
+      throw new TypeError("Failed to fetch");
+    });
+    await user.click(await screen.findByRole("button", { name: copy.action }));
+    expect(await screen.findByText(sharingCopy.failure.offline)).toBeVisible();
+    // The retry gets the stored refusal back without its detail, so the panel asks once more.
+    answers.push(replayed(409));
+    answers.push(problem(409, "household_choice_required"));
+    await user.click(screen.getByRole("button", { name: copy.action }));
+    expect(await screen.findByText(copy.choice)).toBeVisible();
+    expect(screen.queryByText(copy.failed)).not.toBeInTheDocument();
+    expect(calls.map((call) => call.body)).toEqual([{ token }, { token }, { token }]);
+    expect(calls[1]?.key).toBe(calls[0]?.key);
+    expect(calls[2]?.key).not.toBe(calls[1]?.key);
+  });
+
+  it("sends the next press of a step under a new key once the server answered the last one", async () => {
+    const user = userEvent.setup();
+    openedAt(`#invitation=${token}`);
+    render(<AcceptInvitation householdOwners={{ [household]: "Noor" }} />);
+    answers.push(problem(429));
+    await user.click(await screen.findByRole("button", { name: copy.action }));
+    expect(await screen.findByText(sharingCopy.failure.tooMany)).toBeVisible();
+    answers.push(() => Response.json({ invitationId, joined: true, householdId: household }));
+    await user.click(screen.getByRole("button", { name: copy.action }));
+    expect(await screen.findByText("You joined Noor's household.")).toBeVisible();
+    expect(calls[1]?.key).not.toBe(calls[0]?.key);
+  });
+
+  it("under a failed read, asks for the acceptance before a reload while it holds a token", async () => {
+    const user = userEvent.setup();
+    openedAt(`#invitation=${token}`);
+    render(<AcceptInvitation householdOwners={{}} readFailed />);
+    expect(await screen.findByText(sharingCopy.loadFailedHolding)).toBeVisible();
+    expect(screen.queryByText(sharingCopy.loadFailed)).not.toBeInTheDocument();
+    // Once the token is spent, a reload loses nothing.
+    answers.push(problem(404));
+    await user.click(screen.getByRole("button", { name: copy.action }));
+    expect(await screen.findByText(copy.notOpen)).toBeVisible();
+    expect(screen.getByText(sharingCopy.loadFailed)).toBeVisible();
+    expect(screen.queryByText(sharingCopy.loadFailedHolding)).not.toBeInTheDocument();
+  });
+
+  it("says only the failed read when the page was not opened from a link", async () => {
+    openedAt("");
+    render(<AcceptInvitation householdOwners={{}} readFailed />);
+    expect(screen.getByText(sharingCopy.loadFailed)).toBeVisible();
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    expect(screen.queryByRole("heading")).not.toBeInTheDocument();
+    expect(screen.getByText(sharingCopy.loadFailed)).toBeVisible();
+    expect(calls).toEqual([]);
   });
 
   it("sends a lost session back through sign-in with the token in the fragment, never a query", async () => {

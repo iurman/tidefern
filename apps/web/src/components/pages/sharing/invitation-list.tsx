@@ -15,8 +15,9 @@ type Outcome =
 /**
  * The pending invitations (DESIGN.md 3.7): each an InvitationCard with the
  * invited address, the day it was sent in the actor's zone, and Withdraw in
- * one step. An invitation that is no longer open answers 404, which the
- * page says in CONTENT.md's words and then reads the list again.
+ * one step. An invitation that is no longer open (accepted, withdrawn
+ * elsewhere or expired) answers 404, which the page says without guessing
+ * which, then reads the list again.
  */
 export function InvitationList({ invitations }: { invitations: readonly InvitationView[] }) {
   const router = useRouter();

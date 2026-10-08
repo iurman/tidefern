@@ -12,6 +12,7 @@ import {
   isStale,
   leaveFor,
   needsFreshSignIn,
+  settledByServer,
   type ApiFailure,
 } from "./problems";
 
@@ -46,6 +47,25 @@ describe("attempt", () => {
       throw new TypeError("Failed to fetch");
     });
     expect(result).toEqual({ ok: false, status: 0 });
+  });
+
+  it("marks a refusal the API replayed from a stored idempotency row, which has no detail", async () => {
+    const result = await attempt(async () => ({
+      error: { code: "conflict", title: "Conflict", status: 409 },
+      response: new Response(null, { status: 409, headers: { "Idempotency-Replayed": "true" } }),
+    }));
+    expect(result).toEqual({ ok: false, status: 409, code: "conflict", replayed: true });
+  });
+});
+
+describe("settledByServer", () => {
+  it("frees a key once the server answered, and keeps it while the answer is unknown or still running", () => {
+    expect(settledByServer(failure(409, "household_choice_required"))).toBe(true);
+    expect(settledByServer(failure(404))).toBe(true);
+    expect(settledByServer(failure(429))).toBe(true);
+    expect(settledByServer(failure(503))).toBe(true);
+    expect(settledByServer(failure(0))).toBe(false);
+    expect(settledByServer(failure(409, "idempotency_key_in_flight"))).toBe(false);
   });
 });
 
@@ -100,11 +120,19 @@ describe("the sentences a failure gets", () => {
     expect(describeInviteFailure(failure(409))).toBe(copy.invite.failed);
   });
 
-  it("says an invitation no longer open has expired, in CONTENT.md's words", () => {
+  it("says an invitation no longer open was already closed, without guessing why", () => {
+    // Changed on purpose (review of PR #83): the API answers this 404 for an invitation
+    // accepted, withdrawn elsewhere or expired alike, so the sentence no longer says expired.
     expect(describeWithdrawFailure(failure(404))).toBe(
-      "The invitation has expired. Send a new one.",
+      "This invitation was already closed, so there is nothing to withdraw. The page now shows the latest.",
     );
     expect(describeWithdrawFailure(failure(400))).toBe(copy.withdraw.failed);
+  });
+
+  it("gives the refusal for a member of someone else's household a next step", () => {
+    expect(describeInviteFailure(failure(409, "member_of_another_household"))).toBe(
+      "Only the person who started your household can invite people into it. Ask them to send the invitation.",
+    );
   });
 
   it("answers one refusal for every invitation that cannot be used, and asks for a household choice", () => {

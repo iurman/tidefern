@@ -1,9 +1,9 @@
 "use client";
 import { useId, useState, type ReactNode } from "react";
-import type { ShareCategory } from "@tidefern/schemas";
+import { fillSharingWords, type ShareCategory } from "@tidefern/schemas";
 import { Dialog } from "./dialog";
 import { formatCalendarDate } from "./format-date";
-import { GrantRow, grantCopy, privateNotesSentence } from "./grant-row";
+import { GrantRow, grantCopy, privateNotesSentence, sharingWords, useErrorCue } from "./grant-row";
 import styles from "./person-card.module.css";
 
 export interface PersonGrant {
@@ -56,18 +56,26 @@ export interface PersonCardProps {
   loading?: boolean;
   /** A card-level message that says what to do next. */
   error?: ReactNode;
+  /**
+   * Plays the error cue when an error appears after an action: a grant's,
+   * the notify switch's, the removal's or the card's. Off by default, so a
+   * specimen that shows the error state on load stays silent.
+   */
+  errorCue?: boolean;
   disabled?: boolean;
   notifyLoading?: boolean;
   /** The per-card private-notes line; a page that says it once for every card turns it off. */
   showPrivateNotes?: boolean;
   /** More about this person under the switches, such as what they share with you. */
   children?: ReactNode;
+  /** Added to the card's own class, for a page that lays out its cards its own way. */
+  className?: string;
 }
 
 /**
- * A grant row's name and plain words: the category's own from the catalog,
- * or for one child the child's name and the child sentence with the name in
- * it. Exported so a confirm step quotes exactly what the row shows.
+ * A grant row's name and plain words from the catalog: the category's own,
+ * or for one child her name and the child's row with the name in it.
+ * Exported so a confirm step quotes exactly what the row shows.
  */
 export function personGrantCopy(grant: Pick<PersonGrant, "category" | "childName">): {
   label: string;
@@ -76,10 +84,15 @@ export function personGrantCopy(grant: Pick<PersonGrant, "category" | "childName
   if (grant.category === "child" && grant.childName) {
     return {
       label: grant.childName,
-      description: `Everything logged for ${grant.childName}: feeds, sleep, growth, milestones and photos.`,
+      description: fillSharingWords(sharingWords.childRow, grant.childName),
     };
   }
   return grantCopy[grant.category];
+}
+
+/** Whether a message slot holds something to show. */
+function present(message: ReactNode): boolean {
+  return message !== undefined && message !== null && message !== false && message !== "";
 }
 
 function grantKey(grant: PersonGrant): string {
@@ -119,16 +132,23 @@ export function PersonCard({
   removeError,
   loading = false,
   error,
+  errorCue = false,
   disabled = false,
   notifyLoading = false,
   showPrivateNotes = true,
   children,
+  className,
 }: PersonCardProps) {
   const headingId = useId();
   const [confirming, setConfirming] = useState(false);
+  useErrorCue(present(removeError), errorCue);
+  useErrorCue(present(error), errorCue);
   const showList = grants.length > 0 || !notifyHidden;
   return (
-    <article className={styles.card} aria-labelledby={headingId}>
+    <article
+      className={className ? `${styles.card} ${className}` : styles.card}
+      aria-labelledby={headingId}
+    >
       <header className={styles.head}>
         <h3 id={headingId} className={styles.name}>
           {name}
@@ -154,6 +174,7 @@ export function PersonCard({
                   disabled={disabled}
                   loading={grant.loading}
                   error={grant.error}
+                  errorCue={errorCue}
                   level={grant.level}
                   done={grant.done}
                 />
@@ -163,14 +184,15 @@ export function PersonCard({
           {notifyHidden ? null : (
             <li className={styles.notify}>
               <GrantRow
-                label={`Tell ${name} when my period starts`}
-                description="The message says only that there is something new in Tidefern."
+                label={fillSharingWords(sharingWords.notify.label, name)}
+                description={sharingWords.notify.description}
                 checked={notify}
                 onChange={onNotifyChange}
                 disabled={disabled || notifyDisabled}
                 loading={notifyLoading}
                 note={notifyNote}
                 error={notifyError}
+                errorCue={errorCue}
                 done={notifyDone}
               />
             </li>

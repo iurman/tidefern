@@ -33,6 +33,8 @@ const words = SHARING_DESCRIPTIONS[CURRENT_SHARING_DESCRIPTION_VERSION].categori
 
 const sentences = {
   loadFailed: "We could not load who you share with just now. Reload the page to try again.",
+  loadFailedHolding:
+    "We could not load who you share with just now. Accept the invitation above first, then reload the page.",
   empty: "You are the only one who can see this",
   server: "Tidefern had a problem on our side. Wait a moment and try again.",
   offline: "We could not reach Tidefern. Check your connection and try again.",
@@ -342,6 +344,14 @@ test("Theo sees what Noor shares with him and has nothing of hers to change", as
   await expect(held).toContainText("Symptoms");
   await expect(held).toContainText("Level: read");
   await expect(held).toContainText("Only Noor can change this.");
+  // A member of a household Noor owns cannot invite into it, so the page names who can instead of a form.
+  await expect(
+    page.getByText(
+      "Only Noor can invite people into your household. Ask Noor to send the invitation.",
+    ),
+  ).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Their email/ })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Send the invitation" })).toHaveCount(0);
   // Never pressed here: removing the owner would take Theo out of household A.
   await expect(noor.getByRole("button", { name: "Remove Noor" })).toBeVisible();
   await checkState(page, "Theo's view");
@@ -739,7 +749,7 @@ test("failures say what to do next: a failed save, a sign-in that is too old, a 
       409,
       "conflict",
       "member_of_another_household",
-      "Only the person who started your household can invite people into it.",
+      "Only the person who started your household can invite people into it. Ask them to send the invitation.",
     ],
     [
       503,
@@ -772,7 +782,10 @@ test("accepting: an invitation that cannot be used, a household choice, and a li
   for (const url of written) expect(url, "the address the router wrote back").not.toContain("#");
   await expect(page).toHaveURL(/\/sharing$/);
   if (cookies === null) {
-    await expectUnavailable(page);
+    // While the panel holds the token, a reload would lose it, so the failed read asks to accept first.
+    await expect(page.getByRole("heading", { level: 1, name: "Sharing" })).toBeVisible();
+    await expect(page.getByText(sentences.loadFailedHolding)).toBeVisible();
+    await expect(page.getByText(sentences.loadFailed)).toHaveCount(0);
     await checkState(page, "the failed read with the acceptance panel");
     return;
   }

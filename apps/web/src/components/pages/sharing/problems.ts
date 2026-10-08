@@ -6,12 +6,21 @@ import { sharingCopy as copy } from "./copy";
  * What a call from the sharing screen came back with, flattened from the
  * typed client's answer: the data of a 2xx, or the status and the problem's
  * `code` and `detail` (RFC 9457). Status 0 means the request never got an
- * answer (offline, or the connection dropped).
+ * answer (offline, or the connection dropped). `replayed` marks a refusal
+ * the API served from a stored idempotency row instead of the handler,
+ * which carries the status and code but never the detail.
  */
 export type ApiResult<T> =
-  { ok: true; data: T } | { ok: false; status: number; code?: string; detail?: string };
+  | { ok: true; data: T }
+  | { ok: false; status: number; code?: string; detail?: string; replayed?: true };
 
 export type ApiFailure = Extract<ApiResult<unknown>, { ok: false }>;
+
+/** Set by the API on an answer served from a stored idempotency row (packages/api idempotency). */
+const REPLAYED_HEADER = "Idempotency-Replayed";
+
+/** The 409 detail for a key whose first request is still running (packages/api idempotency). */
+export const IDEMPOTENCY_KEY_IN_FLIGHT = "idempotency_key_in_flight";
 
 /** The `detail` values the sharing routes answer with (`sharingDetails` in packages/api), compared by value. */
 export const sharingDetails = {
@@ -48,6 +57,7 @@ export async function attempt<T>(
       status: response.status,
       ...(code === undefined ? {} : { code }),
       ...(detail === undefined ? {} : { detail }),
+      ...(response.headers.get(REPLAYED_HEADER) === "true" ? { replayed: true as const } : {}),
     };
   } catch {
     return { ok: false, status: 0 };
@@ -131,10 +141,26 @@ export function describeInviteFailure(failure: ApiFailure): string {
   return general(failure) ?? copy.invite.failed;
 }
 
-/** A failed withdrawal. A 404 means the invitation is no longer open (CONTENT.md's sentence). */
+/**
+ * A failed withdrawal. The API answers 404 for every invitation that is no
+ * longer open, whether it was accepted, withdrawn elsewhere or expired, and
+ * never says which, so the sentence names none of them.
+ */
 export function describeWithdrawFailure(failure: ApiFailure): string {
-  if (failure.status === 404) return copy.withdraw.expired;
+  if (failure.status === 404) return copy.withdraw.closed;
   return general(failure) ?? copy.withdraw.failed;
+}
+
+/**
+ * Whether the server settled this request, so a retry under the same
+ * `Idempotency-Key` would only replay it: any answer except none at all
+ * (status 0, which may have been a success) and the 409 for a first request
+ * still running. A 4xx changed nothing and a 5xx released the key, so the
+ * next press is a new request with a new key.
+ */
+export function settledByServer(failure: ApiFailure): boolean {
+  if (failure.status === 0) return false;
+  return !(failure.status === 409 && failure.detail === IDEMPOTENCY_KEY_IN_FLIGHT);
 }
 
 /** What an acceptance that did not join comes to: a choice to make, or a sentence. */
