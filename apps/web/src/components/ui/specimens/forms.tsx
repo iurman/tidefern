@@ -179,7 +179,7 @@ export const specimens: SpecimenGroup = {
   onChange={setGrams}
 />`,
       keyboard:
-        "Tab reaches the number, then the unit toggle; Left and Right change the unit and the number redraws in it.",
+        "Tab reaches the number, then the unit toggle; Left and Right change the unit and the number redraws in it. A form whose one unit control drives several fields (the growth form on /family/[childId]) passes unit and hideUnitToggle, and the fields redraw together.",
       states: { loading: "none", active: "none" },
       render: (state) => (
         <MeasurementInput

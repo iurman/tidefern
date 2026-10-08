@@ -119,6 +119,17 @@ const lowWeights = [
   { date: "2026-09-29", value: 5400 },
 ];
 
+/**
+ * The same readings as a guardian's API answer carries them: each with its
+ * id and the guardian-only `pointToCare` flag, set on the one reading beyond
+ * 2 SD. The chart follows the flag and computes nothing.
+ */
+const flaggedWeights = lowWeights.map((weight, index) => ({
+  ...weight,
+  id: `measurement-${index + 1}`,
+  pointToCare: index === lowWeights.length - 1,
+}));
+
 export const specimens: SpecimenGroup = {
   slug: "marks",
   title: "Marks and charts",
@@ -300,10 +311,15 @@ export const specimens: SpecimenGroup = {
   birthDate="2026-02-10"
   today="2026-10-05"
   viewer="owner"
-  measurements={lowWeights}
+  measurements={answer.items.map((item) => ({
+    id: item.id,
+    date: item.date,
+    value: item.weightGrams,
+    pointToCare: item.pointToCare,
+  }))}
 />`,
       keyboard:
-        "As the measurement chart. A reading beyond plus or minus 2 SD adds the pointing-to-care sentence beneath the chart on the owner's view and never on a partner's.",
+        "As the measurement chart. A reading beyond plus or minus 2 SD adds the pointing-to-care sentence beneath the chart on the owner's view and never on a partner's. On /family/[childId] the sentence follows the API's guardian-only pointToCare flag on each reading, keyed by its id.",
       states: defaultOnly,
       render: () => (
         <MeasurementChart
@@ -311,7 +327,7 @@ export const specimens: SpecimenGroup = {
           indicator="weightForAge"
           birthDate="2026-02-10"
           today={today}
-          measurements={lowWeights}
+          measurements={flaggedWeights}
         />
       ),
     },
@@ -323,12 +339,13 @@ export const specimens: SpecimenGroup = {
   indicator="weightForAge"
   birthDate="2026-02-10"
   today="2026-10-05"
-  units="us"
+  units="imperial"
   viewer="partner"
   measurements={lowWeights}
+  addHref={null}
 />`,
       keyboard:
-        "As the measurement chart. The same low readings in pounds, without the pointing-to-care sentence because a partner is viewing.",
+        "As the measurement chart. The same low readings in pounds (the profile's imperial units), without the pointing-to-care sentence because a partner is viewing; with no readings, a read-only viewer's empty state has no action.",
       states: defaultOnly,
       render: () => (
         <MeasurementChart
@@ -336,9 +353,10 @@ export const specimens: SpecimenGroup = {
           indicator="weightForAge"
           birthDate="2026-02-10"
           today={today}
-          units="us"
+          units="imperial"
           viewer="partner"
           measurements={lowWeights}
+          addHref={null}
         />
       ),
     },

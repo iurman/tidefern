@@ -29,6 +29,12 @@ export interface MeasurementInputProps {
   unit?: UnitSystem;
   defaultUnit?: UnitSystem;
   onUnitChange?: (unit: UnitSystem) => void;
+  /**
+   * Leaves the field's own toggle out, for a form whose one unit control
+   * drives every field through `unit` (the growth form's weight, length and
+   * head circumference share one).
+   */
+  hideUnitToggle?: boolean;
   required?: boolean;
   disabled?: boolean;
   id?: string;
@@ -180,6 +186,7 @@ export function MeasurementInput({
   unit,
   defaultUnit = "metric",
   onUnitChange,
+  hideUnitToggle = false,
   required,
   disabled,
   id,
@@ -271,15 +278,17 @@ export function MeasurementInput({
             </span>
           </span>
         ) : null}
-        <SegmentedControl<UnitSystem>
-          label="Unit"
-          hideLabel
-          options={shape.options}
-          value={system}
-          onChange={switchUnit}
-          disabled={disabled}
-          className={styles.unit}
-        />
+        {hideUnitToggle ? null : (
+          <SegmentedControl<UnitSystem>
+            label="Unit"
+            hideLabel
+            options={shape.options}
+            value={system}
+            onChange={switchUnit}
+            disabled={disabled}
+            className={styles.unit}
+          />
+        )}
       </div>
       {error ? (
         <p className={styles.error} id={errorId}>

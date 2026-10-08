@@ -35,18 +35,28 @@ import styles from "./measurement-chart.module.css";
  * the x axis, the SI measure converted for display on the y axis, the
  * 2.3rd to 97.7th band at 40 percent fill with a 1 px edge, the median
  * dashed, the child's measurements as text-colored dots joined by a 2 px
- * line that ends in the frond curl. The band edges, percentiles and the
- * "beyond 2 SD" flag all come from @tidefern/core. The chart is an image;
- * the readings beneath it carry every value in words, and the
- * pointing-to-care sentence appears only on the owner's view.
+ * line that ends in the frond curl. The band edges and percentiles come
+ * from @tidefern/core. The chart is an image; the readings beneath it carry
+ * every value in words, and the pointing-to-care sentence appears only on
+ * the owner's view. Where the API's answer carries `pointToCare` (a
+ * guardian's answer, task E5), the sentence follows that flag and nothing
+ * is computed here; without it (the reference specimens) the chart asks core
+ * whether a shown reading is beyond 2 SD.
  */
 
 export type ChartIndicator = "weightForAge" | "lengthForAge" | "headCircumferenceForAge";
+
+/** The display system: the profile's `imperial`, or `us` as the reference specimens say it. */
+export type ChartUnits = "metric" | "us" | "imperial";
 
 export interface ChartMeasurement {
   date: CalendarDate;
   /** The stored SI integer: grams for weight, millimetres for length and head circumference. */
   value: number;
+  /** The measurement's id, which keys its reading (two can share a day). */
+  id?: string;
+  /** The API's guardian-only flag: this measurement is beyond two standard deviations. */
+  pointToCare?: boolean;
 }
 
 export interface MeasurementChartProps {
@@ -57,12 +67,18 @@ export interface MeasurementChartProps {
   today: CalendarDate;
   measurements: ChartMeasurement[];
   /** The display choice; storage is always SI. */
-  units?: "metric" | "us";
+  units?: ChartUnits;
   /** A partner's view never carries the pointing-to-care sentence. */
   viewer?: "owner" | "partner";
+  /**
+   * Whether the chart says the pointing-to-care sentence under itself. A
+   * page whose flag covers a whole measurement session rather than this one
+   * indicator passes false and says the sentence once for every chart.
+   */
+  careSentence?: boolean;
   initialRange?: ChartRange;
-  /** Where the empty state's one action leads. */
-  addHref?: string;
+  /** Where the empty state's one action leads; null for a viewer who cannot add one. */
+  addHref?: string | null;
   loading?: boolean;
   error?: string;
   className?: string;
@@ -71,7 +87,7 @@ export interface MeasurementChartProps {
 /** The band edges core reports (2.3rd and 97.7th percentiles) sit at plus and minus two standard deviations. */
 const BAND_Z = 2;
 const DEFAULT_WIDTH = 600;
-const MARGIN = { top: 16, right: 24, bottom: 36, left: 48 };
+const MARGIN = { top: 16, right: 24, bottom: 46, left: 48 };
 const BAND_SAMPLES = 48;
 
 const indicatorLabels: Record<ChartIndicator, string> = {
@@ -84,18 +100,14 @@ function isWeight(indicator: ChartIndicator): boolean {
   return indicator === "weightForAge";
 }
 
-/** The unit the axis and the readings show. */
-export function displayUnit(indicator: ChartIndicator, units: "metric" | "us"): string {
+/** The unit the axis and the readings show; `imperial` and `us` both mean pounds and inches. */
+export function displayUnit(indicator: ChartIndicator, units: ChartUnits): string {
   if (isWeight(indicator)) return units === "metric" ? "kg" : "lb";
   return units === "metric" ? "cm" : "in";
 }
 
 /** A stored SI integer in the display unit, unrounded. */
-export function displayFromSi(
-  indicator: ChartIndicator,
-  units: "metric" | "us",
-  value: number,
-): number {
+export function displayFromSi(indicator: ChartIndicator, units: ChartUnits, value: number): number {
   if (isWeight(indicator)) {
     return units === "metric" ? value / GRAMS_PER_KILOGRAM : value / GRAMS_PER_POUND;
   }
@@ -103,7 +115,7 @@ export function displayFromSi(
 }
 
 /** A reference table value (kilograms or centimetres) in the display unit. */
-function displayFromTable(indicator: ChartIndicator, units: "metric" | "us", value: number) {
+function displayFromTable(indicator: ChartIndicator, units: ChartUnits, value: number) {
   const si = isWeight(indicator) ? value * GRAMS_PER_KILOGRAM : value * MILLIMETRES_PER_CENTIMETRE;
   return displayFromSi(indicator, units, si);
 }
@@ -113,10 +125,12 @@ function formatValue(value: number): string {
 }
 
 interface Reading {
+  key: string;
   date: CalendarDate;
   ageDays: number;
   display: number;
   assessment: GrowthAssessment | null;
+  pointToCare: boolean | undefined;
 }
 
 interface BandSample {
@@ -129,7 +143,7 @@ interface BandSample {
 function bandSamples(
   sex: Sex,
   indicator: ChartIndicator,
-  units: "metric" | "us",
+  units: ChartUnits,
   start: number,
   end: number,
 ): BandSample[] {
@@ -178,6 +192,7 @@ export function MeasurementChart(props: MeasurementChartProps) {
     measurements,
     units = "metric",
     viewer = "owner",
+    careSentence = true,
     initialRange = "sinceBirth",
     addHref = "/family",
     loading = false,
@@ -218,9 +233,11 @@ export function MeasurementChart(props: MeasurementChartProps) {
           <p className={styles.text}>
             Add a weight or length and the chart draws the percentile band around it.
           </p>
-          <a className={styles.action} href={addHref}>
-            Add a measurement
-          </a>
+          {addHref === null ? null : (
+            <a className={styles.action} href={addHref}>
+              Add a measurement
+            </a>
+          )}
         </div>
       </figure>
     );
@@ -228,9 +245,10 @@ export function MeasurementChart(props: MeasurementChartProps) {
 
   const todayAge = Math.max(0, diffDays(birthDate, today));
   const readings: Reading[] = measurements
-    .map((measurement) => {
+    .map((measurement, index) => {
       const ageDays = diffDays(birthDate, measurement.date);
       return {
+        key: measurement.id ?? `${measurement.date}-${index}`,
         date: measurement.date,
         ageDays,
         display: displayFromSi(indicator, units, measurement.value),
@@ -238,6 +256,7 @@ export function MeasurementChart(props: MeasurementChartProps) {
           ageDays >= 0
             ? growthAssessment({ sex, ageDays, indicator, value: measurement.value })
             : null,
+        pointToCare: measurement.pointToCare,
       };
     })
     .filter((reading) => reading.ageDays >= 0)
@@ -285,8 +304,14 @@ export function MeasurementChart(props: MeasurementChartProps) {
     ? `${label}, ${rangeLabel}: ${shown.length} ${shown.length === 1 ? "measurement" : "measurements"}, the latest ${formatValue(latest.display)} ${unit} on ${formatDay(latest.date)}${percentileClause(latest.assessment)}.`
     : `${label}, ${rangeLabel}: no measurements in this range.`;
   const approximate = shown.some((reading) => reading.assessment?.approximate);
+  // The API's flag when its answer carries one (a guardian's); core's placement otherwise.
+  const flagged = measurements.some((measurement) => typeof measurement.pointToCare === "boolean");
   const beyondBand =
-    viewer === "owner" && shown.some((reading) => reading.assessment?.farOutsideBand);
+    careSentence &&
+    viewer === "owner" &&
+    shown.some((reading) =>
+      flagged ? reading.pointToCare === true : reading.assessment?.farOutsideBand === true,
+    );
 
   return (
     <figure className={rootClass}>
@@ -370,7 +395,7 @@ export function MeasurementChart(props: MeasurementChartProps) {
         ) : null}
         <ol className={styles.readings} aria-label="Readings">
           {shown.map((reading) => (
-            <li key={reading.date}>
+            <li key={reading.key}>
               <time dateTime={reading.date}>{formatDay(reading.date)}</time>
               {": "}
               <span className="tabular">

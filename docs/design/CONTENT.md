@@ -293,10 +293,87 @@ waiting for review, one line each:
   the draft text the add-a-child form shows in full before its box
   (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
   `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
-  gate).
+  gate). With it, the box's label and the line under it: "I agree to this on
+  the child's behalf." and "Consent text version 2026-10."
 - `[OWNER]` approval of the range lines, source lines and attribution in
   "Context ranges on `/family`", and the attorney's answer on quoting the
   AAP and AASM (`docs/CLAIMS.md` section 2).
+- `[OWNER]` three lines the screens show as marked placeholders until the
+  owner words them, because each says what a grant shows or what a health
+  record needs: the card of a child whose grant shows the name and age only
+  (no seeded case; a `summary` child grant); the line under Growth when the
+  child's sex is not set, which also needs a place to set it (no edit screen
+  exists yet); and the range context lines, which wait on the approval of
+  "Context ranges on `/family`" and show meanwhile as "[OWNER] range line
+  feed-newborn, with its source line (American Academy of Pediatrics)" beside
+  the count they are context for, with one "[OWNER] attribution under the
+  cards for the published ranges" below the cards.
+- `[OWNER]` the growth attribution as the Growth tab shows it:
+  `packages/core/data/SOURCES.md` "Attribution", the CDC sentence word for
+  word, and the WHO sentence with the repository's "the files under `who/`"
+  read as "the tables Tidefern uses", the source URL as a link.
+- The timeline's empty state, for the empty-state table once approved:
+  "Nothing logged yet" / "Feeds, sleep, diapers and milestones logged for
+  [name] appear here, newest first." / "Log on the Family page" (to
+  `/family`; none for someone who cannot log).
+- The interface lines below follow the voice table and live in
+  `apps/web/src/components/pages/family/copy.ts`, where the owner confirms
+  or replaces them in one place:
+  - Card: "Last feed", "Last sleep", "Last diaper", "Sleep", "None logged
+    yet", "Today: 3", "Today: 4 h 30 min", "Today: 5 (3 wet, 2 dirty)" (each diaper counted
+    once by what it held: "Today: 2 (1 wet, 1 wet and dirty)"),
+    "Ended 2 h ago", "Asleep since 2:15 PM", "Guardians: you and Lena",
+    "Guardian: you", "another guardian", "Timeline, growth and milestones",
+    "We could not load today for this child. Reload the page to try
+    again.", "We could not load your family just now. Reload the page to
+    try again."
+  - Quick log: "Feed", "Sleep", "End sleep", "Diaper"; the sheet titles
+    "Log a feed for Ilo", "Log a sleep for Ilo", "End Ilo's sleep", "Log a
+    diaper for Ilo"; "Feed" with "Breast", "Bottle", "Solids"; "Side" with
+    "Left", "Right", "Both"; "Timer", "Start it when the feed starts;
+    stopping it saves the feed with both times.", "Start timer", "Stop and
+    save", "Cancel timer", "Feed timer running:", "Feed timer stopped at";
+    "Amount", "Optional.", "Enter up to 2000 ml." ("67 fl oz"); "Contents"
+    with "Wet", "Dirty", "Wet and dirty"; "The sleep starts now. End it
+    here when Ilo wakes.", "Asleep since 2:15 PM.", "Start sleep",
+    "Starting", "End sleep", "Ending"; "Save", "Saving"; "Choose breast,
+    bottle or solids."; "Feed saved.", "Diaper saved.", "Sleep started.",
+    "Sleep ended.", "Undo", "Undoing", "That entry was removed.", "We could
+    not undo this. Try again."; "We could not save this feed. Try again."
+    (diaper the same), "We could not start the sleep. Try again.", "We could
+    not end the sleep. Try again.", "This sleep changed somewhere else.
+    Reload the page to see it."
+  - Shared failures: "You are offline. Connect, then try again." (the
+    offline line architecture 12.2 asks for), "Your session has ended. Sign
+    in again, then come back.", "This child is no longer here for you.
+    Reload the page.", "Check the fields above, then try again."
+  - Add a child: "Name" with "What the family calls the child.", "Date of
+    birth", "Sex" with "Not set", "Female", "Male" and "Optional. The growth
+    chart's percentile band needs it.", "Consent on the child's behalf",
+    "Add the child", "Adding", "Enter the child's name.", "Use 80
+    characters or fewer.", "Enter the date of birth.", "That date is after
+    today. Check the date.", "Tick the box to add the child.", "We could
+    not add the child. Try again.", "Ada was added."
+  - Child page: "Family" (the way back), "Timeline", "Growth",
+    "Milestones", "We could not load this child just now. Reload the page
+    to try again." and one such line per tab; "Show older entries",
+    "Loading", "We could not load older entries. Try again."; the event
+    titles "Breast feed, left side", "Bottle feed, 90 ml", "Solids",
+    "Feed", "Sleep, 6 h", "Sleep, going on now", "Diaper, wet and dirty",
+    "Milestone: [CDC's item]", with "2:15 PM", "11:00 PM to 6:00 AM",
+    "Since 2:15 PM" and "Note: [the note]".
+  - Growth: "Weight", "Length", "Head circumference"; "kg" and "lb", "cm"
+    and "in"; "Add a measurement", "Add a measurement for Ilo", "Date",
+    "Units" with "kg and cm" and "lb and in", "Fill in what you measured;
+    one is enough.", "Enter at least one measurement.", "Enter the date of
+    the measurement.", "That date is after today. Check the date.", "That
+    date is before Ilo was born. Check the date.", "Check this value, then
+    try again.", "We could not save this measurement. Try again.",
+    "Measurement added."
+  - Milestones: "Checklist for 2 months", the domains "Social and
+    emotional", "Language and communication", "Cognitive", "Movement and
+    physical development" (CDC's four headings), "Marked on Oct 1, 2026",
+    "Saving", "We could not save this. Try again."
 
 ### `/sharing` (H6)
 
