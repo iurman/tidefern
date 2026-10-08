@@ -84,6 +84,18 @@
   color: var(--muted);
 }
 
+/* A refused or failed removal: its own line above the action it is about. */
+.removeError {
+  flex: 1 1 100%;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  color: var(--danger);
+}
+
+.removeError:empty {
+  display: none;
+}
+
 .remove {
   display: inline-flex;
   align-items: center;

@@ -9085,8 +9085,11 @@ export interface components {
       grants: components["schemas"]["GrantSetting"][];
       /** @description The version of the sharing policy the owner saw when she chose these */
       policyVersion: string;
-      /** @description The version of the plain-words category descriptions she saw */
-      descriptionVersion: string;
+      /**
+       * @description The version of the plain-words category descriptions she saw, a key of the sharing descriptions catalog
+       * @enum {string}
+       */
+      descriptionVersion: "2026-10";
     };
     GrantSetting: {
       /** @enum {string} */

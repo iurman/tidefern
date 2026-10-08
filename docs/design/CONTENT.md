@@ -226,7 +226,100 @@ neither is repeated below.
 
 ### `/sharing` (H6)
 
-(none yet)
+The descriptions above are also the catalog `SHARING_DESCRIPTIONS` in
+`packages/schemas/src/sharing.ts` (version 2026-10, which a grant records
+as its `description_version`); a web test compares the two word for word,
+so a change to either table is a new catalog version. A child's row reads
+"Everything logged for [child]: feeds, sleep, growth, milestones and
+photos.", the "A child" row with the name in it. Every other string the
+route shows lives in `apps/web/src/components/pages/sharing/copy.ts`,
+written to the voice table above; the lines below are drafts until the
+owner approves them there.
+
+- `[OWNER]` The metadata description: "Choose who sees what in Tidefern,
+  one category at a time."
+- `[OWNER]` The level words, shown as "Level: summary" on a category that
+  is on, in the confirm step and in what someone shares with you: summary
+  "summary", read "read", contribute "read and add". Turning a category on
+  grants "read", except cycle status, which is a summary by nature; the
+  confirm step names that level and offers no choice yet.
+- `[OWNER]` Whether Pregnancy photos shows a switch in Phase 1. It does
+  now, with this table's "(Phase 2)".
+- `[OWNER]` Who a person is: "household owner", "partner", "household
+  guardian", "outside your household", "co-guardian of Ilo and Sol", and
+  "Someone" for a person with no name yet.
+- `[OWNER]` The confirm step: "Share your cycle status with Alex?", the
+  category's description, the level, "Share with Alex", "Saving",
+  "Cancel". The outcome of turning one off: "Alex can no longer see your
+  cycle status."
+- `[OWNER]` The notify switch: "Share your cycle status or cycle history
+  with Alex first." while it is held back, "No message goes out until you
+  share your cycle status or cycle history with Alex." while it is on with
+  neither shared, "Tidefern will tell Alex when your period starts." and
+  "Tidefern will no longer tell Alex when your period starts."
+- `[OWNER]` What someone shares with you: "Alex shares with you", "Only
+  Alex can change this.", the "Shared with you" heading and "Only the
+  person who shares it with you can change it."
+- `[OWNER]` Removing a person, by role: "Alex leaves your household and
+  loses access to everything you share, right now. What Alex added to your
+  record stays with you." (Alex is in your household); "You leave Alex's
+  household, and Alex loses access to everything you share, right now.
+  What Alex shares with you stays until Alex turns it off." (Alex owns it);
+  otherwise the component's own sentence, "Alex loses access to everything
+  you share, right now. What Alex added to your record stays with you."
+  Outcomes: "Alex no longer sees
+  anything you share." and "You left Alex's household. Alex no longer sees
+  anything you share." The co-guardian refusal, for one child: "Alex also guards
+  Ilo, and removing Alex would leave Ilo without a second guardian. Change
+  who guards Ilo in Family first, then remove Alex."; for several: "Alex
+  also guards Ilo and Sol, and removing Alex would leave at least one of
+  them without a second guardian. Change who guards them in Family first,
+  then remove Alex." with "Go to Family".
+- `[OWNER]` The invite form: "Invite a partner", "Their email" with "They
+  get an email asking them to sign in to Tidefern. Nothing is shared until
+  you turn a category on.", "Invite them as" (Partner, Guardian), "Send the
+  invitation", "Invitation sent to jo@example.com.", and the refusals
+  "Enter their email address, like name@example.com.", "An invitation to
+  this address is already waiting. Withdraw it to send a new one.", "Only
+  the person who started your household can invite people into it. Ask
+  them to send the invitation.", "Tidefern cannot send email right now, so
+  nothing was sent. Try again later." A member of a household someone else
+  owns sees, in place of the form, "Only Alex can invite people into your
+  household. Ask Alex to send the invitation." (or the nameless sentence
+  above when the owner has no name yet).
+- `[OWNER]` Withdrawing: "The invitation to jo@example.com is withdrawn.",
+  "This invitation was already closed, so there is nothing to withdraw.
+  The page now shows the latest." (accepted, withdrawn elsewhere or
+  expired; the API does not say which) and "We could not withdraw the
+  invitation. Try again."
+- `[OWNER]` The acceptance panel: "An invitation for you", "Someone you
+  know invited you to share with them on Tidefern. Accepting adds you to
+  their household. Nothing is shared either way until someone turns a
+  category on.", "Accept the invitation", "Accepting the invitation", "You
+  joined Alex's household." ("You joined the household." when the owner's
+  name is not known), the household choice ("You already belong to
+  a household. Accepting moves you into the new one and out of the one you
+  are in now.", "Move to the new household", "Stay where I am"), "You
+  stayed in your household. The invitation stays open until it expires, if
+  you change your mind.", the owner who must hand over ("You own a
+  household that other people still belong to, so you cannot move out of
+  it yet. You can stay where you are."), one sentence for an invitation
+  that cannot be used whatever the reason ("This invitation cannot be
+  used. It may have expired or been withdrawn, or it was sent to another
+  email address. Ask for a new one, and sign in with the address it was
+  sent to."), "This invitation link is not complete. Open the link in the
+  email again." and "We could not accept the invitation. Try again."
+- `[OWNER]` The next steps after a refusal: "For safety, turning on a
+  category needs a sign-in from the last ten minutes. Sign in again, then
+  come back here.", the same for sending an invitation ("For safety,
+  sending an invitation needs a sign-in from the last ten minutes. Sign in
+  again, then come back here."), "This changed
+  somewhere else, and the page now shows the latest. Try again.", "Too
+  many changes in a row. Wait a minute and try again.", "We could not
+  load who you share with just now. Reload the page to try again.", and,
+  while the acceptance panel holds an invitation a reload would lose, "We
+  could not load who you share with just now. Accept the invitation above
+  first, then reload the page."
 
 ### `/settings` (H7)
 
