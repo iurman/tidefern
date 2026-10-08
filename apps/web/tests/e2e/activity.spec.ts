@@ -1,9 +1,11 @@
+import { randomUUID } from "node:crypto";
 import AxeBuilder from "@axe-core/playwright";
-import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
+import { expect, test, type Cookie, type Locator, type Page, type Route } from "@playwright/test";
 import type { Theme } from "./axe";
 import {
   baseOrigin,
   freshAccount,
+  MAIL_CAPTURE_PATH,
   onboard,
   signInAccount,
   signInAs,
@@ -25,8 +27,10 @@ import {
  * or position, because other specs sign the same people in. Load more needs
  * more rows than a page holds, which no seeded person has, so a fresh
  * account of this file's own makes them with exports, and a second one
- * shows its own sign-ins and a device it signed out; nothing here changes
- * a seeded person beyond the sign-in every spec writes. Against a server
+ * shows its own sign-ins and a device it signed out. Two more, named with
+ * the longest unbroken display names the profile allows, share with each
+ * other so each name shows in the other's rows; nothing here changes a
+ * seeded person beyond the sign-in every spec writes. Against a server
  * without a database the helpers hand back null and the canned cookie, and
  * each test asserts the honest failed-read state instead. Nothing here is
  * tagged @smoke.
@@ -171,6 +175,70 @@ async function expectNoAxeViolationsHere(page: Page, state: string) {
   await page.setViewportSize({ width: 1440, height: 900 });
 }
 
+/**
+ * Every row's words stay inside their own column at 1440, 390 and 320. A
+ * long unbroken name has to break where its column ends: past it, the name
+ * covers the next column where the window is wide, which the document's
+ * scroll width cannot show, and scrolls the page sideways on a phone.
+ */
+async function expectWordsInsideRows(page: Page) {
+  for (const width of [1440, 390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    const spill = await list(page).evaluate((ol) => {
+      let worst = 0;
+      for (const cell of ol.querySelectorAll(":scope > li > span")) {
+        const column = cell.getBoundingClientRect();
+        const words = document.createRange();
+        words.selectNodeContents(cell);
+        const drawn = words.getBoundingClientRect();
+        worst = Math.max(worst, drawn.right - column.right, column.left - drawn.left);
+      }
+      return worst;
+    });
+    expect(spill, `words outside their column at ${width}`).toBeLessThanOrEqual(1);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+}
+
+/**
+ * Display names as long as the profile allows (80 characters) with nowhere
+ * to break: an address used as a name, which the schema accepts.
+ */
+const LONG_NAMES = {
+  owner: "alexandra.vandenberg-marchetti.family.records.at.home@the-long-household.example",
+  partner: "theodore.wolfeschlegelsteinhausenbergerdorff.marchetti@another-household.example",
+} as const;
+
+/** Puts one device's session in the page's context, and nothing else. */
+async function useDevice(page: Page, cookies: Cookie[]) {
+  await page.context().clearCookies();
+  await page.context().addCookies(cookies);
+}
+
+/** The signed-in person's id, from GET /api/v1/me. */
+async function myId(page: Page): Promise<string> {
+  const me = await page.request.get("/api/v1/me");
+  expect(me.status()).toBe(200);
+  return ((await me.json()) as { id: string }).id;
+}
+
+/** The token in the newest invitation link the mail capture holds for an address. */
+async function invitationToken(page: Page, email: string): Promise<string> {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await page.request.get(MAIL_CAPTURE_PATH);
+    expect(response.status()).toBe(200);
+    const { messages } = (await response.json()) as {
+      messages: Array<{ to: string; link?: string }>;
+    };
+    const link = messages
+      .filter((message) => message.to === email && message.link?.includes("#invitation="))
+      .at(-1)?.link;
+    if (link !== undefined) return new URL(link).hash.slice("#invitation=".length);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+  }
+  throw new Error(`no invitation link reached ${email}`);
+}
+
 /** The browser's own Load more call; the server's first page is in process and never routed. */
 const NEXT_PAGE = "**/api/v1/me/activity?**";
 
@@ -300,6 +368,8 @@ test("Theo sees his own sign-in and his reads of Noor's symptoms by her name, an
     await expect(list(page).getByText(hers, { exact: true }), hers).toHaveCount(0);
   }
   await expectNoHealthContent(page);
+  await expectNoAxeViolationsHere(page, "Theo's activity");
+  await expectNoOverflow(page);
 });
 
 test("Mira, a guardian, sees Sol by name, her contributions to Lena's pregnancy overview and last year's row with its year, and the page writes no activity", async ({
@@ -349,6 +419,8 @@ test("Mira, a guardian, sees Sol by name, her contributions to Lena's pregnancy 
   await expect(older).toBeVisible();
   await expect(older.locator("time")).toContainText(day.slice(0, 4));
   await expectNoHealthContent(page);
+  await expectNoAxeViolationsHere(page, "Mira's activity, with last year's row");
+  await expectNoOverflow(page);
 
   // Names came from reads a guardian makes without an audit row: nothing new in her activity.
   const after = await apiActivity(page);
@@ -390,6 +462,8 @@ test("Lena sees Mira's contributions to her pregnancy overview, by Mira's name",
     ).first(),
   ).toBeVisible();
   await expectNoHealthContent(page);
+  await expectNoAxeViolationsHere(page, "Lena's activity");
+  await expectNoOverflow(page);
 });
 
 test("Pia, who reaches Sol through a grant, sees her read without his name, and the page writes no activity", async ({
@@ -415,6 +489,8 @@ test("Pia, who reaches Sol through a grant, sees her read without his name, and 
   ).toBeVisible();
   await expect(list(page)).not.toContainText("Sol");
   await expectNoHealthContent(page);
+  await expectNoAxeViolationsHere(page, "Pia's activity");
+  await expectNoOverflow(page);
   // A grantee's GET /v1/children would have audited a read of Sol; the page never makes it.
   const after = await apiActivity(page);
   expect(after.items.map((item) => item.id)).toEqual(before.items.map((item) => item.id));
@@ -460,6 +536,9 @@ test("Load more reads the next page through the browser, says it is loading, and
   const busy = page.getByRole("button", { name: "Loading" });
   await expect(busy).toHaveAttribute("aria-busy", "true");
   expect(Math.abs(((await busy.boundingBox())?.width ?? 0) - width)).toBeLessThan(1);
+  await expectNoAxeViolationsHere(page, "Load more while it waits");
+  await expectNoOverflow(page);
+  await expect(busy).toHaveAttribute("aria-busy", "true");
   release();
   await expect(drawn).toHaveCount(all.length);
   await expect(drawn.nth(PAGE_SIZE)).toBeFocused();
@@ -470,6 +549,10 @@ test("Load more reads the next page through the browser, says it is loading, and
   const days = await daysDrawn(page);
   expect(days, "newest first across the pages").toEqual([...days].sort().reverse());
   await expectNoHealthContent(page);
+  // The end of the list, with focus on the first new row and the button gone.
+  await expectNoAxeViolationsHere(page, "the end of the list");
+  await expectNoOverflow(page);
+  await expect(drawn.nth(PAGE_SIZE)).toBeFocused();
 
   // A failed page: the sentence says what to do next and the button stays for the retry.
   await page.reload();
@@ -550,8 +633,9 @@ test("a fresh account's own sign-ins and the device it signed out are its only r
   ]);
   await page.goto("/activity");
   await expect(list(page).locator("li")).toHaveCount(3);
+  // One device went; the row's words claim no number of devices either way.
   await expect(
-    rows(page, "Signed out other devices", "by you", dayIn(zone, items[0]?.occurredAt ?? "")),
+    rows(page, "Signed out elsewhere", "by you", dayIn(zone, items[0]?.occurredAt ?? "")),
   ).toHaveCount(1);
   await expect(rows(page, "Signed in", "by you")).toHaveCount(2);
   const days = await daysDrawn(page);
@@ -565,6 +649,80 @@ test("a fresh account's own sign-ins and the device it signed out are its only r
   expect((await page.request.get(`${origin}/api/v1/me`)).status()).toBe(401);
 });
 
+test("a long unbroken display name breaks inside its row at every width, as who did it and as whose records", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  const owner = await freshAccount(page, { label: "activity-long-owner" });
+  lastSignIn = Date.now();
+  if (owner === null) {
+    await page.goto("/activity");
+    await expectFailedRead(page);
+    return;
+  }
+  await onboard(page, { stage: "cycle", timeZone: "Europe/Berlin", displayName: LONG_NAMES.owner });
+  const ownerId = await myId(page);
+  const ownerDevice = await page.context().cookies();
+
+  await page.context().clearCookies();
+  const partner = await freshAccount(page, { label: "activity-long-partner" });
+  lastSignIn = Date.now();
+  if (partner === null) throw new Error("the second fresh account found no database");
+  await onboard(page, {
+    stage: "none",
+    timeZone: "Europe/Berlin",
+    displayName: LONG_NAMES.partner,
+  });
+  const partnerId = await myId(page);
+  const partnerDevice = await page.context().cookies();
+  const origin = baseOrigin();
+
+  // She invites him into her household, and he accepts with the link's token.
+  await useDevice(page, ownerDevice);
+  const invited = await page.request.post(`${origin}/api/v1/sharing/invitations`, {
+    data: { inviteeEmail: partner.email, role: "partner" },
+    headers: { origin, "idempotency-key": randomUUID() },
+  });
+  expect(invited.status(), "the invitation").toBe(201);
+  const token = await invitationToken(page, partner.email);
+  await useDevice(page, partnerDevice);
+  const accepted = await page.request.post(`${origin}/api/v1/sharing/invitations/accept`, {
+    data: { token },
+    headers: { origin, "idempotency-key": randomUUID() },
+  });
+  expect(accepted.status(), "the acceptance").toBe(200);
+
+  // She shares her cycle history with him, and his read of it is a row for each of them.
+  await useDevice(page, ownerDevice);
+  const shared = await page.request.put(`${origin}/api/v1/sharing/grants/${partnerId}`, {
+    data: {
+      grants: [{ category: "cycle.history", level: "read" }],
+      policyVersion: "2026-10",
+      descriptionVersion: "2026-10",
+    },
+    headers: { origin },
+  });
+  expect(shared.status(), "the grant").toBe(200);
+  await useDevice(page, partnerDevice);
+  const read = await page.request.get(`${origin}/api/v1/cycle/predictions?subject=${ownerId}`);
+  expect(read.status(), "his read of her cycle history").toBe(200);
+
+  // His page names her as whose records he viewed.
+  await page.goto("/activity");
+  await expect(rows(page, `Viewed ${LONG_NAMES.owner}'s cycle history`, "by you")).toHaveCount(1);
+  await expectWordsInsideRows(page);
+  await expectNoOverflow(page);
+  await expectNoAxeViolationsHere(page, "the owner's long name in the partner's row");
+
+  // Hers names him as who viewed them.
+  await useDevice(page, ownerDevice);
+  await page.goto("/activity");
+  await expect(rows(page, "Viewed your cycle history", `by ${LONG_NAMES.partner}`)).toHaveCount(1);
+  await expectWordsInsideRows(page);
+  await expectNoOverflow(page);
+  await expectNoAxeViolationsHere(page, "the partner's long name in the owner's row");
+});
+
 test("the populated page has no axe violations in either theme at 1440 and 390", async ({
   page,
 }) => {
@@ -574,6 +732,7 @@ test("the populated page has no axe violations in either theme at 1440 and 390",
     await expectFailedRead(page);
   } else {
     await expect(list(page).locator("li").first()).toBeVisible();
+    await expectWordsInsideRows(page);
   }
   await expectNoAxeViolationsHere(page, cookies === null ? "the failed read" : "Noor's activity");
   await expectNoOverflow(page);
