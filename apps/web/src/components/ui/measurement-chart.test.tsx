@@ -125,6 +125,21 @@ describe("MeasurementChart", () => {
     expect(screen.getByRole("list", { name: "Readings" })).toHaveTextContent("11.9 lb");
   });
 
+  it("leaves the sentence to the page when careSentence is false", () => {
+    render(
+      <MeasurementChart
+        sex="female"
+        indicator="weightForAge"
+        birthDate={birthDate}
+        today={today}
+        measurements={lowWeights.map((weight) => ({ ...weight, pointToCare: true }))}
+        careSentence={false}
+      />,
+    );
+    expect(screen.queryByText(/worth mentioning/)).toBeNull();
+    expect(screen.getByRole("list", { name: "Readings" })).toBeInTheDocument();
+  });
+
   it("follows the API's pointToCare when the answer carries it, and never computes it then", () => {
     const flagged = lowWeights.map((weight, index) => ({
       ...weight,

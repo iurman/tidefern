@@ -107,6 +107,12 @@
   font-variant-numeric: tabular-nums;
 }
 
+.care {
+  margin: 0;
+  color: var(--text);
+  font-weight: var(--weight-sans-strong);
+}
+
 .attribution {
   display: grid;
   gap: var(--space-2);

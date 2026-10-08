@@ -2,7 +2,7 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ILO_ID, SOL_ID, measurement } from "./fixtures";
-import { GrowthPanel, chartSeries } from "./growth-panel";
+import { GrowthPanel, chartSeries, pointsToCare } from "./growth-panel";
 import { fakeApi, json, openDialogs, problem, scrollSpy, words } from "./test-api";
 
 const refresh = vi.fn();
@@ -74,19 +74,28 @@ function sol(overrides: Partial<Parameters<typeof GrowthPanel>[0]> = {}) {
 }
 
 describe("chartSeries", () => {
-  it("keys each reading by its measurement and carries the API's flag only where the answer has it", () => {
+  it("keys each reading by its measurement and leaves the session-wide flag out", () => {
     expect(chartSeries(solWeights, "headCircumferenceForAge")).toEqual([
-      { id: "m-1", date: "2026-04-04", value: 375, pointToCare: false },
+      { id: "m-1", date: "2026-04-04", value: 375 },
     ]);
-    const grantee = solWeights.map(({ pointToCare, ...rest }) => {
-      void pointToCare;
-      return rest;
-    });
-    expect(chartSeries(grantee, "weightForAge")[2]).toEqual({
+    expect(chartSeries(solWeights, "weightForAge")[2]).toEqual({
       id: "m-3",
       date: "2026-10-03",
       value: 10500,
     });
+  });
+});
+
+describe("pointsToCare", () => {
+  it("follows the API's flag on a guardian's view and never shows on a partner's", () => {
+    expect(pointsToCare(solWeights, "owner")).toBe(true);
+    expect(pointsToCare(solWeights, "partner")).toBe(false);
+    expect(pointsToCare(solWeights.slice(0, 2), "owner")).toBe(false);
+    const grantee = solWeights.map(({ pointToCare, ...rest }) => {
+      void pointToCare;
+      return rest;
+    });
+    expect(pointsToCare(grantee, "owner")).toBe(false);
   });
 });
 
@@ -105,6 +114,29 @@ describe("GrowthPanel", () => {
     expect(
       screen.getByRole("link", { name: "www.cdc.gov/growthcharts/who-data-files.htm" }),
     ).toHaveAttribute("href", "https://www.cdc.gov/growthcharts/who-data-files.htm");
+  });
+
+  it("says the care sentence once for the panel, never under a chart whose readings are all in band", async () => {
+    const user = userEvent.setup();
+    // One session: a weight far below the band and a length well inside it; the API flags the session.
+    sol({
+      measurements: [
+        measurement({
+          id: "m-9",
+          childId: SOL_ID,
+          date: "2026-10-03",
+          weightGrams: 9000,
+          lengthMillimetres: 880,
+          headMillimetres: null,
+          pointToCare: true,
+        }),
+      ],
+    });
+    await user.click(screen.getByRole("radio", { name: "Length" }));
+    expect(screen.getByRole("img", { name: /^Length for age/ })).toBeInTheDocument();
+    const sentences = screen.getAllByText(CARE);
+    expect(sentences).toHaveLength(1);
+    expect(sentences[0]?.closest("figure")).toBeNull();
   });
 
   it("never shows the care sentence on a partner's view, and offers her no measurement", () => {

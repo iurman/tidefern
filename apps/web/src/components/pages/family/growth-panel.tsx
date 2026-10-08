@@ -18,6 +18,7 @@ import { SegmentedControl } from "@/components/ui/segmented-control";
 import { SegmentedDateInput } from "@/components/ui/segmented-date-input";
 import { TextLink } from "@/components/ui/text-link";
 import { browserApiClient } from "@/lib/api-browser";
+import { CARE_SENTENCE } from "@/lib/prediction-copy";
 import { failureLine, familyCopy } from "./copy";
 import {
   addMeasurement,
@@ -52,9 +53,10 @@ function valueOf(measurement: ChildMeasurement, indicator: ChartIndicator): numb
 }
 
 /**
- * One indicator's readings for the chart, keyed by measurement id, each
- * with the API's guardian-only `pointToCare` where the answer carries it:
- * the chart follows that flag and computes nothing (architecture 8.4).
+ * One indicator's readings for the chart, keyed by measurement id. The
+ * API's `pointToCare` stays out: it covers a whole session (weight for
+ * length included, which has no chart), so it would put the sentence under
+ * a chart whose readings are all inside the band. The panel says it once.
  */
 export function chartSeries(
   measurements: readonly ChildMeasurement[],
@@ -63,15 +65,20 @@ export function chartSeries(
   return measurements.flatMap((measurement) => {
     const value = valueOf(measurement, indicator);
     if (value === null) return [];
-    return [
-      {
-        id: measurement.id,
-        date: measurement.date,
-        value,
-        ...(measurement.pointToCare === undefined ? {} : { pointToCare: measurement.pointToCare }),
-      },
-    ];
+    return [{ id: measurement.id, date: measurement.date, value }];
   });
+}
+
+/**
+ * Whether the pointing-to-care sentence shows: only on a guardian's view,
+ * and only when the API flagged a session (architecture 8.4). The flag is
+ * the API's; nothing is computed here.
+ */
+export function pointsToCare(
+  measurements: readonly ChildMeasurement[],
+  viewer: "owner" | "partner",
+): boolean {
+  return viewer === "owner" && measurements.some((measurement) => measurement.pointToCare === true);
 }
 
 export interface GrowthPanelProps {
@@ -102,8 +109,8 @@ interface Fields {
  * Growth (DESIGN.md 6.5): the chart for weight, length or head
  * circumference with the 2.3rd to 97.7th band, the median, the frond curl,
  * the period pills and the caption, a unit toggle that redraws the stored SI
- * values at the edge, the pointing-to-care sentence when the API flags a
- * measurement (a guardian's view only), and the WHO and CDC attribution
+ * values at the edge, the pointing-to-care sentence once for the panel when
+ * the API flags a measurement session (a guardian's view only), and the WHO and CDC attribution
  * SOURCES.md requires. "Add a measurement" opens a sheet whose fields share
  * the same unit control.
  */
@@ -276,8 +283,10 @@ export function GrowthPanel({
           measurements={chartSeries(measurements, indicator)}
           units={unit}
           viewer={viewer}
+          careSentence={false}
           addHref={null}
         />
+        {pointsToCare(measurements, viewer) ? <p className={styles.care}>{CARE_SENTENCE}</p> : null}
       </>
     );
   }

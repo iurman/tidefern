@@ -70,6 +70,12 @@ export interface MeasurementChartProps {
   units?: ChartUnits;
   /** A partner's view never carries the pointing-to-care sentence. */
   viewer?: "owner" | "partner";
+  /**
+   * Whether the chart says the pointing-to-care sentence under itself. A
+   * page whose flag covers a whole measurement session rather than this one
+   * indicator passes false and says the sentence once for every chart.
+   */
+  careSentence?: boolean;
   initialRange?: ChartRange;
   /** Where the empty state's one action leads; null for a viewer who cannot add one. */
   addHref?: string | null;
@@ -186,6 +192,7 @@ export function MeasurementChart(props: MeasurementChartProps) {
     measurements,
     units = "metric",
     viewer = "owner",
+    careSentence = true,
     initialRange = "sinceBirth",
     addHref = "/family",
     loading = false,
@@ -300,6 +307,7 @@ export function MeasurementChart(props: MeasurementChartProps) {
   // The API's flag when its answer carries one (a guardian's); core's placement otherwise.
   const flagged = measurements.some((measurement) => typeof measurement.pointToCare === "boolean");
   const beyondBand =
+    careSentence &&
     viewer === "owner" &&
     shown.some((reading) =>
       flagged ? reading.pointToCare === true : reading.assessment?.farOutsideBand === true,
