@@ -81,7 +81,7 @@ export interface MeasurementChartProps {
 /** The band edges core reports (2.3rd and 97.7th percentiles) sit at plus and minus two standard deviations. */
 const BAND_Z = 2;
 const DEFAULT_WIDTH = 600;
-const MARGIN = { top: 16, right: 24, bottom: 36, left: 48 };
+const MARGIN = { top: 16, right: 24, bottom: 46, left: 48 };
 const BAND_SAMPLES = 48;
 
 const indicatorLabels: Record<ChartIndicator, string> = {
