@@ -38,7 +38,7 @@ Titles never carry a stage, a date, a child's name or any health word.
 | Failure | Say what to do next, never only that something failed | "That email is already in use. Sign in instead." / "We could not save this day. Try again." / "The invitation has expired. Send a new one." |
 | Empty | Say what would be here, why it is not, and the one action | See the table below |
 | Success | Short, with the undo where one exists | "Saved for Sunday, Oct 5. Undo" / "Alex can now see your cycle status." |
-| Destructive | Name the consequence and the undo window | "Closing your account locks it now and deletes it in 7 days. Signing in again before then cancels this." |
+| Destructive | Name the consequence and the undo window | "Closing your account locks it now and deletes it in 7 days. Until then, you can sign in and undo it." |
 
 Page titles in Title Case, everything else in sentence case. Second person,
 active voice, numerals for numbers. No em dashes anywhere. Predictions use
@@ -474,7 +474,27 @@ owner approves them there.
 
 ### `/settings` (H7)
 
-(none yet)
+- The destructive line above is corrected (task H7): the undo is an explicit
+  action. Closing locks the account; until the window ends she signs in,
+  lands on the locked view at `/closing` and chooses Undo there. Signing in
+  alone cancels nothing. The `/account/delete` paragraph, the
+  `/design/foundations` example and architecture 7.3 still say signing in
+  cancels, and are outside this route's files.
+- `[OWNER]` the lock-screen preview wording for the gentle and detailed
+  notification levels. Only the generic line exists ("You have a reminder in
+  Tidefern.", the reminder email's own), so Settings shows the other two as
+  marked placeholders. AGENTS.md keeps health facts out of notification text
+  at every level; the wording has to fit that rule.
+- `[OWNER]` whether the profile gains pronouns (DESIGN.md 3.8 draws "name,
+  pronouns, stage"; the profile has no such field) and whether week start
+  shows in Settings (it is kept and resent on every save, not shown).
+- For review: the rest of the copy on `/settings`, its group screens and
+  `/closing` is written to the voice table above and kept in one module,
+  `apps/web/src/components/pages/settings/copy.ts`: the route descriptions,
+  the help line under each group, the stage names, the pending, failure and
+  success lines, the fresh sign-in sentences, the close and withdraw
+  dialogs, the empty consent record ("No consent recorded") and the locked
+  view's lines.
 
 ### `/activity` (H8)
 

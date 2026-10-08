@@ -138,9 +138,14 @@ test("/closing sends a live account on to Settings, and says a failed read in th
 }) => {
   const session = await sharedSession(page);
   if (session !== null) {
-    // Live and not closing, so the account belongs in Settings (task H7 builds it there).
+    // Live and not closing, so the account belongs in Settings (task H7 builds it there). This
+    // account has no profile yet, so the shell's layout sends it on from Settings to /welcome:
+    // the request for /settings proves the first hop, the address bar the second.
+    const requested: string[] = [];
+    page.on("request", (request) => requested.push(new URL(request.url()).pathname));
     await page.goto("/closing");
-    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page).toHaveURL(/\/welcome$/);
+    expect(requested, "the /closing redirect went through /settings").toContain("/settings");
     return;
   }
   // No database: the read fails, so the page says so and claims no closure, and an invitation
