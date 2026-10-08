@@ -195,6 +195,28 @@ describe("her own pregnancy", () => {
     expect(within(own).getByRole("button", { name: "Add a milestone" })).toBeInTheDocument();
   });
 
+  it("lists an entry dated before the pregnancy began apart, under no week's dates", () => {
+    show(me(LENA, "pregnancy"), {
+      own: {
+        kind: "active",
+        pregnancy: lenaPregnancy,
+        events: {
+          ok: true,
+          value: [{ ...anatomy, id: "018f5e7a-5eed-7400-8000-000000000009", date: "2025-03-02" }],
+        },
+        history: { ok: true, value: [] },
+      },
+      people: { ok: true, value: [] },
+    });
+    const own = screen.getByRole("region", { name: "Your pregnancy" });
+    const earlier = within(own).getByText("Earlier weeks").closest("details");
+    expect(earlier).toHaveTextContent("1 entry");
+    const before = within(own).getByRole("list", { name: "Before this pregnancy began" });
+    expect(before).toHaveTextContent("Anatomy scan");
+    expect(within(own).queryByText("Week 0")).not.toBeInTheDocument();
+    expect(within(own).queryByText(/May 3 to 9/)).not.toBeInTheDocument();
+  });
+
   it("shows her due date history, hers alone, and the way out last", () => {
     showLena();
     const own = screen.getByRole("region", { name: "Your pregnancy" });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { countedToday, pregnancyStart, weekByWeek, weekOf, weekSpan } from "./weeks";
+import { BEFORE_START, countedToday, pregnancyStart, weekByWeek, weekOf, weekSpan } from "./weeks";
 
 // The seeded shape of Lena's pregnancy on the frozen calendar: due Feb 7,
 // 2027 and today Oct 4, 2026 in Vancouver, which is 22w0d.
@@ -21,8 +21,10 @@ describe("the weeks from the due date", () => {
     expect(weekOf(due, due)).toBe(40);
   });
 
-  it("puts a day before day 0 in week 0 rather than a week that does not exist", () => {
-    expect(weekOf(due, "2026-04-20")).toBe(0);
+  it("puts a day before day 0 in no week at all", () => {
+    expect(weekOf(due, "2026-05-02")).toBe(BEFORE_START);
+    expect(weekOf(due, "2025-03-02")).toBe(BEFORE_START);
+    expect(weekOf(due, "2026-05-03")).toBe(0);
   });
 
   it("finds the day the API counted from the gestation it sent", () => {
@@ -51,9 +53,18 @@ describe("weekByWeek", () => {
 
   it("is this week alone when nothing is added yet", () => {
     expect(weekByWeek(due, today, [])).toEqual({
+      before: [],
       earlier: [],
       ahead: [{ week: 22, start: "2026-10-04", end: "2026-10-10", items: [] }],
     });
+  });
+
+  it("lists an item dated before day 0 apart, never under Week 0's dates", () => {
+    const typo = [{ id: "typo", date: "2025-03-02" }, ...events];
+    const { before, earlier } = weekByWeek(due, today, typo);
+    expect(before).toEqual([{ id: "typo", date: "2025-03-02" }]);
+    expect(earlier.map((group) => group.week)).toEqual([14, 20, 21]);
+    expect(earlier.flatMap((group) => group.items.map((item) => item.id))).not.toContain("typo");
   });
 
   it("keeps a week past the due date like any other that holds something", () => {

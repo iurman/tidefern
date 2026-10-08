@@ -19,16 +19,33 @@ const problem = (detail?: string, errors?: { path: string; message: string }[]) 
 });
 
 describe("the event form", () => {
+  const start = "2026-05-03";
+
   it("wants a kind and a real date, and a detail no longer than the contract takes", () => {
-    expect(validateEvent({ kind: "appointment", date: "2026-11-01", detail: "" })).toBeNull();
-    expect(validateEvent({ kind: null, date: null, detail: "x".repeat(501) })).toEqual({
+    expect(
+      validateEvent({ kind: "appointment", date: "2026-11-01", detail: "" }, start),
+    ).toBeNull();
+    expect(validateEvent({ kind: null, date: null, detail: "x".repeat(501) }, start)).toEqual({
       kind: copy.event.errors.kindMissing,
       date: copy.event.errors.dateMissing,
       detail: copy.event.errors.detailTooLong,
     });
     expect(
-      validateEvent({ kind: "milestone", date: "2026-11-01", detail: ` ${"x".repeat(500)} ` }),
+      validateEvent(
+        { kind: "milestone", date: "2026-11-01", detail: ` ${"x".repeat(500)} ` },
+        start,
+      ),
     ).toBeNull();
+  });
+
+  it("refuses a day before the pregnancy began and takes day 0 itself", () => {
+    expect(validateEvent({ kind: "appointment", date: "2025-03-02", detail: "" }, start)).toEqual({
+      date: copy.event.errors.dateBefore,
+    });
+    expect(validateEvent({ kind: "appointment", date: "2026-05-02", detail: "" }, start)).toEqual({
+      date: copy.event.errors.dateBefore,
+    });
+    expect(validateEvent({ kind: "appointment", date: start, detail: "" }, start)).toBeNull();
   });
 
   it("always sends the detail it has, trimmed, and leaves an empty one out to clear it", () => {

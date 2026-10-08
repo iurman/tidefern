@@ -94,6 +94,8 @@ export interface EventEditorProps {
   canDelete: boolean;
   /** Today in the subject's zone, for the date field's example line. */
   today: string;
+  /** Day 0 of the pregnancy: a date before it is refused in the form. */
+  start: string;
   children: ReactNode;
 }
 
@@ -106,7 +108,7 @@ export interface EventEditorProps {
  * form with what to do next; a save reloads the page's read with
  * `router.refresh()`, so the list only ever shows what the API returned.
  */
-export function EventEditor({ pregnancyId, canDelete, today, children }: EventEditorProps) {
+export function EventEditor({ pregnancyId, canDelete, today, start, children }: EventEditorProps) {
   const router = useRouter();
   const [form, setForm] = useState<Form>({ mode: "closed" });
   const [removing, setRemoving] = useState<EditableEvent | null>(null);
@@ -166,7 +168,7 @@ export function EventEditor({ pregnancyId, canDelete, today, children }: EventEd
 
   async function save() {
     if (busy || form.mode === "closed") return;
-    const invalid = validateEvent(draft);
+    const invalid = validateEvent(draft, start);
     if (invalid !== null || draft.kind === null || draft.date === null) {
       setErrors(invalid ?? {});
       return;

@@ -67,10 +67,20 @@ export interface EventDraft {
   detail: string;
 }
 
-export function validateEvent(draft: EventDraft): Partial<Record<EventField, string>> | null {
+/**
+ * `start` is day 0 of the pregnancy (the due date minus 280 days): a day
+ * before it belongs to no week of this pregnancy, so it is refused here, as
+ * the ending dialog refuses one, instead of being listed under a week whose
+ * dates would not contain it.
+ */
+export function validateEvent(
+  draft: EventDraft,
+  start: string,
+): Partial<Record<EventField, string>> | null {
   const errors: Partial<Record<EventField, string>> = {};
   if (draft.kind === null) errors.kind = copy.event.errors.kindMissing;
   if (draft.date === null) errors.date = copy.event.errors.dateMissing;
+  else if (compareDates(draft.date, start) < 0) errors.date = copy.event.errors.dateBefore;
   if (draft.detail.trim().length > DETAIL_MAX) errors.detail = copy.event.errors.detailTooLong;
   return Object.keys(errors).length === 0 ? null : errors;
 }

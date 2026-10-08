@@ -225,8 +225,10 @@ waiting for review, one line each:
   happened, week by week."
 - `[OWNER]` review: the week list: "Week by week", the tide marker's "This
   week", "Earlier weeks" with "1 entry" or "N entries", "Week N" with its
-  range, and the empty line "Nothing is added for the weeks ahead yet.
-  Appointments and milestones show here under their week."
+  range, the empty line "Nothing is added for the weeks ahead yet.
+  Appointments and milestones show here under their week.", and "Before
+  this pregnancy began", the heading inside "Earlier weeks" for an entry
+  dated before day 0, which no week's range contains.
 - `[OWNER]` review: a row's line under its title: "Appointment" or
   "Milestone", "Appointment, added by Mira", "Added by you".
 - `[OWNER]` review: "Due date history", "Only you can see this list.",
@@ -242,8 +244,9 @@ waiting for review, one line each:
   Nov 1." and "Deleted."
 - `[OWNER]` review: the event form's failures: "Enter the date as month, day
   and year.", "That date does not exist. Check the day and the month.",
-  "Keep the details to 500 characters or fewer.", "Choose appointment or
-  milestone.", "This changed since you opened it. Close it and open it again
+  "Keep the details to 500 characters or fewer.", "That day is before this
+  pregnancy began. Check the date." (the ending dialog's sentence, reused for
+  a date before day 0), "Choose appointment or milestone.", "This changed since you opened it. Close it and open it again
   to see the latest.", "Updates to this pregnancy are paused, so this was not
   saved." (a grantee's; never "ended"), "This is no longer here. Reload the
   page to see the latest.", "Too many changes in a row. Wait a minute and try

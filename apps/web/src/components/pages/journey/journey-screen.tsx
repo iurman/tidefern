@@ -110,7 +110,7 @@ function WeekList({ pregnancy }: { pregnancy: ActivePregnancy }) {
         <p className={styles.notice}>{copy.weeks.failed}</p>
       ) : (
         <>
-          {weeks.earlier.length > 0 ? (
+          {weeks.before.length > 0 || weeks.earlier.length > 0 ? (
             <Disclosure
               className={styles.earlier}
               summary={
@@ -118,13 +118,30 @@ function WeekList({ pregnancy }: { pregnancy: ActivePregnancy }) {
                   {copy.weeks.earlier}{" "}
                   <span className={styles.count}>
                     {copy.weeks.entries(
-                      weeks.earlier.reduce((sum, group) => sum + group.items.length, 0),
+                      weeks.earlier.reduce(
+                        (sum, group) => sum + group.items.length,
+                        weeks.before.length,
+                      ),
                     )}
                   </span>
                 </>
               }
             >
-              <WeekItems groups={weeks.earlier} canEdit={pregnancy.canEdit} />
+              {weeks.before.length > 0 ? (
+                <div className={styles.week}>
+                  <div className={styles.weekHead}>
+                    <h4 className={styles.weekTitle}>{copy.weeks.before}</h4>
+                  </div>
+                  <Timeline
+                    className={styles.events}
+                    label={copy.weeks.before}
+                    items={weeks.before.map((row) => rowItem(row, pregnancy.canEdit))}
+                  />
+                </div>
+              ) : null}
+              {weeks.earlier.length > 0 ? (
+                <WeekItems groups={weeks.earlier} canEdit={pregnancy.canEdit} />
+              ) : null}
             </Disclosure>
           ) : null}
           {/* The week marker: the tide line, named in words because the line itself is hidden. */}
@@ -146,7 +163,12 @@ function WeekList({ pregnancy }: { pregnancy: ActivePregnancy }) {
 function Weeks({ pregnancy }: { pregnancy: ActivePregnancy }) {
   if (!pregnancy.canAdd && !pregnancy.canEdit) return <WeekList pregnancy={pregnancy} />;
   return (
-    <EventEditor pregnancyId={pregnancy.id} canDelete={pregnancy.canDelete} today={pregnancy.today}>
+    <EventEditor
+      pregnancyId={pregnancy.id}
+      canDelete={pregnancy.canDelete}
+      today={pregnancy.today}
+      start={pregnancy.start}
+    >
       <WeekList pregnancy={pregnancy} />
       {pregnancy.canAdd ? <AddEventButtons /> : null}
     </EventEditor>

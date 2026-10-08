@@ -13,9 +13,13 @@ export function pregnancyStart(dueDate: CalendarDate): CalendarDate {
   return addDays(dueDate, -GESTATION_DAYS);
 }
 
-/** The week a calendar day falls in; a day before day 0 counts in week 0. */
+/** What `weekOf` answers for a day before day 0: no week of this pregnancy holds it. */
+export const BEFORE_START = -1;
+
+/** The week a calendar day falls in, or `BEFORE_START` for a day before day 0. */
 export function weekOf(dueDate: CalendarDate, date: CalendarDate): number {
-  return Math.max(0, Math.floor(diffDays(pregnancyStart(dueDate), date) / 7));
+  const days = diffDays(pregnancyStart(dueDate), date);
+  return days < 0 ? BEFORE_START : Math.floor(days / 7);
 }
 
 /** The first and last day of a week. */
@@ -42,6 +46,12 @@ export interface WeekGroup<T> {
 }
 
 export interface WeekByWeek<T> {
+  /**
+   * Items dated before day 0 (a mistyped year, or one an API client sent):
+   * listed apart under their own heading, never under a week whose dates
+   * would not contain them.
+   */
+  before: T[];
   /** Weeks before this one that hold something, oldest first. */
   earlier: WeekGroup<T>[];
   /** This week, whether or not it holds anything, then each later week that does. */
@@ -61,10 +71,15 @@ export function weekByWeek<T extends { date: CalendarDate }>(
   today: CalendarDate,
   items: readonly T[],
 ): WeekByWeek<T> {
-  const current = weekOf(dueDate, today);
+  const current = Math.max(0, weekOf(dueDate, today));
+  const before: T[] = [];
   const byWeek = new Map<number, T[]>();
   for (const item of items) {
     const week = weekOf(dueDate, item.date);
+    if (week === BEFORE_START) {
+      before.push(item);
+      continue;
+    }
     const list = byWeek.get(week);
     if (list === undefined) byWeek.set(week, [item]);
     else list.push(item);
@@ -76,6 +91,7 @@ export function weekByWeek<T extends { date: CalendarDate }>(
   });
   const filled = [...byWeek.keys()].sort((a, b) => a - b);
   return {
+    before,
     earlier: filled.filter((week) => week < current).map(group),
     ahead: [group(current), ...filled.filter((week) => week > current).map(group)],
   };

@@ -47,6 +47,8 @@ export const journeyCopy = {
     thisWeek: "This week",
     week: (week: number) => `Week ${week}`,
     earlier: "Earlier weeks",
+    /** Entries dated before day 0, kept apart from Week 0 so no range contradicts its rows. */
+    before: "Before this pregnancy began",
     entries: (count: number) => (count === 1 ? "1 entry" : `${count} entries`),
     /** Nothing from this week on: what would be here and why not; the add buttons below are the action. */
     nothingAhead:
@@ -107,6 +109,8 @@ export const journeyCopy = {
     errors: {
       dateMissing: "Enter the date as month, day and year.",
       dateInvalid: "That date does not exist. Check the day and the month.",
+      /** The ending dialog's own sentence for a day before day 0, reused word for word. */
+      dateBefore: "That day is before this pregnancy began. Check the date.",
       detailTooLong: "Keep the details to 500 characters or fewer.",
       kindMissing: "Choose appointment or milestone.",
       stale: "This changed since you opened it. Close it and open it again to see the latest.",

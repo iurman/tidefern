@@ -72,7 +72,12 @@ afterEach(() => {
 
 function renderEditor(canDelete = true) {
   return render(
-    <EventEditor pregnancyId={PREGNANCY} canDelete={canDelete} today="2026-10-04">
+    <EventEditor
+      pregnancyId={PREGNANCY}
+      canDelete={canDelete}
+      today="2026-10-04"
+      start="2026-05-03"
+    >
       <EditEventButton event={glucose} />
       <AddEventButtons />
     </EventEditor>,
@@ -123,6 +128,18 @@ describe("adding an appointment or a milestone", () => {
     expect(screen.getByText("Enter the date as month, day and year.")).toBeVisible();
     // Focus lands on what to fix, so the refusal is heard where it is.
     expect(screen.getByRole("textbox", { name: "Month" })).toHaveFocus();
+    expect(calls).toHaveLength(0);
+  });
+
+  it("refuses a date before the pregnancy began without sending it", async () => {
+    const user = userEvent.setup();
+    renderEditor();
+    await user.click(screen.getByRole("button", { name: "Add an appointment" }));
+    await typeDate(user, "3", "2", "2025");
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(
+      screen.getByText("That day is before this pregnancy began. Check the date."),
+    ).toBeVisible();
     expect(calls).toHaveLength(0);
   });
 
