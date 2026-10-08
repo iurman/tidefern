@@ -92,7 +92,7 @@ const sheetUsage = [
 ].join("\n");
 
 const keyboard =
-  "Focus lands on the close button; Tab moves through previous and next day, the Period switch, the flow radios, the symptom chips, the mood radios, the note, the sharing action, Save and Cancel; Space flips the switch and the chips; Escape closes the sheet and focus returns to the opener.";
+  "Focus lands on the close button; Tab moves through previous and next day, the Period switch, the flow radios, the symptom chips, the mood radios, Clear while a mood is chosen, the note, the sharing action, Save and Cancel; Space flips the switch and the chips; Clear empties the mood and moves focus to Low; Escape closes the sheet and focus returns to the opener.";
 
 const daySheet: Specimen = {
   name: "Day sheet",

@@ -5,7 +5,8 @@ import { SegmentedControl } from "./segmented-control";
 export interface FlowScaleProps {
   /** The legend; the caller names it, so the component carries no default copy. */
   label: string;
-  value?: FlowLevel;
+  /** Controlled value; `null` is a day with no flow logged yet, shown with nothing chosen. */
+  value?: FlowLevel | null;
   defaultValue?: FlowLevel;
   onChange?: (value: FlowLevel) => void;
   error?: string;
@@ -27,7 +28,9 @@ export const flowOptions = FlowLevel.options.map((value) => ({ value, label: flo
 /**
  * The five-value single select for a day's flow (DESIGN.md 5.1): a segmented
  * radio group whose chosen segment sits on the period data color, with `none`
- * first so clearing a day is one tap like any other value.
+ * first so clearing a day is one tap like any other value. It lays out as
+ * columns: the pill where it fits, equal columns on a phone, one value per
+ * row where a column would be narrower than "Spotting".
  */
 export function FlowScale({
   label,
@@ -48,6 +51,7 @@ export function FlowScale({
       error={error}
       disabled={disabled}
       tone="period"
+      layout="columns"
       className={className}
     />
   );

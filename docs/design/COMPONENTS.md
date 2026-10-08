@@ -123,7 +123,7 @@ both themes and asserts one behavior per component that matters
 | Group       | Branch                     | Port | Components                                                                                                                                                      |
 | ----------- | -------------------------- | ---- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `actions`   | `claude/G5-actions`        | 3121 | Button (primary, secondary, quiet, destructive), text link, back link (added by the lead before the page routes), inline feedback, toast, skeleton, empty state, disclosure, copy code, token swatch, theme and sound toggles (moved from `components/` and re-exported) |
-| `forms`     | `claude/G5-forms`          | 3122 | Form field, IANA time zone combobox, segmented date input, measurement input with unit toggle, segmented control, flow scale, chip group, mood selector          |
+| `forms`     | `claude/G5-forms`          | 3122 | Form field, IANA time zone combobox, segmented date input, measurement input with unit toggle, segmented control, flow scale, chip group, mood selector, checkbox field (added by the lead before the page routes, G10) |
 | `structure` | `claude/G5-structure`      | 3123 | Logo and mark, public header and footer (moved from `components/` and re-exported), app shell (tab bar, rail, quick-log button), dialog, bottom sheet, person and grant cards, invitation card, consent record, device row |
 | `calendar`  | `claude/G5-calendar`       | 3124 | Calendar month grid and list over `react-day-picker` 10.0.2, date range selection, day cell textures, week strip                                                 |
 | `marks`     | `claude/G5-marks`          | 3125 | Cycle ring, pregnancy week card, timeline, measurement chart with percentile band                                                                               |
@@ -149,10 +149,11 @@ The day-logging contract (task G9) that Today and Calendar share:
   the stage and today from the server and never reads the browser clock.
 - `lib/prediction-copy.ts` holds the 13.10 sentences, and `CycleRing`
   takes the API's prediction and `latestStart` instead of period starts.
-- The sheet draws the flow and mood radios through `SegmentedControl`
-  with a value no option carries, so an unlogged flow or mood shows
-  nothing chosen without the control switching between controlled and
-  uncontrolled; `FlowScale` and `MoodSelector` have no such value yet.
+- The sheet draws flow and mood with `FlowScale` and `MoodSelector`, whose
+  `null` value shows nothing chosen and stays controlled (task G9b). A
+  chosen mood goes back to none through a quiet Clear beside the selector,
+  passed as its `action`, because a radio group never unselects by
+  pressing; focus then moves to the first mood.
 - The form posts to its own URL if it is ever submitted natively and stays
   `inert` until the page hydrates, so a flow or mood code never reaches a
   URL. Its success and error lines play their cue through
@@ -164,12 +165,18 @@ The day-logging contract (task G9) that Today and Calendar share:
   confirm step closes; her own edit stays for Try again. A share that got
   no answer is retried with the same Idempotency-Key, and a 409 whose read
   shows the note already filed there with the same text counts as shared.
-- The flow scale keeps the shared pill where its five values fit at full
-  size; in a narrower sheet the segments tighten and share one row (a 360
-  px phone and up), and below about 296 px they part into chips that wrap,
-  as the phone sketch in `DESIGN.md` 3.4 draws them. The container queries
-  in `day-sheet.module.css` reach into `SegmentedControl`'s markup; a
-  layout option on `SegmentedControl` itself would remove that coupling.
+- The flow scale and the mood selector use `SegmentedControl`'s
+  `layout="columns"` (task G9b): the round pill from 26rem; narrower, equal
+  columns with the control radius and the caption size that shrink
+  together (five fit a 360 px phone's sheet); and below the option count
+  times 3.625rem, one value per row, as the flow values are on a 320 px
+  phone, so the columns never come out uneven and the pill never folds
+  into uneven rows. The 3.625rem column holds "Spotting", the longest
+  label either scale uses; it is fixed, not measured, so a scale with a
+  longer label widens it first. A focused value draws its ring inside its
+  own column, since the columns touch. The group is its own size
+  container, so it takes its width from its row and never sizes itself to
+  its content; no other module styles its markup.
 
 Each group owns only the files in its rows above plus its page, its
 specimens file and its browser spec; `docs/design/ASSETS.md` gains icon

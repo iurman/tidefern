@@ -184,6 +184,63 @@ describe("DaySheet: symptoms, mood and the note", () => {
   });
 });
 
+const checkedMood = () =>
+  within(screen.getByRole("group", { name: "Mood" }))
+    .queryAllByRole("radio")
+    .filter((radio) => (radio as HTMLInputElement).checked)
+    .map((radio) => radio.getAttribute("value"));
+
+describe("DaySheet: the shared scales, the mood's Clear and the Period help", () => {
+  it("draws flow and mood through FlowScale and MoodSelector, both as columns", () => {
+    render(sheet());
+    const flow = screen.getByRole("group", { name: "Flow" });
+    const mood = screen.getByRole("group", { name: "Mood" });
+    expect(flow).toHaveClass("columns", "periodTone");
+    expect(flow.style.getPropertyValue("--segment-count")).toBe("5");
+    expect(mood).toHaveClass("columns");
+    expect(mood.style.getPropertyValue("--segment-count")).toBe("3");
+    expect(checkedFlow()).toEqual([]);
+    expect(checkedMood()).toEqual([]);
+  });
+
+  it("offers Clear only while a mood is chosen, inside the mood group, and keeps focus on the radio", async () => {
+    const user = userEvent.setup();
+    render(sheet());
+    expect(screen.queryByRole("button", { name: "Clear mood" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Low" }));
+    const mood = screen.getByRole("group", { name: "Mood" });
+    expect(within(mood).getByRole("button", { name: "Clear mood" })).toHaveTextContent("Clear");
+    // The Clear arrives after the radios, so the radio she pressed keeps its focus and the arrows keep working.
+    expect(screen.getByRole("radio", { name: "Low" })).toHaveFocus();
+    await user.keyboard("{ArrowRight}");
+    expect(checkedMood()).toEqual(["steady"]);
+    expect(screen.getByRole("radio", { name: "Steady" })).toHaveFocus();
+  });
+
+  it("clears a chosen mood back to none, moves focus to Low and saves no mood", async () => {
+    const user = userEvent.setup();
+    const onSave = vi.fn();
+    render(sheet({ initial: day({ mood: "steady", symptoms: ["cramps"] }), onSave }));
+    expect(checkedMood()).toEqual(["steady"]);
+    await user.click(screen.getByRole("button", { name: "Clear mood" }));
+    expect(checkedMood()).toEqual([]);
+    expect(screen.getByRole("radio", { name: "Low" })).toHaveFocus();
+    expect(screen.getByRole("radio", { name: "Low" })).not.toBeChecked();
+    expect(screen.queryByRole("button", { name: "Clear mood" })).not.toBeInTheDocument();
+    // The draft now differs from what is saved, so the quiet action reads Cancel.
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(onSave).toHaveBeenCalledWith({ flow: null, symptoms: ["cramps"], mood: null, note: "" });
+  });
+
+  it("says what the Period switch does in one short line", () => {
+    render(sheet());
+    expect(screen.getByRole("switch", { name: "Period" })).toHaveAccessibleDescription(
+      "Logs a period day at Medium. Change the flow below.",
+    );
+  });
+});
+
 describe("DaySheet: notes already shared and the share action", () => {
   it("shows a shared note read-only, labelled by who can read it, never as private", () => {
     render(sheet({ otherNotes: [sharedNote], onDeleteNote: async () => false }));

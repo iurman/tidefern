@@ -1,5 +1,7 @@
 .form {
   display: grid;
+  /* One column the form's own width: a control that cannot shrink stays in its row instead of widening every row, the scales with it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: var(--space-6);
   min-width: 0;
 }
@@ -11,15 +13,26 @@
   gap: var(--space-2);
 }
 
+/*
+ * The label and its help line, with the switch beside them while the line
+ * has room for two short lines; narrower, the switch drops under the help
+ * line at the start, so the line never runs down beside it.
+ */
 .periodRow {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: var(--space-4);
+  gap: var(--space-3) var(--space-4);
   padding: var(--space-4);
   border: 1px solid var(--soft-border);
   border-radius: var(--radius-card);
   background: var(--surface);
+}
+
+.periodText {
+  flex: 1 1 14rem;
+  min-width: 0;
 }
 
 .periodLabel {
@@ -31,6 +44,8 @@
   margin: var(--space-1) 0 0;
   font-size: var(--type-small);
   color: var(--muted);
+  /* Two even lines rather than one long line and a last word on its own. */
+  text-wrap: balance;
 }
 
 /* A part that failed: the sentence that names the next step, then Try again. */
@@ -95,54 +110,6 @@
 .otherNote > button,
 .otherNote > a {
   justify-self: start;
-}
-
-/*
- * The flow scale (DESIGN.md 3.4): the shared segmented pill wherever its five
- * values fit on one row at full size; narrower, as on most phones, the
- * segments tighten and share one row; narrower still (a 320 px phone) they
- * part into chips that wrap, as the phone sketch draws them, so the pill
- * never folds into two uneven rows. The selectors reach into
- * SegmentedControl's markup: a fieldset whose div holds one span per value,
- * each a radio and its label.
- */
-.flowScale {
-  container: flow-scale / inline-size;
-  min-width: 0;
-}
-
-@container flow-scale (width < 26rem) {
-  .flowScale fieldset > div {
-    justify-self: stretch;
-  }
-
-  .flowScale fieldset > div > span {
-    flex: 1 1 auto;
-  }
-
-  .flowScale label {
-    padding-inline: var(--space-1);
-  }
-}
-
-/* Below this the tight row would push a segment under 44 px wide. */
-@container flow-scale (width < 18.5rem) {
-  .flowScale fieldset > div {
-    gap: var(--space-2);
-    border: 0;
-    background: transparent;
-  }
-
-  .flowScale fieldset > div > span {
-    flex: 0 1 auto;
-  }
-
-  /* Drawn like the symptom chips beneath them. */
-  .flowScale label {
-    padding-inline: var(--space-4);
-    border-color: var(--border);
-    background: var(--surface);
-  }
 }
 
 .share {

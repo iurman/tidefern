@@ -244,45 +244,285 @@ test("a note changed elsewhere shows its current text with the step closed", asy
   expect(await below()).toBe(true);
 });
 
-// The flow scale stays one row where its values fit and never folds the pill
-// into two uneven rows: at a 390 px phone's sheet width and at a 360 px one's
-// the segments share one row; at a 320 px one's they part into chips that wrap.
-test("the flow scale keeps one row on a phone and parts into chips only at the narrowest", async ({
+/**
+ * How each radio scale in an element is laid out: its rows of options, the
+ * widths of its options, its track's radius and inner width, and whether any
+ * label is cut or leaves the track.
+ */
+function scales(element: Element) {
+  return [...element.querySelectorAll("fieldset")]
+    .filter((group) => group.querySelector('input[type="radio"]'))
+    .map((group) => {
+      const radio = group.querySelector('input[type="radio"]') as HTMLElement;
+      const track = radio.parentElement?.parentElement as HTMLElement;
+      const box = track.getBoundingClientRect();
+      const labels = [...track.querySelectorAll("label")].map((label) => {
+        const rect = label.getBoundingClientRect();
+        return {
+          top: Math.round(rect.top),
+          left: rect.left,
+          right: rect.right,
+          width: rect.width,
+          height: rect.height,
+          cut: label.scrollWidth > label.clientWidth + 0.5,
+        };
+      });
+      const widths = labels.map((label) => label.width);
+      // Inside the form that holds it: one control that cannot shrink must not widen every row.
+      const form = group.closest("form")?.getBoundingClientRect();
+      return {
+        inForm:
+          form === undefined || (box.left >= form.left - 0.5 && box.right <= form.right + 0.5),
+        name: group.querySelector("legend")?.textContent ?? "",
+        options: labels.length,
+        rows: new Set(labels.map((label) => label.top)).size,
+        narrowest: Math.min(...widths),
+        widest: Math.max(...widths),
+        lowest: Math.min(...labels.map((label) => label.height)),
+        inner: track.clientWidth,
+        radius: getComputedStyle(track).borderTopLeftRadius,
+        cut: labels.some((label) => label.cut),
+        inside: labels.every(
+          (label) => label.left >= box.left - 0.5 && label.right <= box.right + 0.5,
+        ),
+      };
+    });
+}
+
+// G9 laid the flow scale out at narrow widths from day-sheet.module.css by
+// reaching into SegmentedControl's markup: a tight row, then chips that
+// wrapped three and two at a 320 px phone's sheet. G9b replaced that on
+// purpose with SegmentedControl's own columns layout, which the flow scale
+// and the mood selector both use: the round pill where it fits, equal columns
+// with the control radius on a phone, and one value per row where a column
+// would cut a label. A cell set to a phone's width holds the inline sheet at
+// exactly that phone's width, so its scales are as wide as on the phone.
+test("the scales keep the pill where it fits, equal columns on a phone and one value per row at 320 px", async ({
   page,
 }) => {
   await page.goto(route);
-  const flow = stage(page, "Day sheet").getByRole("group", { name: "Flow" });
-  const frame = flow.locator("xpath=..");
-  const layout = (width: string) =>
-    frame.evaluate((element, size) => {
+  await page.evaluate(() => document.fonts.ready);
+  const cell = stage(page, "Day sheet");
+  const at = async (width: string) => {
+    await cell.evaluate((element, size) => {
       (element as HTMLElement).style.width = size;
-      const box = element.getBoundingClientRect();
-      const labels = [...element.querySelectorAll("label")].map((label) => {
-        const rect = label.getBoundingClientRect();
-        return { top: Math.round(rect.top), left: rect.left, right: rect.right, width: rect.width };
-      });
-      const segments = element.querySelector("fieldset > div") as HTMLElement;
-      return {
-        rows: new Set(labels.map((label) => label.top)).size,
-        inside: labels.every((label) => label.left >= box.left && label.right <= box.right + 0.5),
-        narrowest: Math.min(...labels.map((label) => label.width)),
-        pillBorder: getComputedStyle(segments).borderTopWidth,
-        chipBorder: getComputedStyle(element.querySelector("label") as HTMLElement).borderTopColor,
-      };
     }, width);
-  for (const width of ["100%", "340px", "310px"]) {
-    const row = await layout(width);
-    expect(row.rows, width).toBe(1);
-    expect(row.inside, width).toBe(true);
-    expect(row.narrowest, width).toBeGreaterThanOrEqual(44);
-    expect(row.pillBorder, width).toBe("1px");
+    const found = await cell.evaluate(scales);
+    const flow = found.find((group) => group.name === "Flow");
+    const mood = found.find((group) => group.name === "Mood");
+    expect(flow, width).toBeDefined();
+    expect(mood, width).toBeDefined();
+    for (const group of [flow!, mood!]) {
+      expect(group.cut, `${group.name} at ${width}`).toBe(false);
+      expect(group.inside, `${group.name} at ${width}`).toBe(true);
+      expect(group.inForm, `${group.name} at ${width}`).toBe(true);
+      expect(group.lowest, `${group.name} at ${width}`).toBeGreaterThanOrEqual(44);
+    }
+    return { flow: flow!, mood: mood! };
+  };
+
+  // Desktop: the cell is the specimen's own width, wide enough for the round pill.
+  const wide = await at("");
+  for (const group of [wide.flow, wide.mood]) {
+    expect(group.rows).toBe(1);
+    expect(group.radius).toBe("999px");
+    expect(group.widest - group.narrowest).toBeGreaterThan(8);
   }
-  const chips = await layout("270px");
-  expect(chips.rows).toBe(2);
-  expect(chips.inside).toBe(true);
-  expect(chips.narrowest).toBeGreaterThanOrEqual(44);
-  expect(chips.pillBorder).toBe("0px");
-  expect(chips.chipBorder).not.toBe("rgba(0, 0, 0, 0)");
+
+  // A 390 px and a 360 px phone: five equal columns, then three.
+  for (const width of ["390px", "360px"]) {
+    const phone = await at(width);
+    for (const group of [phone.flow, phone.mood]) {
+      expect(group.rows, `${group.name} at ${width}`).toBe(1);
+      expect(group.radius, `${group.name} at ${width}`).toBe("10px");
+      expect(group.widest - group.narrowest, `${group.name} at ${width}`).toBeLessThan(1);
+    }
+  }
+
+  // A 320 px phone: five columns would cut Spotting, so the flow values stack, one per row,
+  // each the track's full width; the three moods still fit as columns.
+  const narrow = await at("320px");
+  expect(narrow.flow.rows).toBe(5);
+  expect(narrow.flow.narrowest).toBeGreaterThanOrEqual(narrow.flow.inner - 1);
+  expect(narrow.flow.radius).toBe("10px");
+  expect(narrow.mood.rows).toBe(1);
+  expect(narrow.mood.widest - narrow.mood.narrowest).toBeLessThan(1);
+});
+
+// The lead saw the pill fold into two rows at phone width. At every viewport
+// the chapter is checked at, every radio scale in every specimen is one row
+// or one option per row, never anything between, and never a cut label.
+for (const width of [1440, 390, 320]) {
+  test(`no scale folds into uneven rows or cuts a label at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(route);
+    await page.evaluate(() => document.fonts.ready);
+    const found = await page.locator("main").evaluate(scales);
+    expect(found.length).toBeGreaterThan(20);
+    for (const group of found) {
+      expect([1, group.options], `${group.name} rows at ${width}`).toContain(group.rows);
+      if (group.rows > 1) expect(group.radius, `${group.name} at ${width}`).toBe("10px");
+      expect(group.cut, `${group.name} at ${width}`).toBe(false);
+      expect(group.inside, `${group.name} at ${width}`).toBe(true);
+      expect(group.inForm, `${group.name} at ${width}`).toBe(true);
+    }
+  });
+}
+
+/**
+ * Where the focused radio in a group draws its ring: how far past its own box
+ * the ring reaches (zero or less is inside), which other labels' text it
+ * crosses, and how wide a band of the track's color runs between the ring and
+ * a chosen value's fill.
+ */
+function focusRing(fieldset: Element) {
+  const radio = document.activeElement;
+  if (!(radio instanceof HTMLInputElement) || !fieldset.contains(radio)) return null;
+  const ring = getComputedStyle(radio);
+  const offset = parseFloat(ring.outlineOffset);
+  const reach = offset + parseFloat(ring.outlineWidth);
+  const box = radio.getBoundingClientRect();
+  const label = radio.nextElementSibling as HTMLElement;
+  const track = radio.parentElement?.parentElement as HTMLElement;
+  const crossed = [...fieldset.querySelectorAll('input[type="radio"]')]
+    .filter((other) => other !== radio)
+    .map((other) => other.nextElementSibling as HTMLElement)
+    .filter((other) => {
+      const range = document.createRange();
+      range.selectNodeContents(other);
+      const text = range.getBoundingClientRect();
+      return (
+        text.left < box.right + reach &&
+        text.right > box.left - reach &&
+        text.top < box.bottom + reach &&
+        text.bottom > box.top - reach
+      );
+    })
+    .map((other) => other.textContent);
+  // An inset shadow in the track's color, measured from the ring's inner edge.
+  const [, color, spread] =
+    /^(rgba?\([^)]*\)) 0px 0px 0px ([\d.]+)px inset$/.exec(getComputedStyle(label).boxShadow) ?? [];
+  const band =
+    spread !== undefined && color === getComputedStyle(track).backgroundColor
+      ? parseFloat(getComputedStyle(label).borderLeftWidth) + parseFloat(spread) + offset
+      : 0;
+  return {
+    name: label.textContent,
+    checked: radio.checked,
+    visible: radio.matches(":focus-visible"),
+    reach,
+    crossed,
+    band,
+  };
+}
+
+// G9b's review: the columns touch, so the global ring (2 px at a 4 px offset)
+// around a focused value crossed the next label ("Spotting" beside Light at a
+// 360 px phone) and, in a stacked list, reached past the form. A focused value
+// in the columns layout draws its ring inside its own box, and on a chosen
+// value a band of the track's color keeps the ring apart from the fill, whose
+// tone is too close to the focus color to show it.
+for (const width of ["390px", "360px", "320px"]) {
+  test(`a focused value keeps its ring inside its own column, clear of the next label, at a ${width} phone`, async ({
+    page,
+  }) => {
+    await page.goto(route);
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => document.fonts.ready);
+    for (const state of ["default", "empty"]) {
+      await stage(page, "Day sheet", state).evaluate((element, size) => {
+        (element as HTMLElement).style.width = size;
+      }, width);
+    }
+
+    // A chosen value as the arrow keys leave it: Light beside Spotting, Low beside Steady.
+    for (const [name, from, to] of [
+      ["Flow", "Medium", "Light"],
+      ["Mood", "Steady", "Low"],
+    ] as const) {
+      const group = stage(page, "Day sheet").getByRole("group", { name, exact: true });
+      // The form is inert until the page hydrates; retry the first press until it lands.
+      await expect(async () => {
+        await group.getByRole("radio", { name: from }).focus({ timeout: 1000 });
+        await page.keyboard.press("ArrowLeft");
+        await expect(group.getByRole("radio", { name: to })).toBeFocused({ timeout: 1000 });
+      }).toPass({ timeout: 15_000 });
+      const chosen = await group.evaluate(focusRing);
+      expect(chosen, `${name} at ${width}`).toMatchObject({
+        name: to,
+        checked: true,
+        visible: true,
+      });
+      expect(chosen!.reach, `${name} at ${width}`).toBeLessThanOrEqual(0);
+      expect(chosen!.crossed, `${name} at ${width}`).toEqual([]);
+      expect(chosen!.band, `${name} at ${width}`).toBeGreaterThanOrEqual(1);
+    }
+
+    // Nothing chosen: Tab from the Period switch enters the flow scale on None, unchecked.
+    const empty = stage(page, "Day sheet", "empty");
+    await empty.getByRole("switch", { name: "Period" }).focus();
+    await page.keyboard.press("Tab");
+    const flow = empty.getByRole("group", { name: "Flow", exact: true });
+    await expect(flow.getByRole("radio", { name: "None" })).toBeFocused();
+    const unchosen = await flow.evaluate(focusRing);
+    expect(unchosen, width).toMatchObject({ name: "None", checked: false, visible: true });
+    expect(unchosen!.reach, width).toBeLessThanOrEqual(0);
+    expect(unchosen!.crossed, width).toEqual([]);
+  });
+}
+
+test("the Period row puts the switch under a short help line on a phone, beside it on desktop", async ({
+  page,
+}) => {
+  await page.goto(route);
+  await page.evaluate(() => document.fonts.ready);
+  const cell = stage(page, "Day sheet");
+  const help = cell.getByText("Logs a period day at Medium. Change the flow below.");
+  const toggle = cell.getByRole("switch", { name: "Period" });
+  await expect(toggle).toHaveAccessibleDescription(
+    "Logs a period day at Medium. Change the flow below.",
+  );
+  const boxes = async () => {
+    const text = await help.boundingBox();
+    const control = await toggle.boundingBox();
+    expect(text).not.toBeNull();
+    expect(control).not.toBeNull();
+    return { text: text!, control: control! };
+  };
+  const desktop = await boxes();
+  expect(desktop.control.x).toBeGreaterThan(desktop.text.x + desktop.text.width);
+  expect(desktop.control.y).toBeLessThan(desktop.text.y + desktop.text.height);
+  for (const width of ["360px", "320px"]) {
+    await cell.evaluate((element, size) => {
+      (element as HTMLElement).style.width = size;
+    }, width);
+    const phone = await boxes();
+    expect(phone.control.y, width).toBeGreaterThanOrEqual(phone.text.y + phone.text.height);
+    // Aligned to the start, under the line it belongs to.
+    expect(Math.abs(phone.control.x - phone.text.x), width).toBeLessThanOrEqual(0.5);
+    // Two short lines at most, never the seven lines it ran to beside the switch.
+    expect(phone.text.height, width).toBeLessThan(50);
+  }
+});
+
+test("a chosen mood clears with Clear, and focus moves to the first mood", async ({ page }) => {
+  await page.goto(route);
+  await page.waitForLoadState("networkidle");
+  const mood = stage(page, "Day sheet").getByRole("group", { name: "Mood" });
+  await expect(mood.getByRole("radio", { name: "Steady" })).toBeChecked();
+  const clear = mood.getByRole("button", { name: "Clear mood" });
+  await expect(clear).toHaveText("Clear");
+  // The form is inert until the page hydrates; retry the first press until it lands.
+  await expect(async () => {
+    await clear.click({ timeout: 1000 });
+    await expect(mood.getByRole("radio", { checked: true })).toHaveCount(0, { timeout: 1000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(mood.getByRole("radio", { name: "Low" })).toBeFocused();
+  await expect(clear).toHaveCount(0);
+  await page.keyboard.press("Space");
+  await expect(mood.getByRole("radio", { name: "Low" })).toBeChecked();
+  await expect(mood.getByRole("radio", { name: "Low" })).toBeFocused();
+  await expect(mood.getByRole("button", { name: "Clear mood" })).toBeVisible();
 });
 
 test("the page mode is a page: the date as its heading, the days and Close as links", async ({

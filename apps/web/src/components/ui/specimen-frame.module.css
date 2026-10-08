@@ -136,6 +136,14 @@
   min-width: 0;
   /* A specimen wider than its cell is cut at the cell's edge instead of widening the page; clip creates no scroll region, so nothing needs keyboard access. */
   overflow-x: clip;
+  /*
+   * The clip runs along the padding edge, so this padding lets the focus
+   * ring (2 px at a 4 px offset) of a specimen that fills its cell show
+   * whole, and the negative margin gives the room back: the content box,
+   * and every specimen in it, keeps its place and width.
+   */
+  padding-inline: var(--space-2);
+  margin-inline: calc(var(--space-2) * -1);
 }
 
 .notes {

@@ -165,11 +165,49 @@ lines without touching another's.
 
 ### `/today` (H2)
 
-(none yet)
+- `[OWNER]` the day-logging strings Today's open card shares with the day
+  sheet (tasks G9 and G9b): the list under `/calendar` and `/log/[date]`
+  below is the one inventory for both routes.
 
 ### `/calendar` and `/log/[date]` (H3)
 
-(none yet)
+The day sheet's strings (tasks G9 and G9b) are in the UI as proposed until
+approved, from `components/ui/day-sheet.tsx` and
+`components/day-log/copy.ts`; Today's open card uses the same ones. The
+saved line follows the success example above ("Saved for Sunday, Oct 5.")
+and "We could not save this day. Try again." is the failure example, so
+neither is repeated below.
+
+- `[OWNER]` the Period switch's help line: "Logs a period day at Medium.
+  Change the flow below." (G9b; it replaces G9's "One press logs a period
+  day and picks Medium below; change it before you save. The same press
+  takes it back.").
+- `[OWNER]` the way back to no mood: a quiet "Clear" beside the mood
+  selector while a mood is chosen, named "Clear mood" for assistive
+  technology (G9b).
+- `[OWNER]` the notes on the day: "Notes on this day", "Shared with people
+  who can see your symptoms", "Shared with people who can see your
+  pregnancy overview", "Added by someone you share with."
+- `[OWNER]` sharing a note: "Share this note with...", "Share this note?",
+  "It moves out of your private notes and is filed with your symptoms, so
+  the people who can see your symptoms can read it. A shared note cannot be
+  made private again, only deleted." (with "your pregnancy overview" in
+  both places in pregnancy), "Share note", "Keep it private", "Sharing",
+  "Save the note first, then share it.", "Note shared."
+- `[OWNER]` deleting a shared note: "Delete this note", "Delete this
+  note?", "It is removed for you and for everyone who can read it, and it
+  cannot be brought back.", "Delete note", "Keep it", "Deleting", "Note
+  deleted."
+- `[OWNER]` undoing a save: "Changes undone for Sunday, Oct 5.", "We could
+  not undo every change. Check this day and change it back.", "Undoing".
+- `[OWNER]` the failures: "We could not load this day. Try again.", "Your
+  session has ended. Sign in again, then come back to this day.", "This day
+  was changed somewhere else. Try again to save your version.", "We could
+  not save your note. Try again.", "This note was changed somewhere else.
+  Try again to save your version.", "We could not share this note. Try
+  again.", "This note changed somewhere else. Check it, then share it
+  again.", "This note was already shared somewhere else.", "This note was
+  deleted somewhere else.", "We could not delete this note. Try again."
 
 ### `/journey` (H4)
 
