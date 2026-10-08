@@ -52,7 +52,8 @@ export function Button({
   const inner = (
     <>
       {icon ? <Icon name={icon} className={styles.icon} /> : null}
-      <span className={styles.stack}>
+      {/* data-loading-text reserves the loading text's width while idle (the CSS ::after), so pressing never widens the button. */}
+      <span className={styles.stack} data-loading-text={loadingText}>
         <span className={styles.label} aria-hidden={loading || undefined}>
           {children}
         </span>
