@@ -925,6 +925,35 @@ describe("ending a pregnancy", () => {
     expect(await stageOf(ANNA)).toBe("pregnancy");
   });
 
+  it("names a day that is not on the calendar as such, not as before the pregnancy", async () => {
+    const impossible = await post(`/pregnancies/${pregnancyId}/end`, {
+      endedAt: "2026-02-30",
+      reason: "birth",
+    });
+    expect(impossible.status).toBe(422);
+    expect((await problemOf(impossible)).errors).toEqual([
+      { path: "endedAt", message: "Not a calendar day." },
+    ]);
+    expect(await stageOf(ANNA)).toBe("pregnancy");
+  });
+
+  it("refuses a day after today in her zone and writes nothing", async () => {
+    const tomorrow = await post(`/pregnancies/${pregnancyId}/end`, {
+      endedAt: addDays(TODAY, 1),
+      reason: "birth",
+    });
+    expect(tomorrow.status).toBe(422);
+    expect((await problemOf(tomorrow)).errors).toEqual([
+      { path: "endedAt", message: "Not a day that has happened yet." },
+    ]);
+    const [row] = await harness.db
+      .select({ endedAt: schema.pregnancies.endedAt, version: schema.pregnancies.version })
+      .from(schema.pregnancies)
+      .where(eq(schema.pregnancies.id, pregnancyId));
+    expect(row).toEqual({ endedAt: null, version: 4 });
+    expect(await stageOf(ANNA)).toBe("pregnancy");
+  });
+
   it("records the ending, moves the stage, clears predictions and cancels the reminders", async () => {
     await harness.db.insert(schema.cyclePredictions).values({
       id: PREDICTION,

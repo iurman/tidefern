@@ -36,6 +36,29 @@ describe("WeekCard", () => {
     expect(week.querySelectorAll(".numeral")).toHaveLength(1);
   });
 
+  it("draws no Dating row on a grantee's card, which is never sent the method", () => {
+    render(<WeekCard today={today} dueDate="2027-01-23" historyHref={null} />);
+    expect(screen.getByText("Jan 23, 2027")).toBeInTheDocument();
+    expect(screen.getByText("110 days to go")).toBeInTheDocument();
+    expect(screen.queryByText("Dating")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Dated from|entered by hand/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("names the method without a History link when there is no history to open", () => {
+    render(<WeekCard today={today} dueDate="2027-01-23" method="lmp" historyHref={null} />);
+    expect(screen.getByText("Dated from your last period.")).toBeInTheDocument();
+    expect(screen.queryByRole("link", { name: "History" })).not.toBeInTheDocument();
+  });
+
+  it("keeps the active card off warmth when another card on the screen holds it", () => {
+    const { rerender } = render(<WeekCard today={today} dueDate="2027-01-23" />);
+    expect(document.querySelector("section")).toHaveClass("active");
+    rerender(<WeekCard today={today} dueDate="2027-01-23" highlight={false} />);
+    expect(document.querySelector("section")).not.toHaveClass("active");
+    expect(document.querySelector(".numeral")).not.toBeNull();
+  });
+
   it("says only that updates are paused on the partner's card", () => {
     render(<WeekCard today={today} dueDate="2027-01-23" paused />);
     expect(screen.getByRole("heading", { name: "Paused" })).toBeInTheDocument();

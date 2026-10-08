@@ -389,6 +389,12 @@ export const specimenGroups: readonly CatalogGroup[] = [
         description: "The week and days, the trimester bar, the due date and days to go.",
       },
       {
+        name: "Pregnancy week card, shared",
+        source: `${ui}week-card.tsx`,
+        description:
+          "A grantee's card while the pregnancy continues: no Dating row and no History link.",
+      },
+      {
         name: "Pregnancy week card, paused",
         source: `${ui}week-card.tsx`,
         description:

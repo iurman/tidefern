@@ -18,6 +18,11 @@ import styles from "./week-card.module.css";
  * go. It sits on warmth because the current week is the one highlighted
  * thing on /journey. No renders, no fruit, no daily tips. The partner's card
  * is the paused variant once the pregnancy has ended, and it never says why.
+ *
+ * A grantee's card while the pregnancy continues is the same card without
+ * the Dating row: the API never sends a grantee the dating method, and the
+ * history is hers alone, so the card draws only what it was given rather
+ * than a method it would have to guess.
  */
 
 const TRIMESTER_ENDS = [98, 196, GESTATION_DAYS] as const;
@@ -30,19 +35,27 @@ export interface WeekCardProps {
   today: CalendarDate;
   /** The one due date on record; absent is the empty state. */
   dueDate?: CalendarDate;
+  /** How the due date was set. Absent on a grantee's card, which then has no Dating row. */
   method?: DatingMethod;
-  /** Where "History" leads: the dating changes the person can see. */
-  historyHref?: string;
+  /** Where "History" leads: the dating changes the person can see. Null leaves the link out. */
+  historyHref?: string | null;
   /** Where the empty state's one action leads. */
   startHref?: string;
   /** The partner's card after the pregnancy has ended. */
   paused?: boolean;
+  /**
+   * The active card sits on warmth as the one highlighted thing on the
+   * screen; false keeps it on the surface when another card on the same
+   * screen already holds the warmth.
+   */
+  highlight?: boolean;
   loading?: boolean;
   error?: string;
   className?: string;
 }
 
-const methodLabels: Record<DatingMethod, string> = {
+/** How each dating method reads, here and in the due date history she can open. */
+export const datingMethodLabels: Record<DatingMethod, string> = {
   lmp: "Dated from your last period",
   ultrasound: "Dated from an ultrasound",
   transfer: "Dated from the transfer",
@@ -97,10 +110,11 @@ export function WeekCard(props: WeekCardProps) {
   const {
     today,
     dueDate,
-    method = "lmp",
+    method,
     historyHref = "/journey/dating",
     startHref = "/journey/start",
     paused = false,
+    highlight = true,
     loading = false,
     error,
     className,
@@ -153,7 +167,7 @@ export function WeekCard(props: WeekCardProps) {
 
   return (
     <section
-      className={[styles.card, styles.active, className].filter(Boolean).join(" ")}
+      className={[styles.card, highlight ? styles.active : "", className].filter(Boolean).join(" ")}
       aria-labelledby={headingId}
     >
       <h3 id={headingId} className={styles.eyebrow}>
@@ -176,13 +190,22 @@ export function WeekCard(props: WeekCardProps) {
       <dl className={styles.facts}>
         <dt>Due</dt>
         <dd className="tabular">{formatDayWithYear(dueDate)}</dd>
-        <dt>Dating</dt>
-        <dd>
-          {methodLabels[method]}.{" "}
-          <a className={styles.link} href={historyHref}>
-            History
-          </a>
-        </dd>
+        {method !== undefined ? (
+          <>
+            <dt>Dating</dt>
+            <dd>
+              {datingMethodLabels[method]}.
+              {historyHref !== null ? (
+                <>
+                  {" "}
+                  <a className={styles.link} href={historyHref}>
+                    History
+                  </a>
+                </>
+              ) : null}
+            </dd>
+          </>
+        ) : null}
         <dt>Countdown</dt>
         <dd className="tabular">{daysToGoSentence(age.totalDays)}</dd>
       </dl>
