@@ -1,0 +1,114 @@
+/*
+ * The activity route (DESIGN.md 3.8): the back link and the title, then one
+ * row per audit event, newest first. One reading column, tokens only, both
+ * themes through them, no warmth surface. The section is the size container,
+ * so the rows answer to the column they have, not to the window: three
+ * columns (when, what, who) where it is wide, and on a phone the day beside
+ * what happened with who did it on the line beneath.
+ */
+
+.page {
+  container: activity / inline-size;
+  max-width: var(--size-reading);
+}
+
+.header {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-1);
+  margin-bottom: var(--space-6);
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+}
+
+.list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--soft-border);
+}
+
+.row {
+  display: grid;
+  grid-template-columns: 7ch minmax(0, 1fr);
+  grid-template-areas:
+    "when what"
+    "when who";
+  column-gap: var(--space-4);
+  align-items: baseline;
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--soft-border);
+  line-height: var(--leading-body);
+}
+
+/* On the first line's baseline with what happened, even where it spans the who line beneath. */
+.when {
+  grid-area: when;
+  color: var(--muted);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+/* An older row's year sits under its day, so the column stays one day wide. */
+.year {
+  display: block;
+}
+
+/*
+ * Both carry a person's or a child's display name, which may be an email
+ * address or one long word: it breaks inside its column instead of running
+ * past the row and scrolling the page sideways.
+ */
+.what {
+  grid-area: what;
+  min-width: 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.who {
+  grid-area: who;
+  min-width: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+  overflow-wrap: anywhere;
+}
+
+.more {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  margin-top: var(--space-6);
+}
+
+/* The first page could not be read: one quiet sentence, server rendered, never a live region. */
+.failed {
+  max-width: 64ch;
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--type-small);
+}
+
+@container activity (min-width: 34rem) {
+  .header {
+    flex-direction: row;
+    align-items: center;
+    gap: var(--space-4);
+  }
+
+  .row {
+    grid-template-columns: 7ch minmax(0, 1fr) 12rem;
+    grid-template-areas: "when what who";
+  }
+}
