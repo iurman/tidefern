@@ -1,5 +1,5 @@
 import type { Me, components } from "@tidefern/api-client";
-import { compareDates, todayIn } from "@tidefern/core";
+import { addDays, compareDates, diffDays, todayIn } from "@tidefern/core";
 import { formatChildAge } from "@/lib/child-age";
 import { journeyCopy as copy, kindName, type EventKind } from "./copy";
 import { countedToday, pregnancyStart, weekByWeek, type WeekByWeek } from "./weeks";
@@ -236,8 +236,27 @@ export function historyRows(changes: readonly DueDateChange[], timeZone: string)
 }
 
 /**
+ * How far a child's date of birth may sit from the recorded ending and still
+ * be this birth's child: the ending is a calendar day in her zone and the
+ * child's date of birth is typed separately, so a birth near midnight or
+ * across a zone can land a day or two apart.
+ */
+export const BIRTH_SLACK_DAYS = 2;
+
+/**
+ * With no ending on record (the postpartum stage chosen without one), the
+ * oldest a guarded child may be to stand as this birth's child. Postpartum
+ * has no fixed length (it lasts until her first logged period), so this is
+ * a bound against naming an older sibling, not a medical window.
+ */
+export const NEWBORN_MAX_DAYS = 365;
+
+/**
  * The child whose age the postpartum view shows: one she guards born on
- * the day the pregnancy ended, else the youngest she guards already born.
+ * the day the pregnancy ended, else the youngest she guards born within
+ * `BIRTH_SLACK_DAYS` of it (or, with no ending on record, younger than
+ * `NEWBORN_MAX_DAYS`). An older sibling is never this birth's child: with
+ * none found the view leaves the child line out.
  */
 export function birthChild(
   children: readonly Child[],
@@ -251,7 +270,12 @@ export function birthChild(
   const exact =
     endedAt === null ? undefined : guarded.find((child) => child.dateOfBirth === endedAt);
   if (exact !== undefined) return exact;
-  const youngest = [...guarded].sort((a, b) => compareDates(b.dateOfBirth, a.dateOfBirth))[0];
+  const near = guarded.filter((child) =>
+    endedAt === null
+      ? compareDates(child.dateOfBirth, addDays(today, -NEWBORN_MAX_DAYS)) > 0
+      : Math.abs(diffDays(endedAt, child.dateOfBirth)) <= BIRTH_SLACK_DAYS,
+  );
+  const youngest = [...near].sort((a, b) => compareDates(b.dateOfBirth, a.dateOfBirth))[0];
   return youngest ?? null;
 }
 

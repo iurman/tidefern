@@ -422,6 +422,27 @@ describe("after an ending", () => {
     });
   });
 
+  it("leaves the child line out when the only child she guards is an older sibling", () => {
+    const view = journeyView(
+      me({ id: MIRA, guardianOf: [sol.id] }, "postpartum"),
+      today,
+      reads({
+        own: {
+          kind: "ended",
+          pregnancy: ended,
+          children: { ok: true, value: [sol] },
+          basis: { ok: true, value: "none" },
+        },
+      }),
+    );
+    expect(view.own).toEqual({
+      kind: "postpartum",
+      child: null,
+      childrenFailed: false,
+      predictionsPaused: true,
+    });
+  });
+
   it("drops the paused sentence once a period has been logged again", () => {
     const view = journeyView(
       me({ guardianOf: [ilo.id] }, "postpartum"),
@@ -504,11 +525,22 @@ describe("helpers", () => {
     expect(overviewGrantees({ ok: true, value: [{ ...people[0]!, grants: [] }] })).toEqual([]);
   });
 
-  it("finds the child born on the ending day, else the youngest she guards", () => {
+  it("finds the child born on the ending day, else a newborn she guards", () => {
     expect(birthChild([sol, ilo], [sol.id, ilo.id], "2026-08-23", today)?.displayName).toBe("Ilo");
     expect(birthChild([sol, ilo], [sol.id, ilo.id], null, today)?.displayName).toBe("Ilo");
-    expect(birthChild([sol, ilo], [sol.id], "2026-08-23", today)?.displayName).toBe("Sol");
     expect(birthChild([ilo], [], "2026-08-23", today)).toBeNull();
+  });
+
+  it("never names an older sibling as the child of this birth", () => {
+    // She recorded the birth before adding the newborn; Sol is two and a half.
+    expect(birthChild([sol, ilo], [sol.id], "2026-08-23", today)).toBeNull();
+    expect(birthChild([sol], [sol.id], null, today)).toBeNull();
+  });
+
+  it("allows a day or two between the ending and the date of birth, for a zone or midnight", () => {
+    expect(birthChild([ilo], [ilo.id], "2026-08-22", today)?.displayName).toBe("Ilo");
+    expect(birthChild([ilo], [ilo.id], "2026-08-25", today)?.displayName).toBe("Ilo");
+    expect(birthChild([ilo], [ilo.id], "2026-08-26", today)).toBeNull();
   });
 
   it("dates each due date change by its day in her zone", () => {
