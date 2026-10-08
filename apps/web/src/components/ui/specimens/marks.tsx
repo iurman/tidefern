@@ -205,6 +205,19 @@ export const specimens: SpecimenGroup = {
       ),
     },
     {
+      name: "Pregnancy week card, shared",
+      source: "apps/web/src/components/ui/week-card.tsx",
+      usage: `<WeekCard
+  today="2026-10-05"
+  dueDate="2027-01-23"
+  historyHref={null}
+/>`,
+      keyboard:
+        "Not interactive. A grantee's card while the pregnancy continues: no Dating row and no History link, because the API never sends a grantee the dating method and the history is hers alone.",
+      states: defaultOnly,
+      render: () => <WeekCard today={today} dueDate="2027-01-23" historyHref={null} />,
+    },
+    {
       name: "Pregnancy week card, paused",
       source: "apps/web/src/components/ui/week-card.tsx",
       usage: `<WeekCard today="2026-10-05" paused />`,
