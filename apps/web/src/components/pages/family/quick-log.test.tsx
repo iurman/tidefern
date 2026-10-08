@@ -22,6 +22,8 @@ beforeEach(() => {
   refresh.mockClear();
   play.mockReset();
   api = fakeApi();
+  // Today as the API counts it at the moment of each write.
+  api.always("GET /api/v1/me", json({ today }));
 });
 
 afterEach(() => {
@@ -34,7 +36,6 @@ function quickLog(overrides: Partial<Parameters<typeof QuickLog>[0]> = {}) {
     <QuickLog
       childId={ILO_ID}
       childName="Ilo"
-      today={today}
       units="metric"
       canDelete
       ongoingSleep={null}
@@ -45,6 +46,8 @@ function quickLog(overrides: Partial<Parameters<typeof QuickLog>[0]> = {}) {
 }
 
 const posts = (calls: Call[]) => calls.filter((call) => call.method === "POST");
+const meReads = (calls: Call[]) =>
+  calls.filter((call) => call.method === "GET" && call.path === "/api/v1/me");
 
 describe("QuickLog", () => {
   it("logs a diaper with its contents, closes the sheet, offers Undo and reads the page again", async () => {
@@ -158,6 +161,79 @@ describe("QuickLog", () => {
       feedMethod: "bottle",
       quantityMl: 89,
     });
+  });
+
+  it("logs solids with the method alone: no side, no amount", async () => {
+    const user = userEvent.setup();
+    api.route(`POST /api/v1/children/${ILO_ID}/events`, json({ id: "x" }, 201));
+    quickLog();
+    await user.click(screen.getByRole("button", { name: "Feed for Ilo" }));
+    const sheet = screen.getByRole("dialog", { name: "Log a feed for Ilo" });
+    await user.click(within(sheet).getByRole("radio", { name: "Solids" }));
+    expect(within(sheet).queryByRole("textbox", { name: "Amount" })).toBeNull();
+    expect(within(sheet).queryByRole("radio", { name: "Left" })).toBeNull();
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Feed saved.")).toBeInTheDocument();
+    const body = posts(api.calls)[0]?.body as { id: string };
+    expect(body).toEqual({ kind: "feed", feedMethod: "solids", date: today, id: body.id });
+  });
+
+  it("files an event under the API's today at the moment of the write, not the day the page was drawn", async () => {
+    const user = userEvent.setup();
+    // The page was drawn on Oct 4; she logs a night feed after midnight from the same tab.
+    api.always("GET /api/v1/me", json({ today: "2026-10-05" }));
+    api.route(`POST /api/v1/children/${ILO_ID}/events`, json({ id: "x" }, 201));
+    api.route(`POST /api/v1/children/${ILO_ID}/events`, json({ id: "y" }, 201));
+    quickLog();
+    await user.click(screen.getByRole("button", { name: "Diaper for Ilo" }));
+    await user.click(screen.getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Diaper saved.")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Sleep for Ilo" }));
+    await user.click(screen.getByRole("button", { name: "Start sleep" }));
+    expect(await screen.findByText("Sleep started.")).toBeInTheDocument();
+    expect(posts(api.calls).map((call) => (call.body as { date: string }).date)).toEqual([
+      "2026-10-05",
+      "2026-10-05",
+    ]);
+    // Each write asked first, so the day follows the instant being logged.
+    expect(meReads(api.calls)).toHaveLength(2);
+    const first = api.calls.findIndex((call) => call.method === "GET");
+    const firstPost = api.calls.findIndex((call) => call.method === "POST");
+    expect(first).toBeLessThan(firstPost);
+  });
+
+  it("sends nothing when today cannot be read, and says what to do next", async () => {
+    const user = userEvent.setup();
+    api.always("GET /api/v1/me", problem(503));
+    quickLog();
+    await user.click(screen.getByRole("button", { name: "Diaper for Ilo" }));
+    const sheet = screen.getByRole("dialog", { name: "Log a diaper for Ilo" });
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    expect(
+      await within(sheet).findByText("We could not save this diaper. Try again."),
+    ).toBeInTheDocument();
+    expect(posts(api.calls)).toEqual([]);
+    expect(refresh).not.toHaveBeenCalled();
+  });
+
+  it("retries an attempt that may have landed under its first day, even after midnight passes", async () => {
+    const user = userEvent.setup();
+    api.route(`POST /api/v1/children/${ILO_ID}/events`, problem(503));
+    api.route(`POST /api/v1/children/${ILO_ID}/events`, json({ id: "x" }, 201));
+    quickLog();
+    await user.click(screen.getByRole("button", { name: "Diaper for Ilo" }));
+    const sheet = screen.getByRole("dialog", { name: "Log a diaper for Ilo" });
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    expect(
+      await within(sheet).findByText("We could not save this diaper. Try again."),
+    ).toBeInTheDocument();
+    api.always("GET /api/v1/me", json({ today: "2026-10-05" }));
+    await user.click(within(sheet).getByRole("button", { name: "Save" }));
+    expect(await screen.findByText("Diaper saved.")).toBeInTheDocument();
+    const [first, second] = posts(api.calls);
+    expect(second?.key).toBe(first?.key);
+    expect(second?.body).toEqual(first?.body);
+    expect((second?.body as { date: string }).date).toBe(today);
   });
 
   it("says a failed check out loud: the error cue once, and focus on the field to fix", async () => {

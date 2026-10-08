@@ -95,6 +95,20 @@ async function send<T>(
   }
 }
 
+/**
+ * GET /v1/me for today in the profile's zone on the API's calendar clock, read
+ * right before an event is filed: a page left open past midnight still files
+ * a night feed under the day it happens, not the day the page was drawn. No
+ * day (no profile) is a failure, so nothing is filed under a guessed date.
+ */
+export async function currentDay(client: ApiClient): Promise<Result<string>> {
+  const result = await send(() => client.GET("/api/v1/me"), 200);
+  if (!result.ok) return result;
+  const today = result.value?.today;
+  if (typeof today !== "string") return { ok: false, kind: "failed", status: 200 };
+  return { ok: true, value: today };
+}
+
 type EventInput = components["schemas"]["ChildEventInput"];
 
 /** The event body without the id, which the attempt supplies. */

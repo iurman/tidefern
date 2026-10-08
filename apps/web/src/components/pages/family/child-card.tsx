@@ -116,7 +116,6 @@ export function ChildCard({ card, today, units, warm, context = {} }: ChildCardP
         <QuickLog
           childId={child.id}
           childName={child.displayName}
-          today={today}
           units={units}
           canDelete={access.canDelete}
           ongoingSleep={day.ongoingSleep}

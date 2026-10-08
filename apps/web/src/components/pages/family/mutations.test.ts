@@ -8,6 +8,7 @@ import {
   addMeasurement,
   attemptFor,
   checkMilestone,
+  currentDay,
   endSleep,
   keepsAttempt,
   logEvent,
@@ -69,6 +70,31 @@ describe("attempts", () => {
     expect(keepsAttempt({ kind: "failed", status: 503 })).toBe(true);
     expect(keepsAttempt({ kind: "invalid", errors: [] })).toBe(false);
     expect(keepsAttempt({ kind: "signedOut" })).toBe(false);
+  });
+});
+
+describe("currentDay", () => {
+  it("reads today from GET /v1/me at the moment it is asked", async () => {
+    const { client, sent } = fake(() => json({ today: "2026-10-05" }, 200));
+    expect(await currentDay(client)).toEqual({ ok: true, value: "2026-10-05" });
+    expect(sent).toMatchObject([{ method: "GET", path: "/api/v1/me" }]);
+  });
+
+  it("answers a failure, never a guessed day, when the read fails or there is no day", async () => {
+    expect(await currentDay(fake(() => json({}, 401)).client)).toEqual({
+      ok: false,
+      kind: "signedOut",
+    });
+    expect(await currentDay(fake(() => "throw").client)).toEqual({
+      ok: false,
+      kind: "failed",
+      status: 0,
+    });
+    expect(await currentDay(fake(() => json({ today: null }, 200)).client)).toEqual({
+      ok: false,
+      kind: "failed",
+      status: 200,
+    });
   });
 });
 

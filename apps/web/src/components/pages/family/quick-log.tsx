@@ -11,6 +11,7 @@ import { failureLine, familyCopy } from "./copy";
 import { Elapsed } from "./elapsed";
 import {
   attemptFor,
+  currentDay,
   endSleep,
   keepsAttempt,
   logEvent,
@@ -37,8 +38,6 @@ type Sheet = "feed" | "sleep" | "diaper";
 export interface QuickLogProps {
   childId: string;
   childName: string;
-  /** Today in the profile's zone, from the API: the day every event here is filed under. */
-  today: string;
   units: UnitSystem;
   /** She may undo, which is a delete: guardians alone. */
   canDelete: boolean;
@@ -94,7 +93,6 @@ function offline(): boolean {
 export function QuickLog({
   childId,
   childName,
-  today,
   units,
   canDelete,
   ongoingSleep,
@@ -113,6 +111,8 @@ export function QuickLog({
   const [notice, setNotice] = useState<Notice | null>(null);
   const [undoing, setUndoing] = useState(false);
   const attempt = useRef<Attempt | null>(null);
+  /** The day the kept attempt was filed under, so a retry of it sends the same body. */
+  const attemptDay = useRef<string | null>(null);
   /** A sleep's start, frozen at the first press of Start sleep so a retry sends the same sleep. */
   const sleepStart = useRef<string | null>(null);
   /** One write at a time; a ref, because a second press can land before React re-renders. */
@@ -185,12 +185,40 @@ export function QuickLog({
     return false;
   }
 
-  function create(body: NewEvent, kind: "feed" | "sleep" | "diaper"): Promise<boolean> {
+  /**
+   * Files one event under today as the API counts it at the moment of the
+   * write (GET /v1/me), never the day the page was drawn: a tab left open
+   * past midnight files a night feed under the night it happens. A retry of
+   * an attempt that may have landed keeps that attempt's day, so it meets the
+   * first request instead of making a second row under another date.
+   */
+  function create(
+    draft: Omit<NewEvent, "date">,
+    kind: "feed" | "sleep" | "diaper",
+  ): Promise<boolean> {
     const client = browserApiClient();
-    const current = attemptFor(client, attempt.current, body);
-    attempt.current = current;
     return run(
-      () => logEvent(client, childId, body, current),
+      async () => {
+        const kept = attempt.current;
+        const keptDay = attemptDay.current;
+        let date: string;
+        if (
+          kept !== null &&
+          keptDay !== null &&
+          kept.fingerprint === JSON.stringify({ ...draft, date: keptDay })
+        ) {
+          date = keptDay;
+        } else {
+          const day = await currentDay(client);
+          if (!day.ok) return day;
+          date = day.value;
+        }
+        const body: NewEvent = { ...draft, date };
+        const current = attemptFor(client, kept, body);
+        attempt.current = current;
+        attemptDay.current = date;
+        return logEvent(client, childId, body, current);
+      },
       (failure) => failureLine(failure, copy.failed[kind]),
       (eventId) => ({
         tone: "success",
@@ -219,9 +247,8 @@ export function QuickLog({
     const timed = method === "breast" && timer !== null;
     const endedAt = timed ? (timer.endedAt ?? new Date().toISOString()) : null;
     if (timed && timer.endedAt === null) setTimer({ ...timer, endedAt });
-    const body: NewEvent = {
+    const body: Omit<NewEvent, "date"> = {
       kind: "feed",
-      date: today,
       feedMethod: method,
       ...(method === "breast" && side !== null ? { side } : {}),
       ...(method === "bottle" && volume !== null ? { quantityMl: volume } : {}),
@@ -237,9 +264,8 @@ export function QuickLog({
 
   async function saveDiaper(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    const body: NewEvent = {
+    const body: Omit<NewEvent, "date"> = {
       kind: "diaper",
-      date: today,
       ...(contents === null ? {} : { diaperContents: contents }),
     };
     if (await create(body, "diaper")) setContents(null);
@@ -249,7 +275,7 @@ export function QuickLog({
     event.preventDefault();
     if (ongoingSleep === null) {
       sleepStart.current ??= new Date().toISOString();
-      await create({ kind: "sleep", date: today, startedAt: sleepStart.current }, "sleep");
+      await create({ kind: "sleep", startedAt: sleepStart.current }, "sleep");
       return;
     }
     const client = browserApiClient();

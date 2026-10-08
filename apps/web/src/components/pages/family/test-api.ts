@@ -31,6 +31,7 @@ export const problem = (status: number, extra: Record<string, unknown> = {}): An
 export function fakeApi() {
   const calls: Call[] = [];
   const routes = new Map<string, Answer[]>();
+  const standing = new Map<string, Answer>();
   vi.spyOn(window, "fetch").mockImplementation(async (input) => {
     const request = input as Request;
     const url = new URL(request.url);
@@ -43,7 +44,8 @@ export function fakeApi() {
       key: request.headers.get("idempotency-key"),
       body: text === "" ? undefined : JSON.parse(text),
     });
-    const next = routes.get(`${request.method} ${url.pathname}`)?.shift();
+    const key = `${request.method} ${url.pathname}`;
+    const next = routes.get(key)?.shift() ?? standing.get(key);
     if (next === undefined) throw new TypeError("Failed to fetch");
     return next();
   });
@@ -52,6 +54,10 @@ export function fakeApi() {
     /** Queues one answer for `METHOD /path`. */
     route(key: string, answer: Answer) {
       routes.set(key, [...(routes.get(key) ?? []), answer]);
+    },
+    /** Answers every `METHOD /path` the queue has no answer for, until replaced. */
+    always(key: string, answer: Answer) {
+      standing.set(key, answer);
     },
   };
 }
