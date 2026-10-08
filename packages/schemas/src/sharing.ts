@@ -61,9 +61,13 @@ export interface SharingDescriptions {
   privateNotes: SharingDescription;
 }
 
-/** A catalog sentence with its `[child]` or `[name]` placeholder filled in. */
+/**
+ * A catalog sentence with its `[child]` or `[name]` placeholder filled in.
+ * The value is a name someone typed, so it goes in through a function:
+ * a replacement string would read `$&`, `$'` and `` $` `` in it as patterns.
+ */
 export function fillSharingWords(template: string, value: string): string {
-  return template.replace(/\[(?:child|name)\]/g, value);
+  return template.replace(/\[(?:child|name)\]/g, () => value);
 }
 
 /**

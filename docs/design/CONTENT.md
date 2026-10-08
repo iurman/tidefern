@@ -269,9 +269,12 @@ owner approves them there.
   you share, right now. What Alex added to your record stays with you."
   Outcomes: "Alex no longer sees
   anything you share." and "You left Alex's household. Alex no longer sees
-  anything you share." The co-guardian refusal: "Alex also guards Ilo and
-  Sol. Change who guards Ilo and Sol in Family first, then remove Alex."
-  with "Go to Family".
+  anything you share." The co-guardian refusal, for one child: "Alex also guards
+  Ilo, and removing Alex would leave Ilo without a second guardian. Change
+  who guards Ilo in Family first, then remove Alex."; for several: "Alex
+  also guards Ilo and Sol, and removing Alex would leave at least one of
+  them without a second guardian. Change who guards them in Family first,
+  then remove Alex." with "Go to Family".
 - `[OWNER]` The invite form: "Invite a partner", "Their email" with "They
   get an email asking them to sign in to Tidefern. Nothing is shared until
   you turn a category on.", "Invite them as" (Partner, Guardian), "Send the

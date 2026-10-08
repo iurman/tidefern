@@ -416,7 +416,7 @@ test("Mira and Lena are co-guardians: removing either one is refused honestly an
     expect((await answered).status()).toBe(409);
     await expect(
       card.getByText(
-        `${other} also guards Ilo and Sol. Change who guards Ilo and Sol in Family first, then remove ${other}.`,
+        `${other} also guards Ilo and Sol, and removing ${other} would leave at least one of them without a second guardian. Change who guards them in Family first, then remove ${other}.`,
       ),
     ).toBeVisible();
     await expect(card.getByRole("link", { name: "Go to Family" })).toHaveAttribute(

@@ -2,7 +2,7 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { components, Me } from "@tidefern/api-client";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
-import { sharingCopy as copy } from "./copy";
+import { grantPhrase, sharingCopy as copy } from "./copy";
 import { buildSharingView, type SharingInput } from "./people";
 
 const refresh = vi.fn();
@@ -150,7 +150,17 @@ interface Call {
 }
 
 let calls: Call[] = [];
-let answers: Array<() => Response>;
+let answers: Array<() => Response | Promise<Response>>;
+
+/** An answer the test releases when it chooses, to hold a request in flight. */
+function held(response: () => Response) {
+  let release = () => {};
+  const answer = () =>
+    new Promise<Response>((resolve) => {
+      release = () => resolve(response());
+    });
+  return { answer, release: () => release() };
+}
 
 const problem =
   (status: number, detail?: string, code = "conflict") =>
@@ -347,6 +357,73 @@ describe("SharingBoard: turning categories on and off", () => {
   });
 });
 
+describe("SharingBoard: changes on two cards at once", () => {
+  it("keeps each card's pending state and outcome its own while both requests are in flight", async () => {
+    const user = userEvent.setup();
+    render(<SharingBoard view={miraView()} />);
+    const pia = held(() => new Response(null, { status: 204 }));
+    const lena = held(() => new Response(null, { status: 204 }));
+    answers.push(pia.answer, lena.answer);
+    const piaSwitch = within(card("Pia")).getByRole("switch", { name: "Sol" });
+    const lenaSwitch = within(card("Lena")).getByRole("switch", { name: "Pregnancy overview" });
+
+    await user.click(piaSwitch);
+    await waitFor(() => expect(calls).toHaveLength(1));
+    await user.click(lenaSwitch);
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(piaSwitch).toHaveAttribute("aria-busy", "true");
+    expect(lenaSwitch).toHaveAttribute("aria-busy", "true");
+
+    pia.release();
+    const piaOff = copy.grant.off("Pia", grantPhrase("child", "Sol"));
+    expect(await screen.findByText(piaOff)).toBeVisible();
+    // Lena's request is still out: her switch still says so and a second press sends nothing.
+    expect(lenaSwitch).toHaveAttribute("aria-busy", "true");
+    expect(lenaSwitch).toHaveTextContent("Saving");
+    await user.click(lenaSwitch);
+    expect(calls).toHaveLength(2);
+
+    lena.release();
+    const lenaOff = copy.grant.off("Lena", grantPhrase("pregnancy.overview", undefined));
+    expect(await screen.findByText(lenaOff)).toBeVisible();
+    // Lena's answer leaves Pia's outcome where it was.
+    expect(screen.getByText(piaOff)).toBeVisible();
+    // Pending lasts until the page has read again, then lets go.
+    await waitFor(() => expect(lenaSwitch).not.toHaveAttribute("aria-busy"));
+    expect(calls.map((call) => call.path)).toEqual([
+      `DELETE /api/v1/sharing/grants/${PIA}/child`,
+      `DELETE /api/v1/sharing/grants/${LENA}/pregnancy.overview`,
+    ]);
+  });
+
+  it("confirms a share on one card while a change on another is still in flight", async () => {
+    const user = userEvent.setup();
+    render(<SharingBoard view={miraView()} />);
+    const pia = held(() => new Response(null, { status: 204 }));
+    answers.push(pia.answer);
+    await user.click(within(card("Pia")).getByRole("switch", { name: "Sol" }));
+    await waitFor(() => expect(calls).toHaveLength(1));
+
+    await user.click(within(card("Lena")).getByRole("switch", { name: "Pregnancy photos" }));
+    const dialog = screen.getByRole("dialog", { name: /with Lena\?$/ });
+    const share = within(dialog).getByRole("button", { name: "Share with Lena" });
+    expect(share).not.toHaveAttribute("aria-busy");
+    const lena = held(() => Response.json({}));
+    answers.push(lena.answer);
+    await user.click(share);
+    await waitFor(() => expect(calls).toHaveLength(2));
+    expect(calls[1]?.path).toBe(`PUT /api/v1/sharing/grants/${LENA}`);
+    expect(share).toHaveAttribute("aria-busy", "true");
+
+    pia.release();
+    lena.release();
+    expect(
+      await screen.findByText(copy.grant.on("Lena", grantPhrase("pregnancy.photos", undefined))),
+    ).toBeVisible();
+    expect(dialog).not.toHaveAttribute("open");
+  });
+});
+
 describe("SharingBoard: the notify switch and removal", () => {
   it("switches the notice with its own PUT and the person's version", async () => {
     const user = userEvent.setup();
@@ -430,7 +507,7 @@ describe("SharingBoard: the notify switch and removal", () => {
     answers.push(problem(409, "co_guardianship_unresolved"));
     await user.click(within(dialog).getByRole("button", { name: "Remove Lena" }));
     expect(
-      await within(lena).findByText(copy.remove.coGuardian("Lena", "Ilo and Sol"), {
+      await within(lena).findByText(copy.remove.coGuardianSeveral("Lena", "Ilo and Sol"), {
         exact: false,
       }),
     ).toBeVisible();

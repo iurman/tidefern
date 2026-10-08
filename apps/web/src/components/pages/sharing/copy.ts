@@ -129,8 +129,12 @@ export const sharingCopy = {
     removed: (name: string) => `${name} no longer sees anything you share.`,
     left: (name: string) =>
       `You left ${name}'s household. ${name} no longer sees anything you share.`,
-    coGuardian: (name: string, children: string) =>
-      `${name} also guards ${children}. Change who guards ${children} in Family first, then remove ${name}.`,
+    // The API names no blocking child, only that one would be left without a second
+    // guardian, so the refusal for several children says "at least one of them".
+    coGuardianOne: (name: string, child: string) =>
+      `${name} also guards ${child}, and removing ${name} would leave ${child} without a second guardian. Change who guards ${child} in Family first, then remove ${name}.`,
+    coGuardianSeveral: (name: string, children: string) =>
+      `${name} also guards ${children}, and removing ${name} would leave at least one of them without a second guardian. Change who guards them in Family first, then remove ${name}.`,
     familyLink: "Go to Family",
     // Sourced: the component library's destructive dialog specimen.
     failed: (name: string) => `We could not remove ${name}. Try again.`,

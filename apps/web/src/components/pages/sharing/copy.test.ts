@@ -69,6 +69,17 @@ describe("the sharing descriptions", () => {
     expect(fillSharingWords(shown.notify.label, "Theo")).toBe("Tell Theo when my period starts");
   });
 
+  it("put a typed name in as it is, even one holding a replacement pattern", () => {
+    const shown = SHARING_DESCRIPTIONS[CURRENT_SHARING_DESCRIPTION_VERSION];
+    expect(fillSharingWords(shown.notify.label, "Jo$'s")).toBe("Tell Jo$'s when my period starts");
+    expect(fillSharingWords(shown.childRow, "A$&")).toBe(
+      "Everything logged for A$&: feeds, sleep, growth, milestones and photos.",
+    );
+    expect(fillSharingWords(shown.childRow, "B$`$$")).toBe(
+      "Everything logged for B$`$$: feeds, sleep, growth, milestones and photos.",
+    );
+  });
+
   it("show the last version of the catalog", () => {
     expect(CURRENT_SHARING_DESCRIPTION_VERSION).toBe(sharingDescriptionVersions.at(-1));
   });
@@ -99,7 +110,8 @@ const samples: Readonly<Record<string, readonly (readonly (string | null)[])[]>>
   "remove.grants": [["Alex"]],
   "remove.removed": [["Alex"]],
   "remove.left": [["Alex"]],
-  "remove.coGuardian": [["Alex", "Ilo and Sol"]],
+  "remove.coGuardianOne": [["Alex", "Ilo"]],
+  "remove.coGuardianSeveral": [["Alex", "Ilo and Sol"]],
   "remove.failed": [["Alex"]],
   "invite.sent": [["jo@example.com"]],
   "invite.ownerOnly": [["Alex"], [null]],

@@ -46,8 +46,29 @@ interface Target {
 
 type Outcome = Target & { kind: "done" | "error"; text: string; coGuardian?: boolean };
 
-function same(a: Target | null, personId: string, key: string): boolean {
-  return a !== null && a.personId === personId && a.key === key;
+/**
+ * One value per person's card, so a change on one card never clears or
+ * overrides the pending state or the outcome of a change on another.
+ */
+type PerPerson<T> = Readonly<Record<string, T>>;
+
+/** The map with one person's entry set, or removed when `value` is undefined. */
+function withEntry<T>(map: PerPerson<T>, personId: string, value: T | undefined): PerPerson<T> {
+  const next = { ...map };
+  if (value === undefined) delete next[personId];
+  else next[personId] = value;
+  return next;
+}
+
+function same(a: Target | undefined, personId: string, key: string): boolean {
+  return a !== undefined && a.personId === personId && a.key === key;
+}
+
+/** The co-guardian refusal, worded for one child or several. */
+function coGuardianText(person: PersonView): string {
+  const [only, ...more] = person.coGuardianOf;
+  if (only !== undefined && more.length === 0) return copy.remove.coGuardianOne(person.name, only);
+  return copy.remove.coGuardianSeveral(person.name, joinNames(person.coGuardianOf));
 }
 
 /** The consequence the removal dialog names, which depends on who owns the household. */
@@ -103,9 +124,18 @@ export function SharingBoard({ view }: { view: SharingView }) {
   const sharedHeadingId = useId();
   const invitationsHeadingId = useId();
   const [isRefreshing, startRefresh] = useTransition();
-  const [busy, setBusy] = useState<Target | null>(null);
-  const [settled, setSettled] = useState<Target | null>(null);
-  const [outcome, setOutcome] = useState<Outcome | null>(null);
+  // The control whose request is in flight, the control whose change the page is reading
+  // again, and the last outcome, each kept per person.
+  const [busy, setBusy] = useState<PerPerson<Target>>({});
+  const [settled, setSettled] = useState<PerPerson<Target>>({});
+  const [outcomes, setOutcomes] = useState<PerPerson<Outcome>>({});
+  // Once a read finishes, no control waits on it any more; adjusted while rendering
+  // (not in an effect) so a later read never brings back an old pending state.
+  const [wasRefreshing, setWasRefreshing] = useState(false);
+  if (wasRefreshing !== isRefreshing) {
+    setWasRefreshing(isRefreshing);
+    if (!isRefreshing) setSettled({});
+  }
   const [freshAuthFor, setFreshAuthFor] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<(GrantConfirmTarget & { person: PersonView }) | null>(
@@ -131,20 +161,29 @@ export function SharingBoard({ view }: { view: SharingView }) {
   }
 
   const pending = (personId: string, key: string) =>
-    same(busy, personId, key) || (isRefreshing && same(settled, personId, key));
+    same(busy[personId], personId, key) || (isRefreshing && same(settled[personId], personId, key));
   const personBusy = (personId: string) =>
-    busy?.personId === personId || (isRefreshing && settled?.personId === personId);
+    busy[personId] !== undefined || (isRefreshing && settled[personId] !== undefined);
 
   function begin(target: Target) {
-    setBusy(target);
-    setOutcome(null);
-    setFreshAuthFor(null);
+    setBusy((map) => withEntry(map, target.personId, target));
+    setOutcomes((map) => withEntry(map, target.personId, undefined));
+    setFreshAuthFor((personId) => (personId === target.personId ? null : personId));
     setNotice(null);
+  }
+
+  /** Ends one person's request; another card's request in flight keeps its own state. */
+  function finish(target: Target) {
+    setBusy((map) => withEntry(map, target.personId, undefined));
+  }
+
+  function setOutcome(next: Outcome) {
+    setOutcomes((map) => withEntry(map, next.personId, next));
   }
 
   /** Reads the page again after a change; the changed control keeps its pending state until then. */
   function refresh(target: Target) {
-    setSettled(target);
+    setSettled((map) => withEntry(map, target.personId, target));
     startRefresh(() => router.refresh());
   }
 
@@ -166,8 +205,11 @@ export function SharingBoard({ view }: { view: SharingView }) {
   }
 
   async function grant() {
-    if (confirm === null || busy !== null) return;
+    if (confirm === null) return;
     const { person, row } = confirm;
+    // A request on this person's card is still in flight; the confirm button shows it as
+    // pending (its `loading`), so a press now has nothing new to do.
+    if (personBusy(person.id)) return;
     const target = { personId: person.id, key: row.key };
     begin(target);
     setConfirmError(undefined);
@@ -187,7 +229,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
         },
       }),
     );
-    setBusy(null);
+    finish(target);
     if (result.ok) {
       closeConfirm();
       setOutcome({
@@ -227,7 +269,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
         },
       }),
     );
-    setBusy(null);
+    finish(target);
     if (result.ok) {
       setOutcome({
         ...target,
@@ -252,7 +294,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
         body: { personId: person.id, notify: checked },
       }),
     );
-    setBusy(null);
+    finish(target);
     if (result.ok) {
       setOutcome({
         ...target,
@@ -276,7 +318,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
         params: { path: { personId: person.id } },
       }),
     );
-    setBusy(null);
+    finish(target);
     if (result.ok) {
       setNotice(
         person.removal === "owner"
@@ -292,7 +334,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
         ...target,
         kind: "error",
         coGuardian: true,
-        text: copy.remove.coGuardian(person.name, joinNames(person.coGuardianOf)),
+        text: coGuardianText(person),
       });
       return;
     }
@@ -301,7 +343,8 @@ export function SharingBoard({ view }: { view: SharingView }) {
   }
 
   function said(personId: string, key: string, kind: Outcome["kind"]): string | undefined {
-    return outcome !== null && outcome.kind === kind && same(outcome, personId, key)
+    const outcome = outcomes[personId];
+    return outcome !== undefined && outcome.kind === kind && same(outcome, personId, key)
       ? outcome.text
       : undefined;
   }
@@ -309,7 +352,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
   function removeError(person: PersonView): ReactNode {
     const text = said(person.id, "remove", "error");
     if (text === undefined) return undefined;
-    if (!outcome?.coGuardian) return text;
+    if (!outcomes[person.id]?.coGuardian) return text;
     return (
       <>
         {text} <TextLink href="/family">{copy.remove.familyLink}</TextLink>
@@ -434,7 +477,7 @@ export function SharingBoard({ view }: { view: SharingView }) {
         target={confirm}
         onClose={closeConfirm}
         onConfirm={() => void grant()}
-        loading={confirm !== null && same(busy, confirm.person.id, confirm.row.key)}
+        loading={confirm !== null && personBusy(confirm.person.id)}
         error={confirmError}
       />
     </>
