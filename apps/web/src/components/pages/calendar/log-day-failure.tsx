@@ -9,26 +9,42 @@ export interface LogDayFailureProps {
   date: CalendarDate;
   /** Where Close leads. */
   closeHref: string;
+  /** The next day's page, only when today is known and that day has come. */
+  nextHref?: string | undefined;
+  /** The session ended between the reads: trying again cannot help, so the sentence says to sign in. */
+  signedOut?: boolean;
 }
 
 /**
- * /log/[date] when the session read itself failed, so neither the stage nor
- * today is known: the day page's own frame (the date as the h1, Close and
- * the previous day as links) with the day sheet's failed-load sentence and
- * Try again, which reads the page again. The next day is left out because
- * only the API knows whether it has come. No form renders in this state, so
- * the stage and the save handler the sheet's props require are never used.
+ * /log/[date] when a server read failed: the day page's own frame (the date
+ * as the h1, Close and the days around it as links) with the day sheet's
+ * own failure sentence, never "Loading" for a read that is already over.
+ * Try again reads the page again. When the session read itself failed,
+ * neither the stage nor today is known, so the next day is left out (only
+ * the API knows whether it has come). When the day's own read answered 401,
+ * the sentence is the sheet's signed-out one, without Try again, as the
+ * sheet says it. No form renders in this state, so the stage and the save
+ * handler the sheet's props require are never used.
  */
-export function LogDayFailure({ date, closeHref }: LogDayFailureProps) {
+export function LogDayFailure({
+  date,
+  closeHref,
+  nextHref,
+  signedOut = false,
+}: LogDayFailureProps) {
   const router = useRouter();
   return (
     <DaySheet
-      page={{ closeHref, previousHref: `/log/${addDays(date, -1)}` }}
+      page={{
+        closeHref,
+        previousHref: `/log/${addDays(date, -1)}`,
+        ...(nextHref === undefined ? {} : { nextHref }),
+      }}
       date={date}
       stage="cycle"
       onSave={() => {}}
-      error={dayLogCopy.loadFailed}
-      onRetry={() => router.refresh()}
+      error={signedOut ? dayLogCopy.signedOut : dayLogCopy.loadFailed}
+      {...(signedOut ? {} : { onRetry: () => router.refresh() })}
     />
   );
 }

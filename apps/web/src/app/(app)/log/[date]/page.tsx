@@ -6,7 +6,7 @@ import { calendarHref } from "@/components/pages/calendar/calendar-model";
 import { logDayCopy as copy } from "@/components/pages/calendar/copy";
 import { LogDayFailure } from "@/components/pages/calendar/log-day-failure";
 import { serverApiClient, sessionMe } from "@/lib/api-server";
-import { isLoggingStage, loadDay } from "@/lib/day-log";
+import { dayNeighbours, isLoggingStage, loadDay } from "@/lib/day-log";
 import { pageMetadata } from "@/lib/site";
 
 // One title and one canonical address for every day: the date stays in the path and nowhere else.
@@ -23,8 +23,8 @@ export const dynamic = "force-dynamic";
  * decided before any read. The none stage is never asked a body question,
  * and a day that has not come yet has nothing to log, so both get the
  * not-found page inside the shell. A visitor the layout redirects gets
- * nothing from here; a failed session read keeps the page's frame and says
- * the day could not be loaded.
+ * nothing from here. A failed read, of the session or of the day, keeps the
+ * page's frame and says the day could not be loaded.
  */
 export default async function LogDayPage({ params }: { params: Promise<{ date: string }> }) {
   const { date } = await params;
@@ -37,14 +37,27 @@ export default async function LogDayPage({ params }: { params: Promise<{ date: s
   if (profile === null || today === null) return null;
   if (!isLoggingStage(profile.stage) || compareDates(date, today) > 0) notFound();
 
+  const closeHref = calendarHref({ month: date, view: "month", today });
   const load = await loadDay(serverApiClient(await headers()), date);
+  if (!load.ok) {
+    // The read is over and failed: the page says so, with or without scripts.
+    const { next } = dayNeighbours(date, today);
+    return (
+      <LogDayFailure
+        date={date}
+        closeHref={closeHref}
+        nextHref={next === null ? undefined : `/log/${next}`}
+        signedOut={load.status === 401}
+      />
+    );
+  }
   return (
     <DayLogPage
       stage={profile.stage}
       today={today}
       date={date}
-      initial={load.ok ? load.day : null}
-      closeHref={calendarHref({ month: date, view: "month", today })}
+      initial={load.day}
+      closeHref={closeHref}
     />
   );
 }

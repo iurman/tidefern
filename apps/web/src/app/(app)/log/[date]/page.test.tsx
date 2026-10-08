@@ -124,6 +124,44 @@ describe("the day page", () => {
     expect(screen.queryByRole("link", { name: "Next day" })).toBeNull();
   });
 
+  it("says the day could not be loaded, never Loading, when the server's day read failed", async () => {
+    given({ kind: "ok", me }, { ok: false, status: 500 });
+    const page = await pageFor("2026-09-04");
+    if (page === "not found" || page === null) throw new Error("expected the failed page");
+    render(page);
+    expect(state.loads).toEqual(["2026-09-04"]);
+    expect(screen.getByRole("heading", { level: 1, name: "Friday, Sep 4" })).toBeInTheDocument();
+    expect(screen.getByText("We could not load this day. Try again.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Try again" })).toBeInTheDocument();
+    expect(screen.queryByText("Loading")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Save" })).toBeNull();
+    // Today is known here, so both neighbours that have come are links.
+    expect(screen.getByRole("link", { name: "Previous day" })).toHaveAttribute(
+      "href",
+      "/log/2026-09-03",
+    );
+    expect(screen.getByRole("link", { name: "Next day" })).toHaveAttribute(
+      "href",
+      "/log/2026-09-05",
+    );
+    for (const close of screen.getAllByRole("link", { name: "Close" })) {
+      expect(close).toHaveAttribute("href", "/calendar?month=2026-09");
+    }
+  });
+
+  it("says to sign in again, without Try again, when the day read answered 401", async () => {
+    given({ kind: "ok", me }, { ok: false, status: 401 });
+    const page = await pageFor("2026-10-05");
+    if (page === "not found" || page === null) throw new Error("expected the failed page");
+    render(page);
+    expect(
+      screen.getByText("Your session has ended. Sign in again, then come back to this day."),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull();
+    expect(screen.queryByText("Loading")).toBeNull();
+    expect(screen.queryByRole("link", { name: "Next day" })).toBeNull();
+  });
+
   it("renders the day the server read, with the days around it and Close as links", async () => {
     given(
       { kind: "ok", me },
