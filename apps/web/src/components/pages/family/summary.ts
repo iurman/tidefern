@@ -37,10 +37,12 @@ export interface SleepSummary {
 export interface DiaperSummary {
   lastSince: string | null;
   today: number;
-  /** Wet and mixed diapers today: a mixed one is wet too. */
+  /** Diapers today that were wet only. */
   wet: number;
-  /** Dirty and mixed diapers today. */
+  /** Diapers today that were dirty only. */
   dirty: number;
+  /** Diapers today that were wet and dirty, counted once, so the parts never exceed the total. */
+  mixed: number;
   /** Whether any diaper today says what it held; without it the split is not shown. */
   known: boolean;
 }
@@ -99,8 +101,9 @@ export function summarizeDay({
     diaper: {
       lastSince: last.diaper === null ? null : formatTimeSince(eventMoment(last.diaper), now),
       today: diapers.length,
-      wet: contents.filter((held) => held === "wet" || held === "mixed").length,
-      dirty: contents.filter((held) => held === "dirty" || held === "mixed").length,
+      wet: contents.filter((held) => held === "wet").length,
+      dirty: contents.filter((held) => held === "dirty").length,
+      mixed: contents.filter((held) => held === "mixed").length,
       known: contents.some((held) => held !== null),
     },
   };

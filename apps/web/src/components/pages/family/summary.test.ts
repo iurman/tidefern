@@ -47,10 +47,10 @@ describe("summarizeDay", () => {
     expect(summary.sleep.todayMinutes).toBe(360);
     expect(summary.sleep.todayCount).toBe(1);
     expect(plain(summary.diaper.lastSince)).toBe("2 h ago");
-    expect(summary.diaper).toMatchObject({ today: 1, wet: 1, dirty: 1, known: true });
+    expect(summary.diaper).toMatchObject({ today: 1, wet: 0, dirty: 0, mixed: 1, known: true });
   });
 
-  it("counts a mixed diaper as wet and dirty, and hides the split when nothing says", () => {
+  it("counts each diaper once by what it held, and hides the split when nothing says", () => {
     const diapers = [
       event({ kind: "diaper", diaperContents: "wet" }),
       event({ kind: "diaper", diaperContents: "wet" }),
@@ -63,13 +63,13 @@ describe("summarizeDay", () => {
       last: { feed: null, sleep: null, diaper: diapers[4] ?? null },
       todayEvents: diapers,
     });
-    expect(summary.diaper).toMatchObject({ today: 5, wet: 3, dirty: 2, known: true });
+    expect(summary.diaper).toMatchObject({ today: 5, wet: 2, dirty: 1, mixed: 1, known: true });
     const unknown = summarizeDay({
       ...base,
       last: { feed: null, sleep: null, diaper: null },
       todayEvents: [event({ kind: "diaper" })],
     });
-    expect(unknown.diaper).toMatchObject({ today: 1, wet: 0, dirty: 0, known: false });
+    expect(unknown.diaper).toMatchObject({ today: 1, wet: 0, dirty: 0, mixed: 0, known: false });
   });
 
   it("names a sleep going on now by its start instead of a time since, and leaves it out of today's total", () => {

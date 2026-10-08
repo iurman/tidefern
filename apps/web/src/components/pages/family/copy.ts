@@ -35,7 +35,15 @@ export const familyCopy = {
     today: (count: string) => `Today: ${count}`,
     sleepEnded: (since: string) => `Ended ${since}`,
     asleepSince: (clock: string) => `Asleep since ${clock}`,
-    diapers: (total: number, wet: number, dirty: number) => `${total} (${wet} wet, ${dirty} dirty)`,
+    /** Each diaper counted once, by what it held, so the parts never add up past the total. */
+    diapers: (total: number, wet: number, dirty: number, mixed: number) => {
+      const parts = [
+        wet > 0 ? `${wet} wet` : null,
+        dirty > 0 ? `${dirty} dirty` : null,
+        mixed > 0 ? `${mixed} wet and dirty` : null,
+      ].filter((part) => part !== null);
+      return parts.length === 0 ? String(total) : `${total} (${parts.join(", ")})`;
+    },
     open: "Timeline, growth and milestones",
     dayFailed: "We could not load today for this child. Reload the page to try again.",
     summaryOnly: `${OWNER} line for a person whose grant shows this child's name and age only`,

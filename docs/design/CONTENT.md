@@ -320,7 +320,8 @@ waiting for review, one line each:
   `apps/web/src/components/pages/family/copy.ts`, where the owner confirms
   or replaces them in one place:
   - Card: "Last feed", "Last sleep", "Last diaper", "Sleep", "None logged
-    yet", "Today: 3", "Today: 4 h 30 min", "Today: 5 (3 wet, 2 dirty)",
+    yet", "Today: 3", "Today: 4 h 30 min", "Today: 5 (3 wet, 2 dirty)" (each diaper counted
+    once by what it held: "Today: 2 (1 wet, 1 wet and dirty)"),
     "Ended 2 h ago", "Asleep since 2:15 PM", "Guardians: you and Lena",
     "Guardian: you", "another guardian", "Timeline, growth and milestones",
     "We could not load today for this child. Reload the page to try

@@ -229,15 +229,21 @@ test("Mira sees both children with their guardians, today's counts and the one w
   await expect(rows.filter({ hasText: /Last sleep|Sleep/ })).toContainText(
     `Today: ${sleptMinutes(today)}`,
   );
+  // Each diaper counted once by what it held, so the parts never add up past the total.
   const diapers = today.filter((event) => event.kind === "diaper");
-  const wet = diapers.filter((event) =>
-    ["wet", "mixed"].includes(event.diaperContents ?? ""),
-  ).length;
-  const dirty = diapers.filter((event) =>
-    ["dirty", "mixed"].includes(event.diaperContents ?? ""),
-  ).length;
+  const held = (contents: string) =>
+    diapers.filter((event) => event.diaperContents === contents).length;
+  const parts = [
+    [held("wet"), "wet"],
+    [held("dirty"), "dirty"],
+    [held("mixed"), "wet and dirty"],
+  ]
+    .filter(([count]) => (count as number) > 0)
+    .map(([count, label]) => `${count} ${label}`);
   await expect(rows.filter({ hasText: "Last diaper" })).toContainText(
-    `Today: ${diapers.length} (${wet} wet, ${dirty} dirty)`,
+    parts.length === 0
+      ? `Today: ${diapers.length}`
+      : `Today: ${diapers.length} (${parts.join(", ")})`,
   );
 
   // Published ranges (task F6) by age, as marked owner placeholders until their words are
@@ -647,7 +653,7 @@ test("quick logging: a diaper with Undo, a bottle, a timed breast feed and a sle
   await expect(card.getByText("Diaper saved.")).toBeVisible();
   await expect(sheet).toBeHidden();
   await expect(rows.filter({ hasText: "Last diaper" })).toContainText("just now");
-  await expect(rows.filter({ hasText: "Last diaper" })).toContainText("Today: 1 (1 wet, 0 dirty)");
+  await expect(rows.filter({ hasText: "Last diaper" })).toContainText("Today: 1 (1 wet)");
   await card.getByRole("button", { name: "Undo" }).click();
   await expect(card.getByText("That entry was removed.")).toBeVisible();
   await expect(rows.filter({ hasText: "Last diaper" })).toContainText("None logged yet");

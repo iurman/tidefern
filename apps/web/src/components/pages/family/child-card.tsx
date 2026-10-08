@@ -89,7 +89,7 @@ export function ChildCard({ card, today, units, warm, context = {} }: ChildCardP
               <dd className={styles.summaryToday}>
                 {copy.today(
                   diaper.known
-                    ? copy.diapers(diaper.today, diaper.wet, diaper.dirty)
+                    ? copy.diapers(diaper.today, diaper.wet, diaper.dirty, diaper.mixed)
                     : String(diaper.today),
                 )}
               </dd>

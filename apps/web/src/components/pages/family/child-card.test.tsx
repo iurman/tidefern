@@ -54,7 +54,7 @@ describe("ChildCard", () => {
         words(cell.textContent),
       );
     expect(row("Last feed")).toEqual(["Last feed", "None logged yet"]);
-    expect(row("Last diaper")).toEqual(["Last diaper", "2 h ago", "Today: 1 (1 wet, 0 dirty)"]);
+    expect(row("Last diaper")).toEqual(["Last diaper", "2 h ago", "Today: 1 (1 wet)"]);
     expect(screen.getByRole("button", { name: "Feed for Ilo" })).toBeInTheDocument();
     expect(screen.getByText("Guardians: you and Lena")).toBeInTheDocument();
     expect(
