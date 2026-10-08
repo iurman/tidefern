@@ -45,7 +45,8 @@ export const activityCopy = {
   otherRecords: "shared records",
   what: {
     signedIn: "Signed in",
-    signedOutOthers: "Signed out other devices",
+    // One row for one device or for all of them (C7 writes no count), so the words give none.
+    signedOutElsewhere: "Signed out elsewhere",
     startedSharing: (place: string) => `Started sharing ${place}`,
     changedSharing: (place: string) => `Changed sharing for ${place}`,
     stoppedSharing: (place: string) => `Stopped sharing ${place}`,

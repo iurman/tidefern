@@ -122,7 +122,7 @@ function whatHappened(event: ActivityEvent, context: ActivityContext): string {
     case "session.sign_in":
       return copy.what.signedIn;
     case "session.revoke":
-      return copy.what.signedOutOthers;
+      return copy.what.signedOutElsewhere;
     case "grant.create":
       return copy.what.startedSharing(placeOf(event, context));
     case "grant.update":

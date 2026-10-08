@@ -248,7 +248,7 @@ account", never its code.
 | Action | What happened |
 | --- | --- |
 | `session.sign_in` | Signed in |
-| `session.revoke` | Signed out other devices |
+| `session.revoke` | Signed out elsewhere |
 | `grant.create` | Started sharing [place] |
 | `grant.update` | Changed sharing for [place] |
 | `grant.revoke`, her own sharing | Stopped sharing [place] |
@@ -262,6 +262,9 @@ account", never its code.
 | `export.create` | Requested a copy of your data |
 | `account.close` | Asked to close your account |
 | `account.close.undo` | Cancelled closing your account |
+
+One `session.revoke` row stands for one device signed out or for every
+other device at once, and the log keeps no count, so its line names none.
 
 [place] is "your symptoms" for her own records, "Noor's symptoms" for a
 person the page can name, and "the symptoms someone shared with you" for

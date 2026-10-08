@@ -84,12 +84,12 @@ function vocabulary(): string[] {
 }
 
 describe("the sentence map", () => {
-  it("says her own sign-in and the devices she signed out", () => {
+  it("says her own sign-in, and a device sign-out without claiming how many devices went", () => {
     expect(line(noor, { action: "session.sign_in" })).toEqual({ what: "Signed in", who: "by you" });
-    expect(line(noor, { action: "session.revoke" })).toEqual({
-      what: "Signed out other devices",
-      who: "by you",
-    });
+    // One session.revoke row stands for one device signed out or for every other one.
+    const revoked = line(noor, { action: "session.revoke" });
+    expect(revoked).toEqual({ what: "Signed out elsewhere", who: "by you" });
+    expect(revoked.what).not.toMatch(/devices|sessions|\ball\b|every/i);
   });
 
   it("names the category of a grant change on her records by its sharing label", () => {
