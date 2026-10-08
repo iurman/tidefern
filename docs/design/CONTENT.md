@@ -161,7 +161,48 @@ lines without touching another's.
 
 ### `/welcome` (H1)
 
-(none yet)
+- `[OWNER]` every line `/welcome` shows beyond the title, Continue and
+  Finish, the step names and the lines DESIGN.md 3.2, core's questions and
+  the shared components already hold: the drafts in
+  `apps/web/src/components/pages/welcome/copy.ts`, each marked there. They
+  are the page description, the memory line ("Nothing is saved until you
+  agree to the terms..."), the zone suggestion, the stage question and the
+  four card lines, the date help, the flow note and every date error, the
+  dating method question and its four labels, the scan and transfer field
+  labels, the baby's name and its help, the guardian box label, the consent
+  and "Before you start" headings, the line for the path that collects
+  nothing, the terms label and help, the pending and failure line of each
+  write, the "saved so far" and "add it later" lines, and the passkey step.
+- `[OWNER]` which categories the onboarding consent lists per stage. H1's
+  ruling: cycle and postpartum list Cycle history, Symptoms and Private
+  notes; pregnancy lists Pregnancy overview, Symptoms and Private notes;
+  status cards and photos are asked when she turns them on; "here for
+  someone else" records no consent at all, because nothing about her own
+  body is collected (the seed gives Theo and Pia none either), and she
+  still accepts the terms and attests her age on that step, named "Terms".
+  Her acceptance is not recorded yet: the terms version reaches the server
+  only inside `POST /v1/me/consents`, and `PUT /v1/me/profile` has no terms
+  field, so the other three stages store the version they accepted and this
+  one stores nothing. Either an API field that records the terms version
+  without a health consent, or a ruling that this path records a minimal
+  consent, closes the gap.
+- `[OWNER]` "weeks and days as of a date" is not offered as a dating
+  method: no method stores it honestly. The transfer wording waits on the
+  clinician review with the other transfer copy.
+- `[OWNER]` the plausible-date windows the page holds dates to: a last
+  period, scan or transfer within the last 42 weeks; a due date given by
+  hand from 2 weeks past to 40 weeks ahead; nothing that already happened
+  after today.
+- `[OWNER]` whether passkeys are offered before the production domain is
+  live (architecture 6.1): the step offers one wherever the browser has
+  WebAuthn, and no Settings page adds one later yet, so "Not now" has no
+  way back.
+- `[OWNER]` "You can add your baby later from Family." names `/family`,
+  where this file puts adding a child, but the shell shows Family only once
+  a child exists, so a postpartum newcomer who skipped a failed child write
+  has no Family entry to follow. The line stays until the shell shows
+  Family to a postpartum profile without a child, or the owner names
+  another place.
 
 ### `/today` (H2)
 

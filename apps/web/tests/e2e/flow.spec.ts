@@ -104,9 +104,7 @@ test("a signed-in person without a profile lands on /welcome, outside the shell,
   await expect(page).toHaveURL(/\/welcome$/);
   await expect(page).toHaveTitle("Welcome | Tidefern");
   await expect(page.getByRole("heading", { level: 1 })).toHaveText("Welcome to Tidefern");
-  await expect(
-    page.getByText("The steps that set up your account arrive here soon."),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 2, name: "Where are you?" })).toBeVisible();
   await expectFlowFrame(page);
   await expectNoOverflow(page);
 

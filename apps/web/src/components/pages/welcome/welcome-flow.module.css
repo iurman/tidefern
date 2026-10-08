@@ -1,0 +1,158 @@
+/* Onboarding in one column at every width (DESIGN.md 3.2), inside the (flow) layout's reading
+   column: the memory line, the step indicator, the tide line, then the step itself. */
+.flow {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.memory {
+  margin: 0;
+  max-width: 60ch;
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.tide {
+  width: 100%;
+}
+
+.step {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* The panel arrives after a step change she made (DESIGN.md 7): opacity and transform only, at the
+   feedback duration, and never on the page load. Reduced motion lands at once. */
+.step[data-entering] {
+  animation: step-in var(--duration-feedback) var(--ease-settle) both;
+}
+
+@keyframes step-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--space-2));
+  }
+
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  text-wrap: balance;
+}
+
+.fields {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.lede {
+  margin: 0;
+  max-width: 60ch;
+  line-height: 1.6;
+}
+
+.note {
+  margin: 0;
+  max-width: 60ch;
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+/* The browser's zone beside the combobox: a sentence and its one button, wrapping on phones. */
+.suggestion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+}
+
+/* A period's first day and its flow: the date, then the three period flows with Medium chosen. */
+.period {
+  display: grid;
+  gap: var(--space-4);
+}
+
+.flowScale {
+  display: grid;
+  gap: var(--space-2);
+}
+
+/* The guardian's consent on the baby's behalf: E12's text in full on a surface, then its own box. */
+.childConsent {
+  display: grid;
+  gap: var(--space-3);
+  padding: var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+}
+
+.subheading {
+  margin: 0;
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  letter-spacing: var(--tracking-heading);
+  line-height: var(--leading-heading);
+}
+
+.disclosure {
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* The terms and the age, beneath the consent and apart from it. */
+.agreements {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.foot {
+  min-width: 0;
+}
+
+/* The two actions in one row at the foot (DESIGN.md 3.2), the primary last. */
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+/* The running write's own line. Empty, it takes no room but stays a live region. */
+.status {
+  margin: var(--space-3) 0 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.5;
+  color: var(--muted);
+  text-align: end;
+}
+
+.status:empty {
+  margin: 0;
+}
+
+.failure {
+  display: grid;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .step[data-entering] {
+    animation: none;
+  }
+}
