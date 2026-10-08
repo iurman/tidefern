@@ -5,12 +5,13 @@ import { OwnerInput } from "@/components/public/policy-document";
 import { CycleRing } from "@/components/ui/cycle-ring";
 import { Disclosure } from "@/components/ui/disclosure";
 import { EmptyState } from "@/components/ui/empty-state";
+import { formatDaySpan } from "@/components/ui/marks-format";
 import { TextLink } from "@/components/ui/text-link";
 import { WeekCard } from "@/components/ui/week-card";
 import { formatSheetDate } from "@/lib/day-log";
 import { CONTRACEPTION_LINE, predictionCopy } from "@/lib/prediction-copy";
-import type { DatingMethod } from "@tidefern/core";
-import { estimateExplanationPlaceholder, feedingLinePlaceholder, todayCopy } from "./copy";
+import { compareDates, type DatingMethod } from "@tidefern/core";
+import { estimatePlaceholder, feedingLinePlaceholder, todayCopy } from "./copy";
 import { LogTodayAction } from "./today-log";
 import styles from "./today.module.css";
 
@@ -88,6 +89,20 @@ function FertileSentence({ sentence }: { sentence: string }) {
   );
 }
 
+/**
+ * "Period logged Oct 3 to 5.": CycleRing's caption sentence for the logged
+ * days it is given, said in the column because this composition hides the
+ * caption. Same days, same order and same wording as the ring, so hiding
+ * the caption drops no fact (DESIGN.md 6.1).
+ */
+export function loggedSentence(loggedDays: readonly string[], today: string): string | null {
+  const days = loggedDays.filter((date) => compareDates(date, today) <= 0).sort(compareDates);
+  const first = days[0];
+  const last = days.at(-1);
+  if (first === undefined || last === undefined) return null;
+  return todayCopy.periodLogged(formatDaySpan(first, last));
+}
+
 export interface CycleHeroProps {
   today: string;
   prediction: CyclePrediction;
@@ -101,17 +116,18 @@ export interface CycleHeroProps {
 /**
  * The cycle stage (DESIGN.md 3.3 and 6.1): the ring at 260 px (220 on a
  * phone) drawing the API's prediction, and beside it the date, the cycle
- * day as a numeral beside "day of your cycle", the 13.10 estimate in
- * Newsreader italic, the ovulation band with the contraception line, the
- * deviation nudge and the pointing-to-care sentence when the API flags
- * them (her own view only: a grantee's answer never carries the flags),
- * and "How this is estimated". First guess and not enough regular cycles
- * draw and say what 6.1 and 13.10 say, because the ring and the sentences
- * come from the same answer.
+ * day as a numeral beside "day of your cycle", the logged period days, the
+ * 13.10 estimate in Newsreader italic, the ovulation band with the
+ * contraception line, the deviation nudge and the pointing-to-care sentence
+ * when the API flags them (her own view only: a grantee's answer never
+ * carries the flags), and "How this is estimated". First guess and not
+ * enough regular cycles draw and say what 6.1 and 13.10 say, because the
+ * ring and the sentences come from the same answer.
  */
 export function CycleHero(props: CycleHeroProps) {
   const { today, prediction, cycleDay, latestStart, loggedDays, nudge, child } = props;
   const copy = predictionCopy(prediction);
+  const logged = loggedSentence(loggedDays, today);
   return (
     <section className={styles.hero} data-ring="" aria-labelledby={TODAY_HEADING_ID}>
       <div className={styles.facts}>
@@ -123,6 +139,7 @@ export function CycleHero(props: CycleHeroProps) {
             <span className={styles.numeralLabel}>{todayCopy.cycleDayLabel}</span>
           </p>
         )}
+        {logged === null ? null : <p className={styles.fact}>{logged}</p>}
         {copy.estimate === null ? null : (
           <p className={`estimate ${styles.estimateLine}`}>{copy.estimate}</p>
         )}
@@ -135,7 +152,7 @@ export function CycleHero(props: CycleHeroProps) {
         {copy.care === null ? null : <p className={styles.fact}>{copy.care}</p>}
         <Disclosure summary={todayCopy.estimateSummary} className={styles.disclosure}>
           <p>
-            <OwnerInput>{estimateExplanationPlaceholder()}</OwnerInput>
+            <OwnerInput>{estimatePlaceholder}</OwnerInput>
           </p>
         </Disclosure>
       </div>

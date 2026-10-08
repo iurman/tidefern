@@ -10,7 +10,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { FLOW_LABELS, MOOD_LABELS, SYMPTOM_LABELS } from "@tidefern/schemas";
+import { FLOW_LABELS, MOOD_LABELS, SYMPTOM_LABELS, type Note } from "@tidefern/schemas";
 import { DayLogInline, DayLogSheet } from "@/components/day-log/day-log-sheet";
 import { Button } from "@/components/ui/button";
 import { useQuickLog } from "@/components/ui/quick-log";
@@ -102,10 +102,17 @@ function flowWords(flow: NonNullable<EntryValues["flow"]>): string {
   return `${FLOW_LABELS[flow].toLowerCase()} flow`;
 }
 
+/** Her own note, as the day sheet tells one apart from a note "Added by someone you share with". */
+function isOwn(note: Note): boolean {
+  return note.authorId === null || note.authorId === note.subjectId;
+}
+
 /**
  * What the card says is logged for today, in the sheet's own labels, or
  * nothing when the server could not read the day. Never a guess: only the
- * values the API returned.
+ * values the API returned. Every note on the day counts, as the sheet shows
+ * them: her private notes, the ones she shared, and notes added by someone
+ * she shares with.
  */
 export function loggedSummary(day: DayState | null): string | null {
   if (day === null) return null;
@@ -114,7 +121,15 @@ export function loggedSummary(day: DayState | null): string | null {
   if (values.flow !== null) parts.push(flowWords(values.flow));
   for (const symptom of values.symptoms) parts.push(SYMPTOM_LABELS[symptom].toLowerCase());
   if (values.mood !== null) parts.push(`${MOOD_LABELS[values.mood].toLowerCase()} mood`);
-  if (day.note.status === "saved") parts.push(todayCopy.log.note);
+  const own = day.others.filter(isOwn);
+  const privateNotes =
+    (day.note.status === "saved" ? 1 : 0) +
+    own.filter((note) => note.category === "journal.private").length;
+  const sharedNotes = own.filter((note) => note.category !== "journal.private").length;
+  const fromOthers = day.others.length - own.length;
+  if (privateNotes > 0) parts.push(todayCopy.log.privateNotes(privateNotes));
+  if (sharedNotes > 0) parts.push(todayCopy.log.sharedNotes(sharedNotes));
+  if (fromOthers > 0) parts.push(todayCopy.log.notesFromOthers(fromOthers));
   return parts.length === 0 ? todayCopy.log.nothing : todayCopy.log.logged(parts);
 }
 

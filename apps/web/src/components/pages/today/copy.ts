@@ -1,11 +1,3 @@
-import {
-  LUTEAL_PHASE_DAYS,
-  MAX_PLAUSIBLE,
-  MIN_PLAUSIBLE,
-  OVULATION_BAND_DAYS,
-  uncertaintyFor,
-} from "@tidefern/core";
-
 /**
  * Today's words in one module (architecture 13.10). The empty and quiet
  * cards are CONTENT.md's rows, the prediction sentences come from
@@ -22,6 +14,8 @@ export const todayCopy = {
   headingPrefix: "Today,",
   /** Beside the cycle day numeral (DESIGN.md 3.3: "12 day of your cycle"). */
   cycleDayLabel: "day of your cycle",
+  /** CycleRing's own caption sentence, said beside the ring and in This week. */
+  periodLogged: (span: string) => `Period logged ${span}.`,
   estimateSummary: "How this is estimated",
   deviationLink: "Review your cycles in the calendar",
   cycleFailed: "We could not load your cycle just now. Reload the page to try again.",
@@ -41,7 +35,12 @@ export const todayCopy = {
     heading: "Log today",
     nothing: "Nothing logged for today yet.",
     logged: (parts: readonly string[]) => `Logged for today: ${parts.join(", ")}.`,
-    note: "a private note",
+    privateNotes: (count: number) => (count === 1 ? "a private note" : `${count} private notes`),
+    sharedNotes: (count: number) => (count === 1 ? "a shared note" : `${count} shared notes`),
+    notesFromOthers: (count: number) =>
+      count === 1
+        ? "a note from someone you share with"
+        : `${count} notes from people you share with`,
     open: "Log today",
   },
   partners: {
@@ -60,9 +59,6 @@ export const todayCopy = {
   },
   week: {
     heading: "This week",
-    logged: (span: string) => `Period logged ${span}.`,
-    nextPeriod: (start: string, end: string) =>
-      `Your next period will likely start between ${start} and ${end}.`,
     fertile: (span: string) => `${span} are the days pregnancy is most likely.`,
     nothing: "No period days logged or estimated this week.",
   },
@@ -76,8 +72,9 @@ export const todayCopy = {
     due: (date: string) => `Due ${date}`,
     paused: "Weekly updates are paused.",
     someone: "Someone who shares with you",
-    failed: (name: string) =>
-      `We could not load what ${name} shares just now. Reload the page to try again.`,
+    nameFailed: "We could not load this person's name just now. Reload the page to try again.",
+    failed: (name: string | null) =>
+      `We could not load what ${name ?? "this person"} shares just now. Reload the page to try again.`,
     childrenFailed:
       "We could not load the children you see just now. Reload the page to try again.",
     openFamily: "Open Family",
@@ -89,23 +86,13 @@ export const todayCopy = {
 } as const;
 
 /**
- * What the `[OWNER]` placeholder in "How this is estimated" names: the
- * explanation the owner writes, with the numbers read from packages/core so
- * the placeholder itself cannot drift from the math (RESEARCH.md decision 6).
+ * What the `[OWNER]` placeholder in "How this is estimated" names
+ * (RESEARCH.md decision 6). It is a customer page, so the placeholder names
+ * what is missing and nothing of how it is built; the numbers the owner's
+ * text must state are listed in CONTENT.md, and copy.test.ts ties them to
+ * packages/core so the list cannot drift from the math.
  */
-export function estimateExplanationPlaceholder(): string {
-  const few = uncertaintyFor(1, false);
-  const two = uncertaintyFor(2, false);
-  const many = uncertaintyFor(3, false);
-  const irregular = uncertaintyFor(3, true);
-  return (
-    `the explanation of the estimate, written from packages/core: only cycles of ${MIN_PLAUSIBLE} to ${MAX_PLAUSIBLE} days count; ` +
-    `ovulation is placed ${LUTEAL_PHASE_DAYS} days before the next period, as a band of plus or minus ${OVULATION_BAND_DAYS} days; ` +
-    `the range is plus or minus ${few} days for a first guess or one cycle, ${two} after two cycles, ${many} after three or more, ` +
-    `and ${irregular} when the cycles differ by more than a week`
-  );
-}
+export const estimatePlaceholder = "the explanation of the estimate";
 
-/** What the `[OWNER]` placeholder in the postpartum quiet card names (architecture 8.4). */
-export const feedingLinePlaceholder =
-  "a line that cycles often return later while feeding (architecture 8.4)";
+/** What the `[OWNER]` placeholder in the postpartum quiet card names (CONTENT.md, `/today` (H2)). */
+export const feedingLinePlaceholder = "the line about cycles while feeding";

@@ -52,7 +52,7 @@ describe("personBlocks", () => {
       personBlocks(
         {
           ownerId: NOOR,
-          name: "Noor",
+          name: { ok: true, value: "Noor" },
           status: { ok: false },
           pregnancy: { ok: true, value: null },
         },
@@ -66,6 +66,22 @@ describe("personBlocks", () => {
       { label: "Pregnancy overview", lines: ["Nothing to show for today yet."] },
     ]);
   });
+
+  it("says this person, not the card's fallback heading, when the name is not known", () => {
+    expect(
+      personBlocks(
+        { ownerId: NOOR, name: { ok: false }, status: { ok: false }, pregnancy: null },
+        null,
+      ),
+    ).toEqual([
+      {
+        label: "Cycle status",
+        lines: [
+          "We could not load what this person shares just now. Reload the page to try again.",
+        ],
+      },
+    ]);
+  });
 });
 
 describe("SharedSummaries", () => {
@@ -73,7 +89,12 @@ describe("SharedSummaries", () => {
     render(
       <SharedSummaries
         people={[
-          { ownerId: NOOR, name: "Noor", status: { ok: true, value: status() }, pregnancy: null },
+          {
+            ownerId: NOOR,
+            name: { ok: true, value: "Noor" },
+            status: { ok: true, value: status() },
+            pregnancy: null,
+          },
         ]}
         childAges={{
           ok: true,
@@ -101,12 +122,42 @@ describe("SharedSummaries", () => {
     render(
       <SharedSummaries
         people={[
-          { ownerId: NOOR, name: null, status: { ok: true, value: status() }, pregnancy: null },
+          {
+            ownerId: NOOR,
+            name: { ok: true, value: null },
+            status: { ok: true, value: status() },
+            pregnancy: null,
+          },
         ]}
         childAges={{ ok: true, value: [] }}
       />,
     );
     expect(screen.getByRole("heading", { name: "Someone who shares with you" })).toBeVisible();
+    expect(screen.queryByText(/could not load this person's name/)).not.toBeInTheDocument();
+  });
+
+  it("says the name could not be read instead of passing the fallback off as the answer", () => {
+    render(
+      <SharedSummaries
+        people={[
+          {
+            ownerId: NOOR,
+            name: { ok: false },
+            status: { ok: true, value: status() },
+            pregnancy: null,
+          },
+        ]}
+        childAges={{ ok: true, value: [] }}
+      />,
+    );
+    const card = screen.getByRole("region", { name: "Someone who shares with you" });
+    expect(
+      within(card).getByText(
+        "We could not load this person's name just now. Reload the page to try again.",
+      ),
+    ).toBeVisible();
+    // The status itself was read, so it still shows.
+    expect(within(card).getByText("Cycle day 3")).toBeInTheDocument();
   });
 
   it("says what would be here when nothing is shared, and what to do when the children failed", () => {

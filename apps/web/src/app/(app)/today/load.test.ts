@@ -287,6 +287,23 @@ describe("weekLines", () => {
     });
   });
 
+  it("gives a first guess's band when it touches the week, as it does an estimate's", () => {
+    // One period on Sep 10: the first guess is Oct 8, give or take 4 days, which reaches into this week.
+    const firstGuess = prediction({
+      basis: "first_guess",
+      sampleSize: 0,
+      uncertaintyDays: 4,
+      nextPeriod: { expected: "2026-10-08", start: "2026-10-04", end: "2026-10-12" },
+      ovulation: { expected: "2026-09-24", start: "2026-09-22", end: "2026-09-26" },
+      fertileWindow: { start: "2026-09-19", end: "2026-09-24" },
+    });
+    expect(weekLines(week, ["2026-09-10"], firstGuess)).toEqual({
+      logged: null,
+      nextPeriod: { start: "2026-10-04", end: "2026-10-12" },
+      fertile: null,
+    });
+  });
+
   it("offers no dates when the API offers none", () => {
     const tooDifferent = prediction({
       basis: "not_enough_regular_cycles",
@@ -583,7 +600,7 @@ describe("loadToday, none stage", () => {
       people: [
         {
           ownerId: NOOR,
-          name: "Noor",
+          name: { ok: true, value: "Noor" },
           status: { ok: true, value: status() },
           pregnancy: null,
         },
@@ -626,7 +643,8 @@ describe("loadToday, none stage", () => {
       people: [
         {
           ownerId: LENA,
-          name: null,
+          // Lena is not in Pia's sharing list, so the read answered and there is no name to show.
+          name: { ok: true, value: null },
           status: null,
           pregnancy: { ok: true, value: { status: "paused" } },
         },
@@ -654,12 +672,25 @@ describe("loadToday, none stage", () => {
       },
     );
     const view = await loadToday(api(), theo);
+    // Changed on purpose after review: a failed sharing read used to leave the name null and the
+    // partner card out, so nothing said a read failed. Now the name is a failure the summary card
+    // says, and the partner card stays to say its own failure line.
     expect(view.hero).toEqual({
       kind: "shared",
-      people: [{ ownerId: NOOR, name: null, status: { ok: false }, pregnancy: null }],
+      people: [{ ownerId: NOOR, name: { ok: false }, status: { ok: false }, pregnancy: null }],
       children: { ok: false },
     });
+    expect(view.partners).toEqual({ ok: false });
+  });
+
+  it("keeps the partner card out only when the sharing read answered that nothing is shared", async () => {
+    answer("GET /api/v1/sharing", list([person({ id: NOOR, displayName: "Noor", role: "owner" })]));
+    answer("GET /api/v1/children", list([]));
+    const view = await loadToday(api(), me({ stage: "none" }));
     expect(view.partners).toBeNull();
+    answer("GET /api/v1/sharing", broken);
+    const failedRead = await loadToday(api(), me({ stage: "none" }));
+    expect(failedRead.partners).toEqual({ ok: false });
   });
 });
 

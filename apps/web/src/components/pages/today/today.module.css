@@ -3,7 +3,7 @@
  * come from the semantic roles and nothing is inverted. The page is its own
  * size container, so the hero and the cards follow the width the shell
  * leaves them; the open card follows the shell itself, because the rail and
- * the quick-log behaviour switch with it at 1024 px.
+ * the quick-log behavior switch with it at 1024 px.
  */
 
 .page {
@@ -41,7 +41,10 @@
  * The ring draws; the sentences beside it say every fact (DESIGN.md 6.1).
  * CycleRing carries its own caption and a numeral in the dial, which this
  * composition sets beside the ring instead (3.3), so both are hidden here
- * and the column below renders them from lib/prediction-copy once.
+ * and the column renders each of them once: the cycle day as the numeral
+ * (the ring's accessible name keeps "of about 28"), "Period logged", and
+ * the 13.10 sentences from lib/prediction-copy. hero.test.tsx checks the
+ * column against the caption, so a caption sentence cannot go missing.
  */
 .ringCell > .ring {
   width: min(100%, 260px);

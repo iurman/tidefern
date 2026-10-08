@@ -115,6 +115,33 @@ describe("loggedSummary", () => {
     expect(loggedSummary(none)).toBe("Logged for today: no flow, low mood.");
   });
 
+  it("counts every note the sheet shows: shared ones and ones added by someone she shares with", () => {
+    const shared: Note = {
+      ...privateNote(),
+      id: "018f5e7a-5eed-7040-8000-000000000002",
+      category: "cycle.symptoms",
+      body: "Steadier today. Sharing this one.",
+    };
+    // Noor's seeded day: a shared note and no private one, which the summary used to leave out.
+    const noor = dayStateFrom(today, [entry({ symptoms: [] })], [shared]);
+    expect(loggedSummary(noor)).toBe("Logged for today: medium flow, steady mood, a shared note.");
+
+    const fromTheo: Note = {
+      ...shared,
+      id: "018f5e7a-5eed-7040-8000-000000000003",
+      authorId: "018f5e7a-5eed-7000-8000-000000000002",
+    };
+    const secondPrivate: Note = { ...privateNote(), id: "018f5e7a-5eed-7040-8000-000000000004" };
+    const busy = dayStateFrom(today, [], [privateNote(), secondPrivate, shared, fromTheo]);
+    expect(loggedSummary(busy)).toBe(
+      "Logged for today: 2 private notes, a shared note, a note from someone you share with.",
+    );
+    const twoFromOthers = dayStateFrom(today, [], [fromTheo, { ...fromTheo, id: shared.id }]);
+    expect(loggedSummary(twoFromOthers)).toBe(
+      "Logged for today: 2 notes from people you share with.",
+    );
+  });
+
   it("says nothing is logged for an empty day, and nothing at all when the day was not read", () => {
     expect(loggedSummary(emptyDay(today))).toBe("Nothing logged for today yet.");
     expect(loggedSummary(null)).toBeNull();

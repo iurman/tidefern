@@ -67,14 +67,32 @@ function heroFor(view: TodayView, hero: Hero): ReactNode {
   }
 }
 
+/**
+ * Whether the screen shows a prediction, so it ends with the 13.10 footer
+ * ("Footer on every prediction surface"): her own cycle view, and a status
+ * someone shares while it says the estimated fertile window, which comes
+ * from that person's prediction. A cycle day or a period day alone is
+ * counted from logged dates and is not one.
+ */
+export function showsPrediction(hero: Hero): boolean {
+  if (hero.kind === "cycle") return true;
+  if (hero.kind !== "shared") return false;
+  return hero.people.some(
+    (person) => person.status?.ok === true && person.status.value?.inFertileWindow === true,
+  );
+}
+
 export function TodayScreen({ view }: { view: TodayView }) {
   const { hero, log, partners, today } = view;
   const side = (
     <>
       {partners === null ? null : <PartnerCard partners={partners} />}
-      {hero.kind === "cycle" ? <WeekSummary week={hero.week} /> : null}
+      {hero.kind === "cycle" ? <WeekSummary week={hero.week} prediction={hero.prediction} /> : null}
     </>
   );
+  const footer = showsPrediction(hero) ? (
+    <p className={styles.footer}>{PREDICTION_FOOTER}</p>
+  ) : null;
 
   if (log === null) {
     // Never asked a body question: no open card, no sheet, no quick log.
@@ -87,6 +105,7 @@ export function TodayScreen({ view }: { view: TodayView }) {
             <div className={styles.cards}>{side}</div>
           </>
         )}
+        {footer}
       </div>
     );
   }
@@ -100,7 +119,7 @@ export function TodayScreen({ view }: { view: TodayView }) {
           <TodayLogCard stage={log.stage} today={today} initial={log.initial} />
           <div className={styles.side}>{side}</div>
         </div>
-        {hero.kind === "cycle" ? <p className={styles.footer}>{PREDICTION_FOOTER}</p> : null}
+        {footer}
       </div>
     </TodayLogProvider>
   );

@@ -44,8 +44,12 @@ interface Block {
   lines: string[];
 }
 
-/** One block per category held: its name as /sharing says it, and what today shows. */
-export function personBlocks(person: SharedPerson, name: string): Block[] {
+/**
+ * One block per category held: its name as /sharing says it, and what today
+ * shows. `name` is the person's name, or null when it is not known, so a
+ * failed read says "this person" rather than the card's fallback heading.
+ */
+export function personBlocks(person: SharedPerson, name: string | null): Block[] {
   const blocks: Block[] = [];
   if (person.status !== null) {
     blocks.push({
@@ -72,12 +76,14 @@ export function personBlocks(person: SharedPerson, name: string): Block[] {
 
 function PersonSummary({ person }: { person: SharedPerson }) {
   const headingId = useId();
-  const name = person.name ?? todayCopy.shared.someone;
+  const name = person.name.ok ? person.name.value : null;
   return (
     <section className={styles.card} aria-labelledby={headingId}>
       <h2 id={headingId} className={styles.cardHeading}>
-        {name}
+        {name ?? todayCopy.shared.someone}
       </h2>
+      {/* The sharing read failed: say so in the name's place instead of passing the fallback off as an answer. */}
+      {person.name.ok ? null : <p className={styles.cardText}>{todayCopy.shared.nameFailed}</p>}
       <dl className={`${styles.lines} ${styles.summaryLines}`}>
         {personBlocks(person, name).map((block) => (
           <div key={block.label}>

@@ -4,7 +4,7 @@ import { beforeAll, describe, expect, it, vi } from "vitest";
 import type { Hero, TodayView } from "@/app/(app)/today/load";
 import { emptyDay } from "@/lib/day-log";
 import { PREDICTION_FOOTER } from "@/lib/prediction-copy";
-import { TodayScreen } from "./today-screen";
+import { TodayScreen, showsPrediction } from "./today-screen";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
 
@@ -110,6 +110,82 @@ describe("TodayScreen", () => {
     expect(screen.queryByText(PREDICTION_FOOTER)).not.toBeInTheDocument();
   });
 
+  it("ends the none stage with the footer when a shared status says the fertile window", () => {
+    // Theo holds Noor's cycle.status grant on a day inside her estimated fertile window.
+    const fertile: Hero = {
+      kind: "shared",
+      people: [
+        {
+          ownerId: "018f5e7a-5eed-7000-8000-000000000001",
+          name: { ok: true, value: "Noor" },
+          status: {
+            ok: true,
+            value: {
+              subjectId: "018f5e7a-5eed-7000-8000-000000000001",
+              date: today,
+              cycleDay: 14,
+              periodDay: null,
+              inFertileWindow: true,
+            },
+          },
+          pregnancy: null,
+        },
+      ],
+      children: { ok: true, value: [] },
+    };
+    render(
+      <TodayScreen view={view({ stage: "none", log: null, partners: null, hero: fertile })} />,
+    );
+    expect(screen.getByText(/^In the estimated fertile window today\./)).toBeInTheDocument();
+    const footer = screen.getByText(PREDICTION_FOOTER);
+    expect(footer).toBeVisible();
+    // Last on the page, as on her own view.
+    expect(footer.nextElementSibling).toBeNull();
+    expect(screen.getAllByText(PREDICTION_FOOTER)).toHaveLength(1);
+  });
+});
+
+describe("showsPrediction", () => {
+  const person = (inFertileWindow: boolean | null) => ({
+    ownerId: "018f5e7a-5eed-7000-8000-000000000001",
+    name: { ok: true as const, value: "Noor" },
+    status:
+      inFertileWindow === null
+        ? ({ ok: false } as const)
+        : {
+            ok: true as const,
+            value: {
+              subjectId: "018f5e7a-5eed-7000-8000-000000000001",
+              date: today,
+              cycleDay: 9,
+              periodDay: null,
+              inFertileWindow,
+            },
+          },
+    pregnancy: null,
+  });
+  const shared = (people: ReturnType<typeof person>[]): Hero => ({
+    kind: "shared",
+    people,
+    children: { ok: true, value: [] },
+  });
+
+  it("is true for her own cycle view and for a shared status inside the fertile window", () => {
+    expect(showsPrediction(cycleHero)).toBe(true);
+    expect(showsPrediction(shared([person(false), person(true)]))).toBe(true);
+  });
+
+  it("is false for a cycle day alone, a failed status, and every view with no prediction", () => {
+    expect(showsPrediction(shared([person(false)]))).toBe(false);
+    expect(showsPrediction(shared([person(null)]))).toBe(false);
+    expect(showsPrediction(shared([]))).toBe(false);
+    expect(showsPrediction({ kind: "empty" })).toBe(false);
+    expect(showsPrediction({ kind: "quiet", feeding: true })).toBe(false);
+    expect(showsPrediction({ kind: "failed" })).toBe(false);
+  });
+});
+
+describe("TodayScreen, other stages", () => {
   it("puts the pregnancy's week card where the ring goes, and nothing else on warmth", () => {
     const { container } = render(
       <TodayScreen

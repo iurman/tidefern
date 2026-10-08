@@ -190,8 +190,8 @@ test("Noor's Today: cycle day, the estimate and ovulation band, the footer and t
     top.getByRole("img", { name: `Cycle day ${status.cycleDay} of about 28` }),
   ).toBeVisible();
 
-  // Each sentence shows once: the ring's own caption is hidden beside the column.
-  const estimate = page.getByText(estimateSentence(prediction), { exact: true });
+  // Each sentence shows once in the hero: the ring's own caption is hidden beside the column.
+  const estimate = top.getByText(estimateSentence(prediction), { exact: true });
   await expect(estimate.filter({ visible: true })).toHaveCount(1);
   await expect(estimate.filter({ visible: true })).toHaveClass(/estimate/);
   await expect(page.locator("figure figcaption")).toBeHidden();
@@ -207,8 +207,9 @@ test("Noor's Today: cycle day, the estimate and ovulation band, the footer and t
   await expect(disclosure.locator("summary")).toHaveText("How this is estimated");
   await disclosure.locator("summary").click();
   await expect(disclosure).toHaveAttribute("open", "");
-  await expect(disclosure).toContainText("[OWNER]");
-  await expect(disclosure).toContainText("21 to 45 days");
+  // The placeholder names what is missing and nothing of how the page is built.
+  await expect(disclosure).toContainText("[OWNER] the explanation of the estimate");
+  await expect(disclosure).not.toContainText(/packages\/|architecture/);
 
   const partner = page.getByRole("region", { name: "What Theo can see right now" });
   await expect(partner.getByText("Cycle status", { exact: true })).toBeVisible();
@@ -221,6 +222,8 @@ test("Noor's Today: cycle day, the estimate and ovulation band, the footer and t
 
   const week = page.getByRole("region", { name: "This week" });
   await expect(week).toBeVisible();
+  // This week never words the next period its own way: only the hero's 13.10 sentence may repeat there.
+  await expect(week.getByText(/^Your next period/)).toHaveCount(0);
   await expect(page.getByText(FOOTER)).toBeVisible();
 
   // The open card holds the form from 1024 px, with today's logged values.
@@ -313,9 +316,8 @@ test("Mira's postpartum Today shows Ilo's age and the quiet card, never a fertil
   await expect(top.getByRole("heading", { name: "When you are ready" })).toBeVisible();
   await expect(top.getByText("Predictions are paused until a period is logged.")).toBeVisible();
   await expect(top.getByRole("button", { name: "Log a period when it comes" })).toBeVisible();
-  await expect(
-    top.getByText(/\[OWNER\] a line that cycles often return later while feeding/),
-  ).toBeVisible();
+  await expect(top.getByText(/\[OWNER\] the line about cycles while feeding/)).toBeVisible();
+  await expect(page.getByText(/architecture|packages\//)).toHaveCount(0);
   await expect(page.getByText(/fertile|Ovulation|next period/i)).toHaveCount(0);
   await expect(page.getByRole("img", { name: /Cycle day/ })).toHaveCount(0);
   await expect(page.getByText(CARE)).toHaveCount(0);
@@ -351,6 +353,15 @@ test("Theo sees Noor's status through his summary grant and is asked nothing", a
   // A summary grant shows the status card and nothing more: no estimate, no symptoms, no care line.
   await expect(page.getByText(/next period|Ovulation is estimated|Cramps/)).toHaveCount(0);
   await expect(page.getByText(CARE)).toHaveCount(0);
+  // The fertile-window line is a prediction, so the screen then ends with the 13.10 footer.
+  const fertile = card.getByText(/^In the estimated fertile window today\./);
+  if (status.inFertileWindow) {
+    await expect(fertile).toBeVisible();
+    await expect(page.getByText(FOOTER)).toBeVisible();
+  } else {
+    await expect(fertile).toHaveCount(0);
+    await expect(page.getByText(FOOTER)).toHaveCount(0);
+  }
   // Never a body question: no open card, no quick log at either width.
   await expect(page.getByRole("region", { name: "Log today" })).toHaveCount(0);
   await expect(shell(page).rail.getByRole("button", { name: "Log today" })).toHaveCount(0);
@@ -452,8 +463,12 @@ test("a fresh cycle account: the empty state, a failed save, then a day logged t
   const guess = await api<Prediction>(page, "/api/v1/cycle/predictions");
   expect(guess.basis).toBe("first_guess");
   await expect(
-    page.getByText(estimateSentence(guess), { exact: true }).filter({ visible: true }),
+    top.getByText(estimateSentence(guess), { exact: true }).filter({ visible: true }),
   ).toBeVisible();
+  // The ring's logged days are said beside it too, since its caption is hidden here.
+  await expect(
+    top.getByText(`Period logged ${day(today)}.`, { exact: true }).filter({ visible: true }),
+  ).toHaveCount(1);
   await expect(top.getByText("1", { exact: true }).filter({ visible: true })).toHaveCount(1);
   await expect(page.getByRole("region", { name: "This week" })).toContainText(
     `Period logged ${day(today)}.`,

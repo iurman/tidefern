@@ -1,11 +1,17 @@
 import { render, screen, within } from "@testing-library/react";
-import { MAX_PLAUSIBLE, MIN_PLAUSIBLE } from "@tidefern/core";
 import type { CyclePrediction } from "@tidefern/schemas";
 import type { ReactNode } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { emptyDay } from "@/lib/day-log";
 import { CARE_SENTENCE, CONTRACEPTION_LINE } from "@/lib/prediction-copy";
-import { CycleHero, EmptyHero, PregnancyHero, QuietHero, numeralParts } from "./hero";
+import {
+  CycleHero,
+  EmptyHero,
+  PregnancyHero,
+  QuietHero,
+  loggedSentence,
+  numeralParts,
+} from "./hero";
 import { TodayLogProvider } from "./today-log";
 
 vi.mock("next/navigation", () => ({ useRouter: () => ({ refresh: vi.fn() }) }));
@@ -165,8 +171,53 @@ describe("CycleHero", () => {
     const summary = screen.getByText("How this is estimated");
     const details = summary.closest("details");
     expect(details).not.toBeNull();
-    expect(details).toHaveTextContent("[OWNER]");
-    expect(details).toHaveTextContent(`${MIN_PLAUSIBLE} to ${MAX_PLAUSIBLE} days`);
+    expect(details).toHaveTextContent("[OWNER] the explanation of the estimate");
+    // A customer page: the placeholder names nothing of how the page is built.
+    expect(details).not.toHaveTextContent(/packages\/|architecture/);
+  });
+
+  it("says the ring's logged days in the column, because this composition hides the caption", () => {
+    cycle();
+    const caption = screen
+      .getByRole("img", { name: "Cycle day 3 of about 28" })
+      .closest("figure")
+      ?.querySelector(":scope > figcaption");
+    // Every caption sentence the column does not already say would be lost once it is hidden.
+    expect(caption).toHaveTextContent("Period logged Oct 3 to 5.");
+    expect(within(column()).getByText("Period logged Oct 3 to 5.")).toBeVisible();
+  });
+
+  it("keeps the logged days after the period has ended, when no week line says them", () => {
+    // Cycle day 12: the period ran Sep 24 to 26 and the ring still draws it.
+    render(
+      <CycleHero
+        today={today}
+        prediction={prediction()}
+        cycleDay={12}
+        latestStart="2026-09-24"
+        loggedDays={["2026-09-24", "2026-09-25", "2026-09-26"]}
+        nudge={false}
+        child={null}
+      />,
+    );
+    expect(within(column()).getByText("Period logged Sep 24 to 26.")).toBeVisible();
+  });
+});
+
+describe("loggedSentence", () => {
+  it("spans the logged days up to today, in order, as the ring's caption does", () => {
+    expect(loggedSentence(["2026-10-05", "2026-10-03", "2026-10-04"], today)).toBe(
+      "Period logged Oct 3 to 5.",
+    );
+    expect(loggedSentence(["2026-10-05"], today)).toBe("Period logged Oct 5.");
+    expect(loggedSentence(["2026-09-29", "2026-10-02"], today)).toBe(
+      "Period logged Sep 29 to Oct 2.",
+    );
+  });
+
+  it("says nothing when no day is logged, or every day given lies after today", () => {
+    expect(loggedSentence([], today)).toBeNull();
+    expect(loggedSentence(["2026-10-06"], today)).toBeNull();
   });
 });
 
@@ -211,9 +262,7 @@ describe("QuietHero", () => {
     );
     const age = screen.getByText("Ilo").closest("p");
     expect(age).toHaveTextContent("Ilo 6 weeks, 1 day");
-    expect(
-      screen.getByText(/\[OWNER\] a line that cycles often return later while feeding/),
-    ).toBeVisible();
+    expect(screen.getByText(/\[OWNER\] the line about cycles while feeding/)).toBeVisible();
   });
 
   it("says what to do when the children could not be read", () => {

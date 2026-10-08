@@ -210,13 +210,15 @@ lines without touching another's.
   sheet (tasks G9 and G9b): the list under `/calendar` and `/log/[date]`
   below is the one inventory for both routes.
 - `[OWNER]` the explanation under "How this is estimated" (`RESEARCH.md`
-  decision 6). The page shows a placeholder that names the numbers it must
-  state, read from `packages/core`: only cycles of 21 to 45 days count,
-  ovulation sits 14 days before the next period as a band of plus or minus
-  2 days, and the range is plus or minus 4 days for a first guess or one
-  cycle, 3 after two, 2 after three or more, 5 when cycles vary.
+  decision 6). The page shows the placeholder "the explanation of the
+  estimate". The text must state these numbers, which `copy.test.ts` ties
+  to `packages/core`: only cycles of 21 to 45 days count, ovulation sits
+  14 days before the next period as a band of plus or minus 2 days, and
+  the range is plus or minus 4 days for a first guess or one cycle, 3
+  after two, 2 after three or more, 5 when cycles vary.
 - `[OWNER]` the postpartum line that cycles often return later while
-  feeding (architecture 8.4, after ACOG). The page shows a placeholder.
+  feeding (architecture 8.4, after ACOG). The page shows the placeholder
+  "the line about cycles while feeding".
 - `[OWNER]` whether the postpartum quiet card keeps "When you are ready"
   (the after-ending row above, which the page uses for every ending, as
   rule 5 of 8.4 reads) or takes `/journey`'s "Predictions are paused after
@@ -234,23 +236,31 @@ lines without touching another's.
     "who you share with", "what [name] shares" and "the children you see";
   - the open card below 1024 px: "Nothing logged for today yet." or
     "Logged for today: medium flow, cramps, steady mood, a private note.",
-    with the button "Log today";
+    where the notes read "a private note" ("2 private notes"), "a shared
+    note" ("2 shared notes") and "a note from someone you share with" ("2
+    notes from people you share with"), with the button "Log today";
   - the partner card: "What [name] can see right now" ("What this person
     can see right now" without a name), a child grant as "Everything logged
     for [child]: feeds, sleep, growth, milestones and photos.", a child
     guarded together as "As a guardian of [child], everything logged for
     [child].", an overview after her pregnancy ended as "Weekly updates are
     paused. No week, due date or dates show.", and "Change sharing";
-  - This week: "Period logged [days].", the fertile and next period lines
-    taken from the 13.10 templates, and "No period days logged or estimated
-    this week.";
+  - This week: "Period logged [days].", "[days] are the days pregnancy is
+    most likely." followed by the contraception line (the fertile days of
+    the 13.10 ovulation template), and "No period days logged or estimated
+    this week."; when the next period's range touches the week, the card
+    repeats the hero's 13.10 sentence for the prediction's basis (estimate
+    or first guess) unchanged, never a wording of its own;
+  - beside the ring: "Period logged [days].", CycleRing's own caption
+    sentence, which this composition hides;
   - the deviation nudge's link to the calendar: "Review your cycles in the
     calendar";
   - the `none` stage: "Cycle day [n]", "Period day [n]" (8.2's "Period day
     2"), "In the estimated fertile window today." followed by the
     contraception line, "Nothing to show for today yet.", "Week [n] and [d]
     days", "Due [date]", "Weekly updates are paused.", "Someone who shares
-    with you", "Open Family", and the empty state "Nothing shared with you
+    with you", "We could not load this person's name just now. Reload the
+    page to try again.", "Open Family", and the empty state "Nothing shared with you
     yet" / "When someone shares a cycle, a pregnancy or a child with you, it
     shows here." with no action.
 

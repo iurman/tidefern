@@ -85,8 +85,11 @@ export interface ChildAge {
 /** One person whose records this person sees a summary of. */
 export interface SharedPerson {
   ownerId: string;
-  /** From GET /v1/sharing; null when the person is not listed there or has no name. */
-  name: string | null;
+  /**
+   * From GET /v1/sharing: the name, null when the person is not listed there
+   * or has no name, or a failure when that read failed, which the card says.
+   */
+  name: Part<string | null>;
   /** Held through a `cycle.status` grant; null when there is no such grant. */
   status: Part<CycleStatus | null> | null;
   /** Held through a `pregnancy.overview` grant; null when there is no such grant. */
@@ -130,7 +133,10 @@ export interface TodayView {
   child: Part<ChildAge | null> | null;
   /** The open card; null for the `none` stage, which is never asked a body question. */
   log: { stage: LoggingStage; initial: DayState | null } | null;
-  /** The partner card; null where it does not show (a `none` stage person who shares nothing). */
+  /**
+   * The partner card; null where it does not show (a `none` stage person
+   * whose sharing read answered that they share nothing).
+   */
   partners: Part<PartnersData> | null;
 }
 
@@ -416,7 +422,12 @@ async function sharedHero(
             )
           : null,
       ]);
-      return { ownerId, name: names.get(ownerId) ?? null, status, pregnancy };
+      return {
+        ownerId,
+        name: sharing.ok ? ok(names.get(ownerId) ?? null) : failed,
+        status,
+        pregnancy,
+      };
     }),
   );
   const ages: Part<ChildAge[]> = children.ok
@@ -444,8 +455,9 @@ export async function loadToday(client: ApiClient, session: TodaySession): Promi
       hero,
       child: null,
       log: null,
-      // Someone who logs nothing of their own sees the card only when they share a child.
-      partners: partners.ok && partners.value.people.length > 0 ? partners : null,
+      // Someone who logs nothing of their own sees the card only when they share a child. A
+      // failed read keeps the card, so its failure line says so: then nobody knows whether they do.
+      partners: !partners.ok || partners.value.people.length > 0 ? partners : null,
     };
   }
 
