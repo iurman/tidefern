@@ -108,6 +108,7 @@ interface Seen {
   method: string;
   path: string;
   key: string | null;
+  ifMatch: string | null;
   body: unknown;
 }
 
@@ -143,6 +144,7 @@ async function answerWrites(
         method: request.method(),
         path: new URL(request.url()).pathname,
         key: request.headers()["idempotency-key"] ?? null,
+        ifMatch: request.headers()["if-match"] ?? null,
         body: request.postData() === null ? undefined : request.postDataJSON(),
       });
       const answer = queue.length > 1 ? queue.shift() : queue[0];
@@ -522,6 +524,57 @@ test("a profile that did not save is retried without recording the consent again
   expect(seen.filter((request) => request.path === "/api/v1/me/profile")).toHaveLength(2);
 });
 
+test("a profile whose answer was lost follows the stage she chose after going back", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  const fresh = await sharedNewcomer(page);
+  if (fresh === null) return expectFailedRead(page);
+  const firstBody = (): Record<string, unknown> => {
+    const put = seen.find(
+      (request) => request.method === "PUT" && request.path === "/api/v1/me/profile",
+    );
+    const saved = { ...(put?.body as Record<string, unknown>) };
+    delete saved.ageAttested;
+    return saved;
+  };
+  const seen: Seen[] = await answerWrites(page, {
+    profile: [
+      // The create lands on the server, but its answer never reaches the page.
+      (route) => route.abort("failed"),
+      // The retry meets the profile that create made.
+      (route) => problem(route, 422, "if_match_required"),
+      (route) => json(route, { ...firstBody(), version: 1 }),
+      (route) => json(route, { version: 2 }),
+    ],
+  });
+  await toCycleConsent(page, fresh.today);
+  await agree(page);
+  await next(page, "Continue");
+  await expect(
+    page.getByText("We could not save your profile. Check your connection and try again."),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Back" }).click();
+  await page.getByRole("button", { name: "Back" }).click();
+  await heading(page, "What brings you to Tidefern?");
+  await page.getByRole("radio", { name: "Here for someone else", exact: true }).check();
+  await next(page);
+  await heading(page, "Before you start");
+  for (const name of [/I accept the terms of use/, /I am 18 or older/]) {
+    const box = page.getByRole("checkbox", { name });
+    if (!(await box.isChecked())) await box.check();
+  }
+  await next(page, "Continue");
+  await heading(page, "Add a passkey");
+  const profile = seen.filter((request) => request.path === "/api/v1/me/profile");
+  expect(profile.map((request) => request.method)).toEqual(["PUT", "PUT", "GET", "PUT"]);
+  expect(firstBody()).toMatchObject({ stage: "cycle" });
+  expect(profile[3], "the replacement names the version read").toMatchObject({
+    ifMatch: "1",
+    body: { stage: "none", timeZone: ZONE },
+  });
+});
+
 test("a period start that did not save can be tried again or skipped once the profile is saved", async ({
   page,
 }) => {
@@ -678,6 +731,13 @@ test("the passkey step adds a passkey, says when the prompt was closed, and fini
   await next(page, "Continue");
   await heading(page, "Add a passkey");
   await expect(page.getByText("Step 5 of 5")).toBeHidden(); // the row, not the phone line, at 1440
+  await expect(page.getByRole("list", { name: "Steps" })).toBeVisible();
+  // At phone width the row gives way to the one line.
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(page.getByText(/^Step \d of \d$/)).toHaveText("Step 5 of 5");
+  await expect(page.getByText("Step 5 of 5")).toBeVisible();
+  await expect(page.getByRole("list", { name: "Steps" })).toBeHidden();
+  await page.setViewportSize({ width: 1440, height: 900 });
 
   await page.evaluate(() => {
     (window as unknown as { __passkeyOutcome: string }).__passkeyOutcome = "closed";

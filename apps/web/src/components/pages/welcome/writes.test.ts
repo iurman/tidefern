@@ -16,6 +16,7 @@ interface Sent {
   method: string;
   path: string;
   key: string | null;
+  ifMatch: string | null;
   body: unknown;
 }
 
@@ -30,6 +31,7 @@ const client = createApiClient({
       method: request.method,
       path: new URL(request.url).pathname,
       key: request.headers.get("idempotency-key"),
+      ifMatch: request.headers.get("if-match"),
       body: text === "" ? undefined : JSON.parse(text),
     });
     const next = answers.shift();
@@ -118,6 +120,7 @@ describe("recording the consent", () => {
         method: "POST",
         path: "/api/v1/me/consents",
         key: "0199b0a0-0000-7000-8000-00000000000a",
+        ifMatch: null,
         body: {
           categories: ["cycle.history", "journal.private"],
           textVersion: "2026-10",
@@ -168,12 +171,49 @@ describe("creating the profile", () => {
   });
 
   it("counts a profile that already exists as saved: the first try landed and its answer was lost", async () => {
-    answers.push(problem(422, "if_match_required"), json({ version: 1 }, 200));
+    answers.push(problem(422, "if_match_required"), json({ ...body, version: 1 }, 200));
     expect(await createProfile(client, body)).toEqual({ ok: true });
     expect(sent.map((request) => `${request.method} ${request.path}`)).toEqual([
       "PUT /api/v1/me/profile",
       "GET /api/v1/me/profile",
     ]);
+  });
+
+  it("replaces a saved profile that holds a zone or stage she changed after the lost answer", async () => {
+    const changed = { ...body, timeZone: "America/Chicago", stage: "none" as const };
+    answers.push(
+      problem(422, "if_match_required"),
+      json({ ...body, version: 1 }, 200),
+      json({ ...changed, version: 2 }, 200),
+    );
+    expect(await createProfile(client, changed)).toEqual({ ok: true });
+    expect(sent.map((request) => `${request.method} ${request.path}`)).toEqual([
+      "PUT /api/v1/me/profile",
+      "GET /api/v1/me/profile",
+      "PUT /api/v1/me/profile",
+    ]);
+    expect(sent[2]).toMatchObject({ ifMatch: "1", body: { ...changed, ageAttested: true } });
+  });
+
+  it("fails when the replacement is refused, so the saved profile never silently keeps her old choice", async () => {
+    const changed = { ...body, stage: "none" as const };
+    answers.push(
+      problem(422, "if_match_required"),
+      json({ ...body, version: 3 }, 200),
+      problem(409, "stale_version"),
+    );
+    expect(await createProfile(client, changed)).toEqual({
+      ok: false,
+      failure: { cause: "refused", status: 409, detail: "stale_version" },
+    });
+  });
+
+  it("fails when the profile read back is not one", async () => {
+    answers.push(problem(422, "if_match_required"), json({}, 200));
+    expect(await createProfile(client, body)).toEqual({
+      ok: false,
+      failure: { cause: "refused", status: 200 },
+    });
   });
 
   it("stops on any other refusal, with its detail", async () => {

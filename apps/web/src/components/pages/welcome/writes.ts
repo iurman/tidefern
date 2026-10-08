@@ -133,23 +133,65 @@ export interface ProfileBody {
 /** The detail E2 answers a PUT with when a profile exists and the request named no version. */
 const IF_MATCH_REQUIRED = "if_match_required";
 
+/** The fields of a profile read back, when the body has them. */
+interface SavedProfile extends ProfileBody {
+  version: number;
+}
+
+function savedProfile(body: unknown): SavedProfile | null {
+  if (typeof body !== "object" || body === null) return null;
+  const read = body as Partial<Record<keyof SavedProfile, unknown>>;
+  if (
+    typeof read.version !== "number" ||
+    typeof read.timeZone !== "string" ||
+    typeof read.stage !== "string" ||
+    typeof read.weekStart !== "number" ||
+    !(typeof read.displayName === "string" || read.displayName === null)
+  ) {
+    return null;
+  }
+  return read as SavedProfile;
+}
+
+/** Whether the profile read back holds what she chose this time. */
+export function profileMatches(saved: ProfileBody, body: ProfileBody): boolean {
+  return (
+    saved.timeZone === body.timeZone &&
+    saved.stage === body.stage &&
+    saved.weekStart === body.weekStart &&
+    saved.displayName === body.displayName
+  );
+}
+
 /**
  * PUT /v1/me/profile, creating it with the age attestation. A retry after a
  * create whose answer never arrived meets a profile that exists: the API
  * then asks for its version (`if_match_required`), so the page reads the
- * profile once and counts the write done instead of failing on its own
- * success.
+ * profile once. When it holds what she chose, the write is done instead of
+ * failing on its own success. When she went Back and changed her zone or
+ * stage in between, the page replaces it once with the version it read, so
+ * the saved profile follows her latest choice rather than the one she undid.
  */
 export async function createProfile(client: ApiClient, body: ProfileBody): Promise<WriteOutcome> {
   const sent = await answer(
     client.PUT("/api/v1/me/profile", { body: { ...body, ageAttested: true } }),
   );
   if (sent.status === 200 || sent.status === 201) return DONE;
-  if (sent.status === 422 && detailOf(sent.body) === IF_MATCH_REQUIRED) {
-    const read = await answer(client.GET("/api/v1/me/profile"));
-    return read.status === 200 ? DONE : failure(read.status, read.body);
+  if (sent.status !== 422 || detailOf(sent.body) !== IF_MATCH_REQUIRED) {
+    return failure(sent.status, sent.body);
   }
-  return failure(sent.status, sent.body);
+  const read = await answer(client.GET("/api/v1/me/profile"));
+  if (read.status !== 200) return failure(read.status, read.body);
+  const saved = savedProfile(read.body);
+  if (saved === null) return failure(read.status, read.body);
+  if (profileMatches(saved, body)) return DONE;
+  const replaced = await answer(
+    client.PUT("/api/v1/me/profile", {
+      params: { header: { "if-match": String(saved.version) } },
+      body: { ...body, ageAttested: true },
+    }),
+  );
+  return replaced.status === 200 ? DONE : failure(replaced.status, replaced.body);
 }
 
 /**
