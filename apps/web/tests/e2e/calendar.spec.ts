@@ -644,11 +644,8 @@ test("Save keeps its width while it reads Saving", async ({ page }) => {
     return;
   }
   // DESIGN.md 5.1 step 6 and the voice table: a pending control keeps its width. The shared Button
-  // (components/ui/button.tsx) renders its loading text only while loading, so the wider "Saving"
-  // widens "Save" by the width of its last three letters. This records the defect until the Button
-  // is fixed (a request to the lead in the H3 report); once it is, this test passes, Playwright
-  // fails it for passing, and the line below goes. Nothing is written: the save is held, then refused.
-  test.fail(true, "the shared Button grows from Save to Saving");
+  // (components/ui/button.tsx) reserves its loading text's width while idle (#91), so "Save" does
+  // not widen when it reads "Saving". Nothing is written: the save is held, then refused.
   const day = addDays(session.today, -2);
   const write = `**/api/v1/cycle/entries/${day}`;
   await dayButton(page, day).click();
