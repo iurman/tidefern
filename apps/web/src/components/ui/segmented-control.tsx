@@ -30,10 +30,14 @@ export interface SegmentedControlProps<T extends string = string> {
    * pill at the options' own widths. `columns` is that pill wherever the
    * group is at least 26rem wide; narrower, the options become equal columns
    * with the control radius and the caption size that shrink together; and
-   * once a column would be too narrow for the longest label, one option per
-   * row, so a label is never cut and the pill never folds into uneven rows.
-   * The group measures its own width for this, so it fills the width it is
-   * given and never sizes itself to its content.
+   * below the option count times 3.625rem, one option per row, so the pill
+   * never folds into uneven rows. That 3.625rem column is fixed, not
+   * measured: it holds "Spotting" at the caption size, the longest label the
+   * flow and mood scales use. A longer label needs the column widened in
+   * the stylesheet first; otherwise its column grows past the others instead
+   * of the options stacking, and the row can overflow its track. The group
+   * measures its own width for this, so it fills the width it is given and
+   * never sizes itself to its content.
    */
   layout?: "pill" | "columns";
   /**

@@ -30,7 +30,7 @@ export const flowOptions = FlowLevel.options.map((value) => ({ value, label: flo
  * radio group whose chosen segment sits on the period data color, with `none`
  * first so clearing a day is one tap like any other value. It lays out as
  * columns: the pill where it fits, equal columns on a phone, one value per
- * row where even those would cut a label.
+ * row where a column would be narrower than "Spotting".
  */
 export function FlowScale({
   label,

@@ -186,6 +186,27 @@ test("the flow scale and the mood selector show nothing chosen when empty, and T
   }
 });
 
+// G9b's review: the forced ring is the product's ring for the layout on show, outside the round
+// pill at desktop width and inside the first column on a phone, where the columns touch and a ring
+// outside would cross the next label.
+for (const [width, offset] of [
+  [1440, "4px"],
+  [390, "-2px"],
+] as const) {
+  test(`the scales' forced focus ring follows their layout at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(route);
+    for (const name of ["Flow scale", "Mood selector"]) {
+      const first = page
+        .getByRole("region", { name })
+        .locator('[data-theme="light"] [data-specimen-state="focus-visible"] input[type="radio"]')
+        .first();
+      await expect(first, name).toHaveCSS("outline-style", "solid");
+      await expect(first, name).toHaveCSS("outline-offset", offset);
+    }
+  });
+}
+
 // G10 measured the forced focus ring cut at the sides of the forms specimens that fill their cell:
 // the ring reaches 6 px past the control and the stage clipped at its edge. The stage now clips 8 px
 // out, with the room taken back by a negative margin, so its content box is still the cell.

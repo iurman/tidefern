@@ -170,10 +170,13 @@ The day-logging contract (task G9) that Today and Calendar share:
   columns with the control radius and the caption size that shrink
   together (five fit a 360 px phone's sheet); and below the option count
   times 3.625rem, one value per row, as the flow values are on a 320 px
-  phone, so a label is never cut and the pill never folds into uneven
-  rows. The group is its own size container, so it takes its width from
-  its row and never sizes itself to its content; no other module styles
-  its markup.
+  phone, so the columns never come out uneven and the pill never folds
+  into uneven rows. The 3.625rem column holds "Spotting", the longest
+  label either scale uses; it is fixed, not measured, so a scale with a
+  longer label widens it first. A focused value draws its ring inside its
+  own column, since the columns touch. The group is its own size
+  container, so it takes its width from its row and never sizes itself to
+  its content; no other module styles its markup.
 
 Each group owns only the files in its rows above plus its page, its
 specimens file and its browser spec; `docs/design/ASSETS.md` gains icon

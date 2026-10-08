@@ -31,8 +31,9 @@ export const moodOptions = MoodCode.options.map((value) => ({ value, label: mood
 
 /**
  * Three values, single select, as a segmented radio group on the action
- * fill. It lays out as columns like the flow scale, so the two read as one
- * kind of control in the day sheet at every width.
+ * fill. It shares the flow scale's columns layout, so in the day sheet the
+ * two switch from the pill to equal columns at the same width; its three
+ * short labels stay in columns where the flow scale's five stack.
  */
 export function MoodSelector({
   label,

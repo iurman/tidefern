@@ -369,6 +369,108 @@ for (const width of [1440, 390, 320]) {
   });
 }
 
+/**
+ * Where the focused radio in a group draws its ring: how far past its own box
+ * the ring reaches (zero or less is inside), which other labels' text it
+ * crosses, and how wide a band of the track's color runs between the ring and
+ * a chosen value's fill.
+ */
+function focusRing(fieldset: Element) {
+  const radio = document.activeElement;
+  if (!(radio instanceof HTMLInputElement) || !fieldset.contains(radio)) return null;
+  const ring = getComputedStyle(radio);
+  const offset = parseFloat(ring.outlineOffset);
+  const reach = offset + parseFloat(ring.outlineWidth);
+  const box = radio.getBoundingClientRect();
+  const label = radio.nextElementSibling as HTMLElement;
+  const track = radio.parentElement?.parentElement as HTMLElement;
+  const crossed = [...fieldset.querySelectorAll('input[type="radio"]')]
+    .filter((other) => other !== radio)
+    .map((other) => other.nextElementSibling as HTMLElement)
+    .filter((other) => {
+      const range = document.createRange();
+      range.selectNodeContents(other);
+      const text = range.getBoundingClientRect();
+      return (
+        text.left < box.right + reach &&
+        text.right > box.left - reach &&
+        text.top < box.bottom + reach &&
+        text.bottom > box.top - reach
+      );
+    })
+    .map((other) => other.textContent);
+  // An inset shadow in the track's color, measured from the ring's inner edge.
+  const [, color, spread] =
+    /^(rgba?\([^)]*\)) 0px 0px 0px ([\d.]+)px inset$/.exec(getComputedStyle(label).boxShadow) ?? [];
+  const band =
+    spread !== undefined && color === getComputedStyle(track).backgroundColor
+      ? parseFloat(getComputedStyle(label).borderLeftWidth) + parseFloat(spread) + offset
+      : 0;
+  return {
+    name: label.textContent,
+    checked: radio.checked,
+    visible: radio.matches(":focus-visible"),
+    reach,
+    crossed,
+    band,
+  };
+}
+
+// G9b's review: the columns touch, so the global ring (2 px at a 4 px offset)
+// around a focused value crossed the next label ("Spotting" beside Light at a
+// 360 px phone) and, in a stacked list, reached past the form. A focused value
+// in the columns layout draws its ring inside its own box, and on a chosen
+// value a band of the track's color keeps the ring apart from the fill, whose
+// tone is too close to the focus color to show it.
+for (const width of ["390px", "360px", "320px"]) {
+  test(`a focused value keeps its ring inside its own column, clear of the next label, at a ${width} phone`, async ({
+    page,
+  }) => {
+    await page.goto(route);
+    await page.waitForLoadState("networkidle");
+    await page.evaluate(() => document.fonts.ready);
+    for (const state of ["default", "empty"]) {
+      await stage(page, "Day sheet", state).evaluate((element, size) => {
+        (element as HTMLElement).style.width = size;
+      }, width);
+    }
+
+    // A chosen value as the arrow keys leave it: Light beside Spotting, Low beside Steady.
+    for (const [name, from, to] of [
+      ["Flow", "Medium", "Light"],
+      ["Mood", "Steady", "Low"],
+    ] as const) {
+      const group = stage(page, "Day sheet").getByRole("group", { name, exact: true });
+      // The form is inert until the page hydrates; retry the first press until it lands.
+      await expect(async () => {
+        await group.getByRole("radio", { name: from }).focus({ timeout: 1000 });
+        await page.keyboard.press("ArrowLeft");
+        await expect(group.getByRole("radio", { name: to })).toBeFocused({ timeout: 1000 });
+      }).toPass({ timeout: 15_000 });
+      const chosen = await group.evaluate(focusRing);
+      expect(chosen, `${name} at ${width}`).toMatchObject({
+        name: to,
+        checked: true,
+        visible: true,
+      });
+      expect(chosen!.reach, `${name} at ${width}`).toBeLessThanOrEqual(0);
+      expect(chosen!.crossed, `${name} at ${width}`).toEqual([]);
+      expect(chosen!.band, `${name} at ${width}`).toBeGreaterThanOrEqual(1);
+    }
+
+    // Nothing chosen: Tab from the Period switch enters the flow scale on None, unchecked.
+    const empty = stage(page, "Day sheet", "empty");
+    await empty.getByRole("switch", { name: "Period" }).focus();
+    await page.keyboard.press("Tab");
+    const flow = empty.getByRole("group", { name: "Flow", exact: true });
+    await expect(flow.getByRole("radio", { name: "None" })).toBeFocused();
+    const unchosen = await flow.evaluate(focusRing);
+    expect(unchosen, width).toMatchObject({ name: "None", checked: false, visible: true });
+    expect(unchosen!.reach, width).toBeLessThanOrEqual(0);
+    expect(unchosen!.crossed, width).toEqual([]);
+  });
+}
+
 test("the Period row puts the switch under a short help line on a phone, beside it on desktop", async ({
   page,
 }) => {
