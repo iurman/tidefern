@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { uuidv7 } from "@tidefern/core/uuid";
 
 import {
   and,
@@ -106,26 +106,12 @@ export class SweepRoleError extends Error {
 }
 
 /**
- * A UUIDv7 (RFC 9562): 48 bits of Unix milliseconds, then random bits with
- * the version and variant set. Time-ordered ids keep the claim scan
- * (`run_after, id`) cheap and let a dead row be dated at a glance.
+ * A job's id: a UUIDv7 from the one minter in `@tidefern/core`. Time-ordered
+ * ids keep the claim scan (`run_after, id`) cheap and let a dead row be
+ * dated at a glance.
  */
 export function jobId(now: number = Date.now()): string {
-  const bytes = randomBytes(16);
-  // 48 bits of milliseconds as a 16-bit high word and a 32-bit low word, so
-  // no BigInt is needed and the web build's lower target type-checks this.
-  const high = Math.floor(now / 0x1_0000_0000);
-  const low = now % 0x1_0000_0000;
-  bytes[0] = (high >>> 8) & 0xff;
-  bytes[1] = high & 0xff;
-  bytes[2] = (low >>> 24) & 0xff;
-  bytes[3] = (low >>> 16) & 0xff;
-  bytes[4] = (low >>> 8) & 0xff;
-  bytes[5] = low & 0xff;
-  bytes[6] = ((bytes[6] as number) & 0x0f) | 0x70;
-  bytes[8] = ((bytes[8] as number) & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return uuidv7(now);
 }
 
 export function isJobType(value: string): value is JobType {
@@ -303,17 +289,48 @@ export async function complete(
   return updated.length === 1;
 }
 
+/** A schema object's name as Postgres reports it; anything else is left out, never quoted. */
+const SCHEMA_NAME = /^[A-Za-z_][A-Za-z0-9_$.]{0,127}$/;
+
+/** How many causes deep `describeError()` looks for the driver's error. */
+const CAUSE_DEPTH = 4;
+
+function nameField(error: Error, field: "constraint" | "routine"): string | undefined {
+  const value = (error as { constraint?: unknown; routine?: unknown })[field];
+  return typeof value === "string" && SCHEMA_NAME.test(value) ? value : undefined;
+}
+
 /**
- * What `last_error` records: the error's name and, when the driver set one,
- * its code. Never the message, because a database error can quote the row
- * it refused and a job row must stay free of content.
+ * What `last_error` records, and what a failed job's log line carries: the
+ * error's name and, when the driver set one, its SQLSTATE with the
+ * constraint (or, without one, the routine) it names. A failed query throws
+ * Drizzle's own error, whose name is plain `Error` and whose message quotes
+ * the statement's parameters; the driver's error is its cause, so the code
+ * is read from the first error in the cause chain that has one, and that
+ * error's name is kept beside the outer one. Never a message, a detail or a
+ * parameter, because a database error can quote the row it refused and a
+ * job row and a log line must stay free of content.
  */
 export function describeError(error: unknown): string {
-  if (error instanceof Error) {
-    const code = (error as { code?: unknown }).code;
-    return typeof code === "string" && code.length > 0 ? `${error.name} ${code}` : error.name;
+  if (!(error instanceof Error)) return typeof error;
+  let coded: Error | undefined;
+  let current: unknown = error;
+  for (let depth = 0; depth < CAUSE_DEPTH && current instanceof Error; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === "string" && code.length > 0) {
+      coded = current;
+      break;
+    }
+    current = current.cause;
   }
-  return typeof error;
+  if (coded === undefined) return error.name;
+  const parts = coded === error ? [error.name] : [error.name, coded.name];
+  parts.push((coded as { code?: unknown }).code as string);
+  const constraint = nameField(coded, "constraint");
+  const routine = nameField(coded, "routine");
+  if (constraint !== undefined) parts.push(`constraint=${constraint}`);
+  else if (routine !== undefined) parts.push(`routine=${routine}`);
+  return parts.join(" ");
 }
 
 /** The wait before the next attempt, or null when the job has used them all. */

@@ -3163,6 +3163,21 @@
             "format": "date-time",
             "description": "When the person attested to being 18 or older"
           },
+          "termsVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version of the terms last accepted; null when none was recorded"
+          },
+          "termsAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When that version was accepted; null when none was recorded"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -3187,6 +3202,8 @@
           "units",
           "notificationDetail",
           "ageAttestedAt",
+          "termsVersion",
+          "termsAcceptedAt",
           "version",
           "createdAt",
           "updatedAt"
@@ -3256,6 +3273,11 @@
               true
             ],
             "description": "The attestation of being 18 or older; required when the profile is created"
+          },
+          "termsVersion": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$",
+            "description": "The version of the terms accepted; a new version records a new acceptance"
           }
         },
         "required": [
@@ -11389,6 +11411,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,
@@ -12985,6 +13009,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,
@@ -14155,6 +14181,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,

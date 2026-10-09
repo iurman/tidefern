@@ -4,16 +4,16 @@ import type { Context, TypedResponse } from "hono";
 import { stream } from "hono/streaming";
 import { and, desc, eq, inArray, isNull, ne, or, sql } from "drizzle-orm";
 import {
-  EnvKeyProvider,
   SubjectKeyMissingError,
   createKeyCache,
   decryptFieldFor,
   unwrapForSubject,
 } from "@tidefern/crypto";
-import type { KeyCache, KeyProvider } from "@tidefern/crypto";
+import type { KeyCache } from "@tidefern/crypto";
 import { schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
+import { enqueue } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 import {
   ActivityPage,
   ActivityQuery,
@@ -33,6 +33,7 @@ import type {
 
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
+import type { AreaOptions } from "./index";
 import { audit, auditActions } from "../middleware/audit";
 import { problem } from "../problem";
 import type { ProblemCode } from "../problem";
@@ -60,29 +61,6 @@ export const EXPORT_FILE_NAME = "tidefern-export.ndjson";
 export const CLOSURE_IN_PROGRESS = "closure_in_progress";
 export const UNDO_WINDOW_CLOSED = "undo_window_closed";
 export const ACTIVITY_CURSOR_INVALID = "cursor_invalid";
-
-/**
- * The context variables a route reads its database and key provider from.
- * The host hands both to `createApp()`, but the route registry hands a route
- * only the app, so until app.ts sets these two variables a route takes them
- * from the context when a test (or a wrapping host) set them there, and
- * otherwise falls back to the production client inside `withActor()` and to
- * the environment KEK of architecture 17.1.
- */
-export const DB_VARIABLE = "db";
-export const KEYS_VARIABLE = "keys";
-
-const envKeys = new EnvKeyProvider();
-
-interface Injected {
-  db?: ActorDatabase | undefined;
-  keys?: KeyProvider | undefined;
-}
-
-function injected(c: Context<ApiEnv>): { db: ActorDatabase | undefined; keys: KeyProvider } {
-  const vars = c.var as unknown as Injected;
-  return { db: vars.db, keys: vars.keys ?? envKeys };
-}
 
 function actorOf(c: Context<ApiEnv>) {
   const actor = c.var.actor;
@@ -661,10 +639,10 @@ async function undoClosure(
 // Registration. ---------------------------------------------------------------------
 
 /** The account routes; one line in routes/index.ts calls this. */
-export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
+export function registerAccount(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db, keys } = options;
   app.openapi(activityRoute, async (c) => {
     const { actor } = actorOf(c);
-    const { db } = injected(c);
     const { cursor, limit } = c.req.valid("query");
     let after: { occurredAt: Date; id: string } | null = null;
     if (cursor !== undefined) {
@@ -692,7 +670,6 @@ export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(exportRoute, async (c) => {
     const { actor } = actorOf(c);
-    const { db, keys } = injected(c);
     const me = actor.id;
     const cache = createKeyCache();
     // The key and the audit row first, in their own transaction, so a
@@ -743,7 +720,6 @@ export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(closeRoute, async (c) => {
     const { actor, session } = actorOf(c);
-    const { db } = injected(c);
     const { mode } = c.req.valid("json");
     const outcome = await closeAccount(db, actor.id, session.id, mode);
     if (outcome === "open") {
@@ -755,14 +731,12 @@ export function registerAccount(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(closeStateRoute, async (c) => {
     const { actor } = actorOf(c);
-    const { db } = injected(c);
     const open = await withActor(actor.id, (tx) => openClosure(tx, actor.id), db);
     return c.json({ request: open === undefined ? null : closureBody(open) }, 200);
   });
 
   app.openapi(closeUndoRoute, async (c) => {
     const { actor } = actorOf(c);
-    const { db } = injected(c);
     const outcome = await undoClosure(db, actor.id);
     if (outcome === "none") return problemAt(c, 404, "not_found");
     if (outcome === "closed") {

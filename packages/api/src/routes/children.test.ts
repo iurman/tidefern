@@ -13,7 +13,9 @@ import type {
   Problem,
 } from "@tidefern/schemas";
 
+import { createApp } from "../app";
 import { FRESH_AUTHENTICATION_REQUIRED } from "../auth";
+import { realCalendarClock } from "../clock";
 import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "../middleware/index";
 import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
@@ -24,7 +26,6 @@ import {
   ID_IN_USE,
   LAST_GUARDIAN,
   STALE_VERSION,
-  configureChildren,
   guardianConsentHash,
 } from "./children";
 import { CHILD_CONSENT_NOT_WITHDRAWN_HERE } from "./profile";
@@ -982,6 +983,71 @@ describe("measurements", () => {
   });
 });
 
+describe("a cursor neither list issued", () => {
+  /** A cursor as the lists write one: base64url of a JSON object of strings. */
+  const forged = (parts: Record<string, string>) =>
+    Buffer.from(JSON.stringify(parts), "utf8").toString("base64url");
+  const SOME_ID = "018f5e7a-4000-7000-8000-0000000000ff";
+  const MALFORMED = [
+    "not-a-cursor",
+    forged({ i: "not-an-id" }),
+    forged({ d: "2026-02-31", i: SOME_ID }),
+    forged({ d: "yesterday", i: SOME_ID }),
+    Buffer.from("[1,2]", "utf8").toString("base64url"),
+  ];
+  // Shaped like a cursor, but one the other list (or the notes or events list) issues.
+  const FOREIGN_TO_CHILDREN = [
+    forged({ d: DAY_TEN, i: SOME_ID }),
+    forged({ o: "desc", d: DAY_TEN, t: "2026-10-05T05:00:00.000000Z", i: SOME_ID }),
+    Buffer.from(`${DAY_TEN}|${SOME_ID}`, "utf8").toString("base64url"),
+  ];
+  const FOREIGN_TO_MEASUREMENTS = [
+    forged({ i: SOME_ID }),
+    forged({ d: DAY_TEN }),
+    forged({ o: "desc", d: DAY_TEN, t: "2026-10-05T05:00:00.000000Z", i: SOME_ID }),
+    Buffer.from(`${DAY_TEN}|${SOME_ID}`, "utf8").toString("base64url"),
+  ];
+  /**
+   * Over the 200-character bound but otherwise exactly what each list issues:
+   * the right keys and values, with JSON whitespace after them. Only the
+   * length check can refuse these.
+   */
+  const padded = (parts: Record<string, string>) =>
+    Buffer.from(`${JSON.stringify(parts)}${" ".repeat(300)}`, "utf8").toString("base64url");
+  const OVERSIZED_FOR_CHILDREN = padded({ i: SOME_ID });
+  const OVERSIZED_FOR_MEASUREMENTS = padded({ d: DAY_TEN, i: SOME_ID });
+
+  it("answers the children list a 422 on the cursor, never a database error", async () => {
+    for (const cursor of [...MALFORMED, ...FOREIGN_TO_CHILDREN, OVERSIZED_FOR_CHILDREN]) {
+      const response = await call("GET", `/children?cursor=${cursor}`);
+      const body = await expectProblem(response, 422, "validation_failed");
+      expect(body.errors?.map((error) => error.path)).toEqual(["cursor"]);
+    }
+  });
+
+  it("answers the measurements list a 422 on the cursor, never a database error", async () => {
+    for (const cursor of [...MALFORMED, ...FOREIGN_TO_MEASUREMENTS, OVERSIZED_FOR_MEASUREMENTS]) {
+      const response = await call("GET", `/children/${childId}/measurements?cursor=${cursor}`);
+      const body = await expectProblem(response, 422, "validation_failed");
+      expect(body.errors?.map((error) => error.path)).toEqual(["cursor"]);
+    }
+  });
+
+  it("still pages both lists with the cursors they issue", async () => {
+    const first = await json<{ items: ChildMeasurement[]; nextCursor: string | null }>(
+      await call("GET", `/children/${childId}/measurements?limit=1`),
+    );
+    expect(first.nextCursor).not.toBeNull();
+    const second = await call(
+      "GET",
+      `/children/${childId}/measurements?limit=1&cursor=${first.nextCursor}`,
+    );
+    expect(second.status).toBe(200);
+    const children = await call("GET", `/children?cursor=${forged({ i: SOME_ID })}`);
+    expect(children.status).toBe(200);
+  });
+});
+
 describe("milestones", () => {
   it("serves the checklist for the child's age and for a chosen age, and refuses an age that is not one", async () => {
     const own = await json<MilestoneChecklist>(
@@ -1169,7 +1235,15 @@ describe("the guardian's consent on the child's behalf", () => {
       },
     };
     const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    configureChildren({ db, keys: broken });
+    // The same database and sessions behind an app whose key provider cannot wrap.
+    const sound = app;
+    app = createApp({
+      auth: fixture.auth,
+      db,
+      keys: broken,
+      log: { sink: () => undefined },
+      clock: realCalendarClock,
+    });
     try {
       const response = await call("POST", "/children", {
         token: CHILDREN_TOKENS.cara,
@@ -1178,7 +1252,7 @@ describe("the guardian's consent on the child's behalf", () => {
       });
       await expectProblem(response, 500, "internal");
     } finally {
-      configureChildren({ db, keys: fixture.keys });
+      app = sound;
       quiet.mockRestore();
     }
     expect(await createFootprint()).toEqual(before);

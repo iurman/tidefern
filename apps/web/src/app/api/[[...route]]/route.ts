@@ -98,7 +98,7 @@ const app = createApp({
 // The invitation mail goes out through the same transport as Better Auth's
 // (Resend on production, capture under E2E_MAIL_CAPTURE, the console
 // otherwise). Without this the invitation route answers 503 and sends nothing.
-configureSharing(app, { db, mailer });
+configureSharing(app, { mailer });
 // The reminder emails (task H10): the same transport, the generic template
 // from packages/auth, and links on the site's origin (`site.url`: SITE_URL,
 // else the host Vercel supplies; architecture 10.2 and 17.1). Without this a

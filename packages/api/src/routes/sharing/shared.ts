@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { OpenAPIHono } from "@hono/zod-openapi";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { uuidv7 } from "@tidefern/core";
 
 import type { ApiEnv } from "../../context";
 import type { Mailer } from "../../jobs/notice";
@@ -21,13 +21,11 @@ export { uuidv7 };
  * `@tidefern/auth/server` chose for Better Auth, so invitation mail takes
  * the same transport. Without a mailer the invitation route fails closed
  * with a 503 and sends nothing: there is no console fallback that would
- * print the address and the live link into a function log. Without a
- * database `withActor()` opens its transactions on the db package's
- * production client, which is the one the host passes `createApp` anyway;
- * tests pass PGlite.
+ * print the address and the live link into a function log. The database
+ * is not here: the sharing routes take it from `createApp()`'s `db`, as
+ * every area does (`AreaOptions`).
  */
 export interface SharingDependencies {
-  db?: ActorDatabase | undefined;
   mailer?: Mailer | undefined;
   /** The https origin links are built on; the request's own origin when unset. */
   siteUrl?: string | undefined;

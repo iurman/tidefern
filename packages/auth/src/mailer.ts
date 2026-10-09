@@ -20,17 +20,51 @@ export interface Mailer {
   send(message: MailMessage): Promise<void>;
 }
 
+/** Every http or https URL in a plain text body. */
+const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"]+/g;
+
 /**
- * Renders mail to stdout, the development and test transport. The address
- * and the link are printed because a developer needs to click the link; no
- * health data ever reaches these callbacks, so nothing else can leak here.
+ * Where a developer reads the withheld links instead. The capture endpoint is
+ * mounted only off Vercel, so the hint names a local run; a preview has no
+ * such endpoint.
+ */
+const CONSOLE_LINK_HINT =
+  "Locally, links are not printed because they carry a credential: run with E2E_MAIL_CAPTURE=true and read GET /api/internal/e2e/mail for them.";
+
+/**
+ * A link reduced to its origin. A verification, reset or invitation link
+ * carries its token in the query, the path or the fragment, and a token is a
+ * credential, so nothing past the origin is printed.
+ */
+function withheld(url: string): string {
+  try {
+    return `${new URL(url).origin}/[link withheld]`;
+  } catch {
+    return "[link withheld]";
+  }
+}
+
+/**
+ * Renders mail to stdout, the transport for local runs, previews and CI. A
+ * preview's or CI's stdout is a log the deployment keeps, so every link in
+ * the body is cut to its origin and a token never reaches it; a developer
+ * reads the full link from the capture endpoint (`E2E_MAIL_CAPTURE=true`),
+ * which is how the browser tests read it too. No health data ever reaches
+ * these callbacks, so nothing else can leak here.
  */
 export class ConsoleMailer implements Mailer {
   constructor(private readonly write: (line: string) => void = (line) => console.log(line)) {}
 
   async send(message: MailMessage): Promise<void> {
     this.write(`mail to=${message.to} subject=${JSON.stringify(message.subject)}`);
-    this.write(message.text);
+    let withheldAny = false;
+    this.write(
+      message.text.replace(URL_IN_TEXT, (url) => {
+        withheldAny = true;
+        return withheld(url);
+      }),
+    );
+    if (withheldAny) this.write(CONSOLE_LINK_HINT);
   }
 }
 

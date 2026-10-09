@@ -6,8 +6,9 @@ import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { can, listScope, stageAfter } from "@tidefern/core";
 import type { Category, Pregnancy, Stage } from "@tidefern/core";
 import { isActorId, schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { enqueue } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 import {
   CONSENT_DISCLOSURES,
   ConsentInput,
@@ -25,6 +26,7 @@ import type { Consent, ConsentBasis, DataCategory, Processor } from "@tidefern/s
 
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
+import type { AreaOptions } from "./index";
 import { problem } from "../problem";
 import { lockClosure, revokeAtClosure } from "./account";
 
@@ -287,17 +289,6 @@ function actorOf(c: Context<ApiEnv>) {
   return actor;
 }
 
-/**
- * The database the routes open the actor's transaction on: the one the
- * host or a test bound as `db` on the Hono environment, or the db package's
- * production client when nothing is bound, which is the handle the Next.js
- * host passes to `createApp` as well.
- */
-export function databaseFor(c: Context<ApiEnv>): ActorDatabase | undefined {
-  const bindings = c.env as unknown as { db?: ActorDatabase } | undefined;
-  return bindings?.db;
-}
-
 function profileBody(row: ProfileRow): Profile {
   return {
     displayName: row.displayName,
@@ -307,6 +298,8 @@ function profileBody(row: ProfileRow): Profile {
     units: row.units,
     notificationDetail: row.notificationDetail,
     ageAttestedAt: row.ageAttestedAt.toISOString(),
+    termsVersion: row.termsVersion,
+    termsAcceptedAt: row.termsAcceptedAt === null ? null : row.termsAcceptedAt.toISOString(),
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -518,6 +511,9 @@ async function putProfile(
         userId: actorId,
         ...fields,
         ageAttestedAt: now,
+        ...(input.termsVersion === undefined
+          ? {}
+          : { termsVersion: input.termsVersion, termsAcceptedAt: now }),
         createdAt: now,
         updatedAt: now,
         version: 1,
@@ -548,9 +544,14 @@ async function putProfile(
   if (refusal !== null) {
     return { kind: "refused", detail: refusal.detail, path: "stage", message: refusal.message };
   }
+  // A new terms version is a new acceptance; the same one, or none, keeps the last.
+  const terms =
+    input.termsVersion === undefined || input.termsVersion === existing.termsVersion
+      ? {}
+      : { termsVersion: input.termsVersion, termsAcceptedAt: now };
   const [row] = await tx
     .update(schema.profiles)
-    .set({ ...fields, updatedAt: now, version: existing.version + 1 })
+    .set({ ...fields, ...terms, updatedAt: now, version: existing.version + 1 })
     .where(and(eq(schema.profiles.userId, actorId), eq(schema.profiles.version, existing.version)))
     .returning();
   // The version guard in the WHERE lost a race with another writer.
@@ -959,7 +960,8 @@ async function dataSummary(
 }
 
 /** Adds the profile, consent and data summary routes; called once from the registry. */
-export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
+export function registerProfile(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(getProfileRoute, async (c) => {
     const actor = actorOf(c);
     const [row] = await withActor(
@@ -970,7 +972,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           .from(schema.profiles)
           .where(and(eq(schema.profiles.userId, actor.id), isNull(schema.profiles.deletedAt)))
           .limit(1),
-      databaseFor(c),
+      db,
     );
     if (row === undefined) return problem(c, 404, "not_found");
     c.header("ETag", `"${row.version}"`);
@@ -986,7 +988,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const outcome = await withActor(
       actor.id,
       (tx) => putProfile(tx, actor.id, input, ifMatch, now),
-      databaseFor(c),
+      db,
     );
     switch (outcome.kind) {
       case "created":
@@ -1034,7 +1036,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
             })),
           )
           .returning(),
-      databaseFor(c),
+      db,
     );
     rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const first = rows[0];
@@ -1080,7 +1082,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           )
           .orderBy(asc(schema.consents.id))
           .limit(limit + 1),
-      databaseFor(c),
+      db,
     );
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
@@ -1104,7 +1106,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
         if (decision !== "proceed") return { kind: decision };
         return withdrawAndClose(tx, actor.id, session.id, id, now);
       },
-      databaseFor(c),
+      db,
     );
     switch (outcome.kind) {
       case "missing":
@@ -1131,7 +1133,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(dataSummaryRoute, async (c) => {
     const actor = actorOf(c);
-    const body = await withActor(actor.id, (tx) => dataSummary(tx, actor), databaseFor(c));
+    const body = await withActor(actor.id, (tx) => dataSummary(tx, actor), db);
     return c.json(body, 200);
   });
 }

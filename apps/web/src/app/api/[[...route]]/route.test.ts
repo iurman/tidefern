@@ -208,10 +208,7 @@ describe("the API host", () => {
 
     const app = host.createApp.mock.results[0]?.value;
     expect(host.configureSharing).toHaveBeenCalledTimes(1);
-    expect(host.configureSharing).toHaveBeenCalledWith(app, {
-      db: host.appDb,
-      mailer: host.mailer,
-    });
+    expect(host.configureSharing).toHaveBeenCalledWith(app, { mailer: host.mailer });
 
     expect(host.configureReminders).toHaveBeenCalledTimes(1);
     const reminders = host.configureReminders.mock.lastCall?.[0] as Api.ReminderDependencies;

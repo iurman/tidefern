@@ -160,13 +160,13 @@ describe("creating the profile", () => {
     weekStart: 7,
   };
 
-  it("sends the age attestation with it", async () => {
+  it("sends the age attestation and the terms version accepted with it", async () => {
     answers.push(json({}, 201));
     expect(await createProfile(client, body)).toEqual({ ok: true });
     expect(sent[0]).toMatchObject({
       method: "PUT",
       path: "/api/v1/me/profile",
-      body: { ...body, ageAttested: true },
+      body: { ...body, ageAttested: true, termsVersion: TERMS_VERSION },
     });
   });
 
@@ -192,7 +192,10 @@ describe("creating the profile", () => {
       "GET /api/v1/me/profile",
       "PUT /api/v1/me/profile",
     ]);
-    expect(sent[2]).toMatchObject({ ifMatch: "1", body: { ...changed, ageAttested: true } });
+    expect(sent[2]).toMatchObject({
+      ifMatch: "1",
+      body: { ...changed, ageAttested: true, termsVersion: TERMS_VERSION },
+    });
   });
 
   it("fails when the replacement is refused, so the saved profile never silently keeps her old choice", async () => {

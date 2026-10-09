@@ -33,7 +33,6 @@ import {
   TOKENS,
   asAppRole,
   createAccountFixture,
-  withInjected,
 } from "../test/account";
 import type { AccountFixture } from "../test/account";
 import {
@@ -66,7 +65,7 @@ const KEYS = {
   anonymous: "018f5e7a-3100-7000-8000-00000000000c",
 } as const;
 
-type Client = ReturnType<typeof withInjected>;
+type Client = ReturnType<typeof createApp>;
 
 /**
  * The whole app on the fixture's database, or on `database` when given:
@@ -74,12 +73,12 @@ type Client = ReturnType<typeof withInjected>;
  * `tidefern_app`, as it does on CI and in production.
  */
 function build(fixture: AccountFixture, database: ActorDatabase = fixture.harness.db): Client {
-  const app = createApp({
+  return createApp({
     auth: fixture.auth,
     db: database,
+    keys: KEK,
     log: { sink: () => undefined },
   });
-  return withInjected(app, { db: database, keys: KEK });
 }
 
 /**

@@ -1,5 +1,6 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
 import { secureHeaders } from "hono/secure-headers";
+import type { KeyProvider } from "@tidefern/crypto";
 import type { ActorDatabase } from "@tidefern/db";
 import { withSession } from "./auth";
 import type { SessionAuth } from "./auth";
@@ -51,6 +52,13 @@ export interface ApiOptions {
    * package's production client is used.
    */
   db?: ActorDatabase;
+  /**
+   * The key encryption key provider for the encrypted columns (architecture
+   * 9.2), handed to every route area with `db`. Without one the areas share
+   * an `EnvKeyProvider` over `TIDEFERN_KEK_V1`, read on first use; tests
+   * pass a fixed provider.
+   */
+  keys?: KeyProvider;
   /**
    * The job runner (architecture 10.1): the owner-role connection, the
    * handler registry, `CRON_SECRET`, and the mailer and address for the
@@ -199,7 +207,7 @@ export function createApp(options: ApiOptions = {}) {
   );
 
   app.openapi(meRoute, (c) => c.json(meBody(c), 200));
-  registerRoutes(app, { db: options.db });
+  registerRoutes(app, { db: options.db, keys: options.keys });
 
   app.notFound((c) => problem(c, 404, "not_found"));
   app.onError((error, c) => {

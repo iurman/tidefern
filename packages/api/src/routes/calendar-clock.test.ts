@@ -19,8 +19,6 @@ import { IDEMPOTENCY_KEY_HEADER } from "../middleware/index";
 import { ANNA, BEN, CARA, OWN_ORIGIN, TOKENS, createActorFixture } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
 import type { ApiTestDatabase } from "../test/database";
-import { configureChildren } from "./children";
-import { configureCycle } from "./cycle";
 import { Me } from "./me";
 
 /**
@@ -180,16 +178,17 @@ beforeAll(async () => {
     .insert(schema.childGuardians)
     .values({ id: "018f5e7a-2000-7000-8000-00000000e151", childId: CHILD, userId: ANNA });
 
-  configureCycle({ db });
-  configureChildren({ db, keys: new FixedKeyProvider(randomBytes(32), "test") });
+  // One key provider for both apps, as one host would hand both areas.
+  const keys = new FixedKeyProvider(randomBytes(32), "test");
   const log = { sink: () => undefined };
   frozen = createApp({
     auth: fixture.auth,
     db,
+    keys,
     log,
     clock: calendarClock({ TIDEFERN_FAKE_NOW: FROZEN }),
   });
-  real = createApp({ auth: fixture.auth, db, log, clock: realCalendarClock });
+  real = createApp({ auth: fixture.auth, db, keys, log, clock: realCalendarClock });
 });
 
 afterAll(async () => {

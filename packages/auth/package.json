@@ -17,6 +17,7 @@
   "dependencies": {
     "@better-auth/drizzle-adapter": "1.7.7",
     "@better-auth/passkey": "1.7.7",
+    "@tidefern/core": "workspace:*",
     "@tidefern/crypto": "workspace:*",
     "@tidefern/db": "workspace:*",
     "better-auth": "1.7.7"

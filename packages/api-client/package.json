@@ -15,7 +15,6 @@
   },
   "devDependencies": {
     "@tidefern/config": "workspace:*",
-    "@tidefern/db": "workspace:*",
     "@types/node": "24.19.1",
     "eslint": "10.12.0",
     "openapi-typescript": "7.13.0",
@@ -26,6 +25,7 @@
     "zod": "4.6.5"
   },
   "dependencies": {
+    "@tidefern/core": "workspace:*",
     "openapi-fetch": "0.17.0"
   }
 }

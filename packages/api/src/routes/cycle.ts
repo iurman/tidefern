@@ -19,8 +19,8 @@ import type {
   PeriodStart,
 } from "@tidefern/core";
 import { schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { uuidv7 } from "@tidefern/core";
 import {
   CycleEntry,
   CycleEntryList,
@@ -41,6 +41,7 @@ import { requireActor } from "../auth";
 import { pinCalendar } from "../clock";
 import type { CalendarClock } from "../clock";
 import type { ApiEnv } from "../context";
+import type { AreaOptions } from "./index";
 import { audit, auditActions, auditDay } from "../middleware/audit";
 import { problem } from "../problem";
 import type { ProblemCode } from "../problem";
@@ -64,27 +65,6 @@ import type { ProblemCode } from "../problem";
  * `refresh_cycle_prediction()`, which re-checks her `cycle.history`
  * contribute grant and sees the pregnancy she cannot.
  */
-
-export interface CycleOptions {
-  /**
-   * The database `withActor()` opens the actor's transaction on. The pooled
-   * production client is the default; the test harness passes PGlite.
-   */
-  db?: ActorDatabase | undefined;
-}
-
-/**
- * The registry calls `registerCycle(app)` with nothing else and the request
- * context carries no database, so this area keeps its one runtime setting
- * here. Production needs no call: `withActor()` defaults to the pooled
- * client. The test harness calls `configureCycle()` before its first
- * request. The day the host puts the database on the context, this goes.
- */
-const runtime: CycleOptions = {};
-
-export function configureCycle(options: CycleOptions): void {
-  runtime.db = options.db;
-}
 
 /** The problem statuses the cycle routes declare. */
 type CycleProblemStatus = 404 | 409 | 422;
@@ -810,7 +790,8 @@ async function symptomsByEntry(
   return byEntry;
 }
 
-export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
+export function registerCycle(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(vocabularyRoute, (c) => c.json(cycleVocabulary(), 200));
 
   app.openapi(listEntriesRoute, async (c) => {
@@ -890,7 +871,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
             : null;
         return { items, nextCursor };
       },
-      runtime.db,
+      db,
     );
     return c.json(page, 200);
   });
@@ -1009,7 +990,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         }
         return { kind: "written", item: entryItem(row, symptoms, access) };
       },
-      runtime.db,
+      db,
     ).catch((error: unknown): { kind: "refused" } => {
       // A grant revoked after the session was loaded: the write rolled back.
       if (error instanceof ContributeGrantGoneError) return { kind: "refused" };
@@ -1065,7 +1046,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         await storePrediction(tx, subjectId, computed.prediction, now);
         return "deleted";
       },
-      runtime.db,
+      db,
     );
     if (outcome === "missing") return fail(c, 404, "not_found");
     if (outcome === "stale") return fail(c, 409, "conflict", { detail: VERSION_MISMATCH });
@@ -1093,7 +1074,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
             ? predictionBody(subjectId, now, factsOf(null))
             : predictionBody(subjectId, live.computedAt, factsOfRow(live));
         },
-        runtime.db,
+        db,
       );
       return c.json(shared, 200);
     }
@@ -1110,7 +1091,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
           today,
         );
       },
-      runtime.db,
+      db,
     );
     return c.json(body, 200);
   });
@@ -1135,7 +1116,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         }
         return derived;
       },
-      runtime.db,
+      db,
     );
     if (status === null) return fail(c, 404, "not_found");
     return c.json(status, 200);

@@ -10103,6 +10103,13 @@ export interface components {
        * @description When the person attested to being 18 or older
        */
       ageAttestedAt: string;
+      /** @description The version of the terms last accepted; null when none was recorded */
+      termsVersion: string | null;
+      /**
+       * Format: date-time
+       * @description When that version was accepted; null when none was recorded
+       */
+      termsAcceptedAt: string | null;
       /** @description The value `If-Match` carries on the next update */
       version: number;
       /**
@@ -10140,6 +10147,8 @@ export interface components {
        * @enum {boolean}
        */
       ageAttested?: true;
+      /** @description The version of the terms accepted; a new version records a new acceptance */
+      termsVersion?: string;
     };
     ConsentRecord: {
       /**

@@ -134,6 +134,8 @@ describe("the journal", () => {
       // Task E10: the closure's grant revocation for the app role, and
       // pg_temp last on every function's search_path.
       "0013_closure_grant_revocation_and_search_path",
+      // Task J3c: the terms version and its acceptance instant on profiles.
+      "0014_profile_terms_acceptance",
     ]);
 
     const files = readMigrationFiles(migrationConfig);

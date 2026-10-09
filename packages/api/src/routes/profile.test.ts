@@ -50,6 +50,8 @@ import {
 
 // Synthetic people and records only. Dan has no relationship with anyone.
 const DAN = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f40";
+// Eve onboards in her own test only, the here-for-someone-else way.
+const EVE = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f41";
 const HOUSEHOLD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9fa0";
 const CHILD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f11";
 const CHILD_CONSENT = "018f5e7a-5000-7000-8000-000000000001";
@@ -62,7 +64,7 @@ const BEN_SESSION = "018f5e7a-7000-7000-8000-000000000003";
 // A grant Anna holds: Ben shares his status with her.
 const HELD_GRANT = "018f5e7a-5000-7000-8000-00000000b004";
 
-const TOKEN = { ...TOKENS, dan: "dan", annaStale: "anna-stale" } as const;
+const TOKEN = { ...TOKENS, dan: "dan", eve: "eve", annaStale: "anna-stale" } as const;
 
 // Distinct values so a leak of Anna's profile into another response is visible as text.
 const ANNA_NAME = "Annabel Quill";
@@ -153,6 +155,10 @@ beforeAll(async () => {
     .insert(schema.user)
     .values({ id: DAN, name: "Dan", email: "dan@example.com", emailVerified: true });
   fixture.auth.signIn(TOKEN.dan, DAN, "dan@example.com", 60);
+  await db
+    .insert(schema.user)
+    .values({ id: EVE, name: "Eve", email: "eve@example.com", emailVerified: true });
+  fixture.auth.signIn(TOKEN.eve, EVE, "eve@example.com", 60);
   // Signed in an hour ago: a session, but not a fresh authentication.
   fixture.auth.signIn(TOKEN.annaStale, ANNA, "anna@example.com", 3600);
   // Anna's request session gets a UUID id like a Better Auth row, so the
@@ -496,6 +502,68 @@ describe("GET and PUT /v1/me/profile", () => {
     }
     // Dan, a foreign actor, has no profile and sees no one else's.
     expect((await call("GET", "/v1/me/profile", TOKEN.dan)).status).toBe(404);
+  });
+
+  it("records the terms version accepted at creation, with no consent row, as onboarding sends it", async () => {
+    const before = Date.now();
+    const created = await call("PUT", "/v1/me/profile", TOKEN.eve, {
+      body: profileInput({
+        displayName: "Eve",
+        timeZone: "UTC",
+        stage: "none",
+        ageAttested: true,
+        termsVersion: "2026-10",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const body = Profile.parse(await created.json());
+    expect(body.termsVersion).toBe("2026-10");
+    expect(Date.parse(body.termsAcceptedAt ?? "")).toBeGreaterThanOrEqual(before - 1000);
+    // Accepting the terms is never consent (architecture 7.4): no consent row is written.
+    const consents = await harness.db
+      .select({ id: schema.consents.id })
+      .from(schema.consents)
+      .where(eq(schema.consents.subjectId, EVE));
+    expect(consents).toEqual([]);
+    const read = Profile.parse(await (await call("GET", "/v1/me/profile", TOKEN.eve)).json());
+    expect(read).toEqual(body);
+  });
+
+  it("keeps a profile made without the terms version at null until a write names one", async () => {
+    const plain = Profile.parse(await (await call("GET", "/v1/me/profile", TOKENS.ben)).json());
+    expect(plain.termsVersion).toBeNull();
+    expect(plain.termsAcceptedAt).toBeNull();
+
+    const accepted = await call("PUT", "/v1/me/profile", TOKENS.ben, {
+      body: profileInput({ displayName: "Ben", timeZone: "UTC", termsVersion: "2026-10" }),
+      headers: { "if-match": String(plain.version) },
+    });
+    expect(accepted.status).toBe(200);
+    const first = Profile.parse(await accepted.json());
+    expect(first.termsVersion).toBe("2026-10");
+    expect(first.termsAcceptedAt).not.toBeNull();
+
+    // The same version again, or none, leaves the acceptance as it was.
+    for (const extra of [{ termsVersion: "2026-10" }, {}]) {
+      const current = Profile.parse(await (await call("GET", "/v1/me/profile", TOKENS.ben)).json());
+      const again = await call("PUT", "/v1/me/profile", TOKENS.ben, {
+        body: profileInput({ displayName: "Ben", timeZone: "UTC", ...extra }),
+        headers: { "if-match": String(current.version) },
+      });
+      expect(again.status).toBe(200);
+      const body = Profile.parse(await again.json());
+      expect(body.termsVersion).toBe("2026-10");
+      expect(body.termsAcceptedAt).toBe(first.termsAcceptedAt);
+    }
+
+    // A label that is not a version is refused on the field, as on the consent.
+    const current = Profile.parse(await (await call("GET", "/v1/me/profile", TOKENS.ben)).json());
+    const refused = await call("PUT", "/v1/me/profile", TOKENS.ben, {
+      body: profileInput({ displayName: "Ben", timeZone: "UTC", termsVersion: "I had a loss" }),
+      headers: { "if-match": String(current.version) },
+    });
+    expect(refused.status).toBe(422);
+    expect((await problemOf(refused)).errors?.map((error) => error.path)).toContain("termsVersion");
   });
 });
 

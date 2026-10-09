@@ -74,6 +74,11 @@ export type NotificationDetail = z.infer<typeof NotificationDetail>;
 /** First day of the week, Intl convention: 1 is Monday, 7 is Sunday. */
 export const WeekStart = z.int().min(1).max(7).describe("1 is Monday, 7 is Sunday");
 
+/** A version label such as `2026-10`: letters, digits, dots and hyphens only, never prose. */
+const versionLabel = z
+  .string()
+  .regex(/^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$/, "Expected a version label such as 2026-10");
+
 /**
  * The profile as its owner writes it with `PUT /v1/me/profile`, the whole
  * record each time. `ageAttested` is the sign-up attestation of being 18 or
@@ -81,6 +86,12 @@ export const WeekStart = z.int().min(1).max(7).describe("1 is Monday, 7 is Sunda
  * recorded once as `ageAttestedAt`, and ignored afterwards. The display
  * name is the one plaintext text column a person writes; it is an identity
  * fact a related person may see, never a health fact, and it is capped.
+ * `termsVersion` is the version of the terms the person accepted, sent by
+ * onboarding on every path, the here-for-someone-else one included, where
+ * no consent is asked: accepting the terms is never consent (architecture
+ * record 7.4), so it lives on the profile and not in a consent row. A new
+ * version records a new acceptance instant; the same one, or none, keeps
+ * the last.
  */
 export const ProfileInput = z
   .object({
@@ -94,6 +105,9 @@ export const ProfileInput = z
       .literal(true)
       .optional()
       .describe("The attestation of being 18 or older; required when the profile is created"),
+    termsVersion: versionLabel
+      .optional()
+      .describe("The version of the terms accepted; a new version records a new acceptance"),
   })
   .meta({ id: "ProfileInput" });
 export type ProfileInput = z.infer<typeof ProfileInput>;
@@ -108,6 +122,13 @@ export const Profile = z
     units: Units,
     notificationDetail: NotificationDetail,
     ageAttestedAt: instant.describe("When the person attested to being 18 or older"),
+    termsVersion: z
+      .string()
+      .nullable()
+      .describe("The version of the terms last accepted; null when none was recorded"),
+    termsAcceptedAt: instant
+      .nullable()
+      .describe("When that version was accepted; null when none was recorded"),
     version: z.int().min(1).describe("The value `If-Match` carries on the next update"),
     createdAt: instant,
     updatedAt: instant,
@@ -152,11 +173,6 @@ export const GuardianConsentInput = z
       "The guardian's consent on the child's behalf; a child is never created without it",
   });
 export type GuardianConsentInput = z.infer<typeof GuardianConsentInput>;
-
-/** A version label such as `2026-10`: letters, digits, dots and hyphens only, never prose. */
-const versionLabel = z
-  .string()
-  .regex(/^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$/, "Expected a version label such as 2026-10");
 
 /**
  * The collection consent as the onboarding page collected it (architecture
