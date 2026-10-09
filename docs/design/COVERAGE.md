@@ -107,14 +107,13 @@ Gaps:
 ## Links the specimens make to routes that do not exist yet
 
 Specimens use the product's real destinations with synthetic data. These
-answer 404 on main because later Phase 1 tasks build them: `/calendar`,
-`/journey`, `/journey/dating`, `/journey/start`, `/family`,
-`/family/child/milestones`, `/sharing`, `/settings`, `/log` and
-`/log/<date>`. The link check allows a 404 only for those exact paths (and a
-`YYYY-MM-DD` date under `/log`). Every other
-internal link must answer 200, or 307 to `/sign-in` for a signed-in route
-(`/today`, `/settings/sound`). When a route lands, its links start answering
-200 with no change to the test.
+answer 404 on main because no route serves them yet: `/journey/dating`,
+`/journey/start`, `/family/child/milestones` and `/log` (the day page lives
+at `/log/<date>`). The link check allows a 404 only for those exact paths.
+Every other internal link must answer 200, or 307 to `/sign-in` for a
+signed-in route (`/today`, `/calendar`, `/journey`, `/family`, `/sharing`,
+`/settings`, `/settings/sound`, `/log/<date>`); task J1 took the routes H2
+to H7 built off the list, so the check holds them to that.
 
 ## Not checked here
 

@@ -105,31 +105,28 @@ test("every catalog href resolves to exactly one element, and every section is c
 });
 
 /**
- * Product destinations the specimens link to with synthetic data (the shell's
- * tabs, a day's log, the journey and family screens). Phase 1 builds these
- * routes in later tasks, so today they may answer 404; every other internal
- * link must answer 200. docs/design/COVERAGE.md lists them.
+ * Product destinations the specimens link to with synthetic data that no
+ * route serves yet, so they may answer 404; every other internal link must
+ * answer 200, or 307 to sign-in for a signed-in route. The shell's tabs and
+ * a day's log (`/calendar`, `/journey`, `/family`, `/sharing`, `/settings`,
+ * `/log/<date>`) were built in tasks H2 to H7 and left this list in task
+ * J1, so the check now holds them to 200 or 307. docs/design/COVERAGE.md
+ * lists the rest.
  */
 const plannedProductRoutes = new Set([
-  "/calendar",
-  "/journey",
   "/journey/dating",
   "/journey/start",
-  "/family",
   "/family/child/milestones",
-  "/sharing",
-  "/settings",
   "/log",
 ]);
-const plannedDayLogRoute = /^\/log\/\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Only the exact unbuilt paths are allowed, so a route that exists today
- * (`/settings/sound`, `/settings/devices`, `/settings/two-factor`) still fails
- * the check if it disappears.
+ * (`/today`, `/calendar`, `/settings/sound`, `/log/<date>`) still fails the
+ * check if it disappears.
  */
 function isPlannedProductRoute(path: string): boolean {
-  return plannedProductRoutes.has(path) || plannedDayLogRoute.test(path);
+  return plannedProductRoutes.has(path);
 }
 
 test("every internal link on every /design page answers 200 and every fragment resolves once", async ({
