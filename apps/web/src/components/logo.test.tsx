@@ -32,4 +32,22 @@ describe("Mark", () => {
       expect(img).toHaveAttribute("height", "200");
     }
   });
+
+  it("as the LCP element, preloads each variant at high priority for its system theme", async () => {
+    render(<Mark size={200} priority />);
+    // React hoists the preloads into the head; give it a tick to flush them.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    const links = Array.from(document.head.querySelectorAll('link[rel="preload"][as="image"]'));
+    const byHref = Object.fromEntries(
+      links.map((link) => [
+        link.getAttribute("href"),
+        [link.getAttribute("media"), link.getAttribute("fetchpriority")],
+      ]),
+    );
+    expect(byHref["/brand/tidefern-mark.svg"]).toEqual(["(prefers-color-scheme: light)", "high"]);
+    expect(byHref["/brand/tidefern-mark-dark.svg"]).toEqual([
+      "(prefers-color-scheme: dark)",
+      "high",
+    ]);
+  });
 });

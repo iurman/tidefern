@@ -1,4 +1,8 @@
 import Link from "next/link";
+import { preload } from "react-dom";
+
+const LIGHT_MARK = "/brand/tidefern-mark.svg";
+const DARK_MARK = "/brand/tidefern-mark-dark.svg";
 
 /**
  * The mark is a hand-authored vector reconstruction of the brand sheet, pending
@@ -15,12 +19,27 @@ export function Mark({
   /**
    * The page's LCP element, such as the home hero mark. Each variant is then lazy, so
    * only the one the theme shows is fetched (a hidden lazy image never loads), and at
-   * high priority: the pattern the installed Next docs give for theme images.
+   * high priority: the pattern the installed Next docs give for theme images. The
+   * header's smaller mark uses the same files and comes first in the document, so its
+   * low-priority request would otherwise be the one the hero shares; a high-priority
+   * preload per system theme makes the shared request early and high (task J2b).
    */
   priority?: boolean;
 }) {
   const loading = priority ? "lazy" : undefined;
   const fetchPriority = priority ? "high" : undefined;
+  if (priority) {
+    preload(LIGHT_MARK, {
+      as: "image",
+      fetchPriority: "high",
+      media: "(prefers-color-scheme: light)",
+    });
+    preload(DARK_MARK, {
+      as: "image",
+      fetchPriority: "high",
+      media: "(prefers-color-scheme: dark)",
+    });
+  }
   return (
     <span
       className={`mark ${className}`.trim()}
@@ -32,7 +51,7 @@ export function Mark({
         className="mark-light"
         loading={loading}
         fetchPriority={fetchPriority}
-        src="/brand/tidefern-mark.svg"
+        src={LIGHT_MARK}
         alt=""
         width={size}
         height={size}
@@ -42,7 +61,7 @@ export function Mark({
         className="mark-dark"
         loading={loading}
         fetchPriority={fetchPriority}
-        src="/brand/tidefern-mark-dark.svg"
+        src={DARK_MARK}
         alt=""
         width={size}
         height={size}
