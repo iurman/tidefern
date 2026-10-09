@@ -210,20 +210,13 @@ export default function TypePage() {
               <td className="tabular">20 KB</td>
               <td>SIL Open Font License 1.1</td>
             </tr>
-            <tr>
-              <th scope="row">
-                <code>figtree-latin-wght-italic.woff2</code>
-              </th>
-              <td>Figtree italic, weight 300 to 900</td>
-              <td className="tabular">21 KB</td>
-              <td>SIL Open Font License 1.1</td>
-            </tr>
           </tbody>
         </table>
         <p className="caption">
           Latin subsets from fontsource 5.3.0, self-hosted with the licence text beside each file
-          and loaded through next/font with swap and matched fallback metrics. Why these two faces
-          won is recorded in docs/design/TYPOGRAPHY.md.
+          and loaded through next/font with swap and matched fallback metrics. The two roman files
+          are preloaded on every route; the italic loads when the estimate sentence needs it. Why
+          these two faces won is recorded in docs/design/TYPOGRAPHY.md.
         </p>
       </section>
 
