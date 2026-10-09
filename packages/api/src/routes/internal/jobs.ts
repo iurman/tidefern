@@ -41,6 +41,14 @@ export interface JobsOptions {
   claimLimit?: number | undefined;
   /** How long a run may keep starting drain batches; `DEFAULT_DRAIN_BUDGET_MS` when unset. */
   drainBudgetMs?: number | undefined;
+  /**
+   * `false` turns off the inline drain only: work a request enqueues waits
+   * for the scheduled run at `/api/internal/jobs/run`, which is unchanged.
+   * Only the browser suite's server sets it (`E2E_JOBS_SCHEDULED_ONLY`, never
+   * on Vercel), so a spec can see the state between a close and the deletion
+   * and then run the job itself (task J3d). Unset means on.
+   */
+  inlineDrain?: boolean | undefined;
   /** The real clock, for tests; the calendar is the app's clock (clock.ts). */
   now?: (() => Date) | undefined;
   /** The reminder step; `enqueueReminders` when unset, replaced only in tests. */

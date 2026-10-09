@@ -207,6 +207,9 @@ jobs:
       # sends to /api/internal/jobs/run; OWNER_EMAIL is a test-only inbox the closure's processor
       # notice goes to, which the capture mailer keeps. Without them a closure past its window
       # waits and deletes nothing. None of the three is a secret: the database dies with the job.
+      # E2E_JOBS_SCHEDULED_ONLY turns off the inline drain on this server alone (never on Vercel),
+      # so a close waits for the scheduled run: the specs see the deleting view in a stable state,
+      # and the deletion flow then runs the job itself instead of racing one already in flight.
       - name: Start the production server against the seeded database
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -220,6 +223,7 @@ jobs:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
           CRON_SECRET: ci-only-cron-secret-0123456789abcdef-not-real
           OWNER_EMAIL: owner@example.test
+          E2E_JOBS_SCHEDULED_ONLY: "true"
         run: |
           cd apps/web
           setsid nohup node_modules/.bin/next start --port 3000 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-seeded.log" 2>&1 &

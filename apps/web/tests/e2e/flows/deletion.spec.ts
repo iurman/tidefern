@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { runDueJobs } from "../jobs";
-import { baseOrigin, onboard } from "../session";
+import { MAIL_CAPTURE_PATH, baseOrigin, onboard } from "../session";
 import {
   api,
   authAnswer,
@@ -19,9 +20,9 @@ import {
  * the last ten minutes); she lands on /closing, every page of the app
  * sends her back there, and she undoes it. Then she logs a day, closes
  * again and deletes now, which offers no undo, and the closure job runs
- * for real (architecture 11): inline after the close, then the scheduled
- * run through the cron route (jobs.ts). After that her session is gone,
- * her password signs nobody in, and her address makes a new account with
+ * for real (architecture 11) through the cron route (jobs.ts) until the
+ * processor notice says it finished. After that her session is gone, her
+ * password signs nobody in, and her address makes a new account with
  * another id and nothing held, all read through the API. One fresh
  * account of the test's own, made through the forms; no seeded persona
  * changes. Against a server without a database the sign-up form says the
@@ -43,6 +44,14 @@ interface Closure {
 }
 interface DataSummary {
   categories: { category: string; count: number }[];
+}
+
+/** The closure processor notices the mail capture holds; one lands as each closure finishes. */
+async function processorNotices(page: Page): Promise<number> {
+  const response = await page.request.get(`${baseOrigin()}${MAIL_CAPTURE_PATH}`);
+  expect(response.ok(), "the mail capture answers").toBe(true);
+  const { messages } = (await response.json()) as { messages: { subject: string }[] };
+  return messages.filter(({ subject }) => subject === "Tidefern processor notice").length;
 }
 
 /** Rows the data summary counts under every category together. */
@@ -120,6 +129,11 @@ test("from /account/delete signed out: sign in, close, the locked view, undo, cl
     expect(logged.status(), "her logged day").toBe(200);
     expect(heldRows(await api<DataSummary>(page, "/api/v1/me/data-summary"))).toBeGreaterThan(0);
 
+    // Anything an earlier spec left due runs now, so the run after her close finishes hers alone
+    // (one worker), and the processor notice it sends is hers.
+    expect((await runDueJobs(page.request)).failed, "jobs left by earlier specs").toBe(0);
+    const noticesBefore = await processorNotices(page);
+
     // Close again and delete now: its own words, and no undo.
     await page.goto("/settings/close-account");
     await page.getByRole("button", { name: "Close my account" }).click();
@@ -127,15 +141,33 @@ test("from /account/delete signed out: sign in, close, the locked view, undo, cl
     await expect(dialog).toContainText("There is no undo.");
     await dialog.getByRole("button", { name: "Delete my account now" }).click();
 
-    // The server runs the closure job straight after it answers (the inline drain of
-    // architecture 10.1, on the owner connection the suite's server now has), so whether the next
-    // page still finds her session is a race: she lands on the locked view, or already on
-    // sign-in. The scheduled run then drains whatever the inline one left, as Vercel Cron would.
-    // After both, her session is gone and no page of the app is hers.
-    await page.waitForURL(/\/(closing|sign-in)$/);
-    const run = await runDueJobs(page.request);
-    expect(run.failed, "jobs that failed in the run").toBe(0);
-    expect(run.dead, "jobs that died in the run").toBe(0);
+    // The suite's server keeps the closure job for the scheduled run (E2E_JOBS_SCHEDULED_ONLY, never
+    // on Vercel, where the inline drain starts it straight after the answer), so the view between
+    // the close and the deletion is stable here and gets the same checks as every other state.
+    await page.waitForURL(/\/closing$/);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(
+      "Your account is being deleted",
+    );
+    await expect(page.getByText("You chose to delete it now, so there is no undo.")).toBeVisible();
+    await expect(page.getByRole("button", { name: /Undo/ })).toHaveCount(0);
+    await checkState(page, "the locked view while deleting");
+
+    // The scheduled run, as Vercel Cron sends it, until the closure has finished: the closure
+    // sends the processor notice only once it is completed (architecture 11), after her rows, her
+    // key and her user are gone. A large closure can take more than one run.
+    let runs = 0;
+    while ((await processorNotices(page)) === noticesBefore) {
+      expect(runs, "scheduled runs before her closure finished").toBeLessThan(5);
+      const run = await runDueJobs(page.request);
+      expect(run.failed, "jobs that failed in the run").toBe(0);
+      expect(run.dead, "jobs that died in the run").toBe(0);
+      runs += 1;
+    }
+    expect(await processorNotices(page), "processor notices after her closure").toBe(
+      noticesBefore + 1,
+    );
+
+    // Her session is gone and no page of the app is hers.
     expect((await page.request.get("/api/v1/me")).status(), "her old session").toBe(401);
     for (const path of ["/closing", "/today", "/settings/close-account"]) {
       await page.goto(path);
