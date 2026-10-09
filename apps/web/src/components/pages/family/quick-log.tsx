@@ -376,7 +376,13 @@ export function QuickLog({
       ) : null}
       <BottomSheet open={sheet !== null} onClose={close} title={title}>
         {sheet === "feed" ? (
-          <form ref={formRef} className={styles.sheetForm} onSubmit={saveFeed} noValidate>
+          <form
+            method="post"
+            ref={formRef}
+            className={styles.sheetForm}
+            onSubmit={saveFeed}
+            noValidate
+          >
             <SegmentedControl<FeedMethod | "">
               label={copy.method}
               options={methodOptions}
@@ -454,7 +460,7 @@ export function QuickLog({
           </form>
         ) : null}
         {sheet === "diaper" ? (
-          <form className={styles.sheetForm} onSubmit={saveDiaper} noValidate>
+          <form method="post" className={styles.sheetForm} onSubmit={saveDiaper} noValidate>
             <SegmentedControl<DiaperContents | "">
               label={copy.contents}
               options={contentOptions}
@@ -476,7 +482,7 @@ export function QuickLog({
           </form>
         ) : null}
         {sheet === "sleep" ? (
-          <form className={styles.sheetForm} onSubmit={saveSleep} noValidate>
+          <form method="post" className={styles.sheetForm} onSubmit={saveSleep} noValidate>
             <p className={styles.sheetText}>
               {ongoingSleep !== null && ongoingSince !== null
                 ? copy.asleepSince(ongoingSince)

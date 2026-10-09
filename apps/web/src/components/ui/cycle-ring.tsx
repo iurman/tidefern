@@ -60,7 +60,7 @@ export interface CycleRingProps {
   latestStart: CalendarDate | null;
   /** The logged days of the current period, YYYY-MM-DD each, drawn as the solid arc. */
   loggedDays?: CalendarDate[];
-  /** Where the empty state's one action leads. */
+  /** Where the empty state's one action leads; by default the day page for `today`. */
   logHref?: string;
   /** The values are on their way; the ring keeps its size and says so. */
   loading?: boolean;
@@ -197,7 +197,14 @@ function Marks({ ring, loggedDays }: { ring: RingFacts; loggedDays: CalendarDate
 }
 
 export function CycleRing(props: CycleRingProps) {
-  const { today, loggedDays = [], logHref = "/log", loading = false, error, className } = props;
+  const {
+    today,
+    loggedDays = [],
+    logHref = `/log/${today}`,
+    loading = false,
+    error,
+    className,
+  } = props;
   const titleId = useId();
   const ring = loading || error ? null : facts(props);
   const rootClass = [styles.ring, className].filter(Boolean).join(" ");

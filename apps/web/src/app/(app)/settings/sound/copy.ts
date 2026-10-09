@@ -51,6 +51,8 @@ export function describePlayResult(result: PlayResult, cueName = "success cue"):
       return "Sound is off. Choose All or Actions only to hear it.";
     case "quiet":
       return "Quiet hours are on right now, so it stayed silent.";
+    case "hidden":
+      return "This tab was in the background, so it stayed silent.";
     case "locked":
       return "Your browser has not allowed sound yet. Press the button once more.";
     case "hover-level":

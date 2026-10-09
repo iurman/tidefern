@@ -130,6 +130,15 @@ describe("CycleRing", () => {
     expect(document.querySelectorAll(".today")).toHaveLength(0);
   });
 
+  it("sends the empty state's action to today's day page when no address is given", () => {
+    // Today's empty hero gives none; a bare /log is no route and answered 404.
+    render(<CycleRing today={today} prediction={null} latestStart={null} />);
+    expect(screen.getByRole("link", { name: "Log a period" })).toHaveAttribute(
+      "href",
+      "/log/2026-10-05",
+    );
+  });
+
   it("draws nothing predicted for basis none, which offers no date", () => {
     const none: CyclePrediction = {
       ...notEnough,

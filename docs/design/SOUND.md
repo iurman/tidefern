@@ -23,7 +23,8 @@ the code checks and what still needs a person with real phones.
   and the chapter prints and draws the same list, so a number on the page
   cannot drift from the sound.
 - **`play()` says why it stayed silent.** It returns `played`, `off`,
-  `quiet`, `locked`, `hover-level` or `hover-gap`. The chapter and the
+  `quiet`, `hidden` (the tab is in the background, task J3f), `locked`,
+  `hover-level` or `hover-gap`. The chapter and the
   sample button print that in words, because sound never carries meaning
   alone.
 - **The settle cue is a link's.** A plain click or Enter on an `a[href]`

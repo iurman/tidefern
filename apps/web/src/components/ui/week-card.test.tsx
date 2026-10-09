@@ -67,6 +67,17 @@ describe("WeekCard", () => {
     expect(document.querySelector(".numeral")).toBeNull();
   });
 
+  it("leads its links to the journey screen when no address is given", () => {
+    const { rerender } = render(<WeekCard today={today} />);
+    expect(screen.getByRole("link", { name: "Start a pregnancy" })).toHaveAttribute(
+      "href",
+      "/journey",
+    );
+    rerender(<WeekCard today={today} dueDate="2027-01-23" method="ultrasound" />);
+    for (const link of screen.getAllByRole("link"))
+      expect(link).toHaveAttribute("href", "/journey");
+  });
+
   it("follows the empty state formula and keeps width while loading", () => {
     const { rerender } = render(<WeekCard today={today} startHref="/start" />);
     expect(screen.getByRole("heading", { name: "No pregnancy recorded" })).toBeInTheDocument();

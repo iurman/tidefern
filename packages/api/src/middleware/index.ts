@@ -26,3 +26,8 @@ export type { LogLine, LoggerOptions } from "./logger";
 export { countMutation, rateLimit } from "./rate-limit";
 export type { RateLimitDecision, RateLimitOptions } from "./rate-limit";
 export { routeTemplate } from "./route";
+export {
+  API_CONTENT_SECURITY_POLICY,
+  API_SECURITY_HEADERS,
+  securityHeaders,
+} from "./security-headers";

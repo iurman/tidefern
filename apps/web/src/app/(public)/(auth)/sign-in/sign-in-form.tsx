@@ -161,7 +161,7 @@ export function SignInForm() {
           {copy.heading}
         </h1>
         <p className={styles.lede}>{copy.lede}</p>
-        <form key="password" className={styles.form} onSubmit={submitPassword}>
+        <form method="post" key="password" className={styles.form} onSubmit={submitPassword}>
           <FormField label={copy.email.label} required>
             <TextInput
               name="email"
@@ -212,7 +212,7 @@ export function SignInForm() {
         {two.heading}
       </h1>
       <p className={styles.lede}>{backup ? two.backupLede : two.lede}</p>
-      <form key={step} className={styles.form} onSubmit={submitCode}>
+      <form method="post" key={step} className={styles.form} onSubmit={submitCode}>
         {backup ? (
           <FormField label={two.backupCode.label} required>
             <TextInput

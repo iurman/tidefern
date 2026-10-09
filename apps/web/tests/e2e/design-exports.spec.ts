@@ -105,30 +105,14 @@ test("every catalog href resolves to exactly one element, and every section is c
   expect(unknown).toEqual([]);
 });
 
-/**
- * Product destinations the specimens link to with synthetic data that no
- * route serves yet, so they may answer 404; every other internal link must
- * answer 200, or 307 to sign-in for a signed-in route. The shell's tabs and
- * a day's log (`/calendar`, `/journey`, `/family`, `/sharing`, `/settings`,
- * `/log/<date>`) were built in tasks H2 to H7 and left this list in task
- * J1, so the check now holds them to 200 or 307. docs/design/COVERAGE.md
- * lists the rest.
+/*
+ * Every internal link a specimen makes must answer 200, or 307 to sign-in
+ * for a signed-in route. The last specimen links to unbuilt routes
+ * (`/journey/dating`, `/journey/start`, `/family/child/milestones`, `/log`)
+ * moved to the routes that exist in task J3f, when the cycle ring's empty
+ * action was found sending a person with no log yet to the `/log` 404 on
+ * Today; no 404 is allowed any more.
  */
-const plannedProductRoutes = new Set([
-  "/journey/dating",
-  "/journey/start",
-  "/family/child/milestones",
-  "/log",
-]);
-
-/**
- * Only the exact unbuilt paths are allowed, so a route that exists today
- * (`/today`, `/calendar`, `/settings/sound`, `/log/<date>`) still fails the
- * check if it disappears.
- */
-function isPlannedProductRoute(path: string): boolean {
-  return plannedProductRoutes.has(path);
-}
 
 test("every internal link on every /design page answers 200 and every fragment resolves once", async ({
   page,
@@ -159,7 +143,6 @@ test("every internal link on every /design page answers 200 and every fragment r
     const status = response.status();
     // A signed-in route seen signed out sends the visitor to sign in; that is the route working.
     const toSignIn = status === 307 && response.headers()["location"] === signInRedirect(path);
-    if (status === 404 && isPlannedProductRoute(path) && fragments.size === 0) continue;
     if (status !== 200 && !toSignIn) {
       broken.push(`${path} answered ${status}`);
       continue;

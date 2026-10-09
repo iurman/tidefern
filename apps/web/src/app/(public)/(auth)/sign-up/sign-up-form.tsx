@@ -57,7 +57,7 @@ export function SignUpForm() {
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate={false}>
+    <form method="post" className={styles.form} onSubmit={submit} noValidate={false}>
       <FormField label={copy.name.label} help={copy.name.help} required>
         <TextInput name="name" type="text" autoComplete="name" maxLength={100} />
       </FormField>

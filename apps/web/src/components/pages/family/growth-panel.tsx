@@ -344,7 +344,14 @@ export function GrowthPanel({
           }}
           title={copy.addTitle(childName)}
         >
-          <form key={form} ref={formRef} className={styles.sheetForm} onSubmit={submit} noValidate>
+          <form
+            method="post"
+            key={form}
+            ref={formRef}
+            className={styles.sheetForm}
+            onSubmit={submit}
+            noValidate
+          >
             <SegmentedDateInput
               label={copy.date}
               order="mdy"

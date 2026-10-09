@@ -88,7 +88,12 @@ export function InviteForm() {
       <h3 id={headingId} className={styles.subheading}>
         {copy.invite.heading}
       </h3>
-      <form className={styles.form} noValidate onSubmit={(event) => void submit(event)}>
+      <form
+        method="post"
+        className={styles.form}
+        noValidate
+        onSubmit={(event) => void submit(event)}
+      >
         <FormField
           id={INVITE_EMAIL_ID}
           label={copy.invite.email.label}
