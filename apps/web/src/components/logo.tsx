@@ -5,7 +5,22 @@ import Link from "next/link";
  * owner approval of final geometry. Two color variants keep it legible on
  * each theme; the wordmark is set in Newsreader, never traced.
  */
-export function Mark({ size = 40, className = "" }: { size?: number; className?: string }) {
+export function Mark({
+  size = 40,
+  className = "",
+  priority = false,
+}: {
+  size?: number;
+  className?: string;
+  /**
+   * The page's LCP element, such as the home hero mark. Each variant is then lazy, so
+   * only the one the theme shows is fetched (a hidden lazy image never loads), and at
+   * high priority: the pattern the installed Next docs give for theme images.
+   */
+  priority?: boolean;
+}) {
+  const loading = priority ? "lazy" : undefined;
+  const fetchPriority = priority ? "high" : undefined;
   return (
     <span
       className={`mark ${className}`.trim()}
@@ -15,6 +30,8 @@ export function Mark({ size = 40, className = "" }: { size?: number; className?:
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="mark-light"
+        loading={loading}
+        fetchPriority={fetchPriority}
         src="/brand/tidefern-mark.svg"
         alt=""
         width={size}
@@ -23,6 +40,8 @@ export function Mark({ size = 40, className = "" }: { size?: number; className?:
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="mark-dark"
+        loading={loading}
+        fetchPriority={fetchPriority}
         src="/brand/tidefern-mark-dark.svg"
         alt=""
         width={size}

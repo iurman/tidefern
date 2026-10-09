@@ -18,7 +18,7 @@ export function Hero() {
   return (
     <section className={`${styles.hero} wrap`} aria-labelledby="hero-title">
       <div className={styles.warmth}>
-        <Mark size={200} className={styles.mark} />
+        <Mark size={200} className={styles.mark} priority />
         <div className={styles.copy}>
           <p className="eyebrow">{copy.eyebrow}</p>
           <h1 id="hero-title" className={styles.tagline}>
