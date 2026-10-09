@@ -50,7 +50,8 @@ jobs:
       # with the job, and CI never holds a real credential (architecture 16.1). Every variable here
       # is listed in turbo.json globalEnv so the build hash keys on it. The owner URL (the service's
       # postgres superuser) is not job env: it sits on the three database steps that need it and on
-      # nothing else, so neither server below inherits it.
+      # the seeded server's step, for the job runner, and on nothing else, so the build, the unit
+      # tests and the database-free server never see it.
       #
       # Migration 0000 creates tidefern_app NOLOGIN; the grant-login step below gives it LOGIN with
       # this throwaway password, then next build and next start connect as it (architecture 7.2).
@@ -67,7 +68,8 @@ jobs:
       E2E_MAIL_CAPTURE: "true"
       TIDEFERN_FAKE_NOW: "2026-10-05"
       BETTER_AUTH_TELEMETRY: "0"
-      # CRON_SECRET is left unset on purpose: the job runner answers 404 without it, and a test proves that.
+      # CRON_SECRET is not job env: it sits on the seeded server's step and on the browser suite's,
+      # which calls the job runner with it. Everywhere else it is unset, and the runner answers 404.
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -194,10 +196,17 @@ jobs:
 
       # Every variable the server needs is listed here, so what the browser suite runs against is
       # readable in one place (a step's env adds to the job's, it does not replace it; the job env
-      # carries the same values and the owner URL is on no step from here on). The server is started
-      # once in a session of its own, outside Playwright's webServer (PLAYWRIGHT_BASE_URL turns that
-      # off); the saved pid leads its process group, which is what the stop step kills, next-server
-      # child included.
+      # carries the same values). The server is started once in a session of its own, outside
+      # Playwright's webServer (PLAYWRIGHT_BASE_URL turns that off); the saved pid leads its
+      # process group, which is what the stop step kills, next-server child included.
+      #
+      # The last three give this server the job runner (architecture 10.1 and 11), so the deletion
+      # flow proves removal and not just the lock (task J3d): the owner URL, the same literal as the
+      # database steps, is the runner's connection (the host builds its one-connection owner pool
+      # only when DATABASE_URL_UNPOOLED is set); CRON_SECRET is a test-only bearer the browser suite
+      # sends to /api/internal/jobs/run; OWNER_EMAIL is a test-only inbox the closure's processor
+      # notice goes to, which the capture mailer keeps. Without them a closure past its window
+      # waits and deletes nothing. None of the three is a secret: the database dies with the job.
       - name: Start the production server against the seeded database
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -208,6 +217,9 @@ jobs:
           E2E_MAIL_CAPTURE: ${{ env.E2E_MAIL_CAPTURE }}
           TIDEFERN_FAKE_NOW: ${{ env.TIDEFERN_FAKE_NOW }}
           BETTER_AUTH_TELEMETRY: ${{ env.BETTER_AUTH_TELEMETRY }}
+          DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
+          CRON_SECRET: ci-only-cron-secret-0123456789abcdef-not-real
+          OWNER_EMAIL: owner@example.test
         run: |
           cd apps/web
           setsid nohup node_modules/.bin/next start --port 3000 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-seeded.log" 2>&1 &
@@ -223,10 +235,21 @@ jobs:
           cat "$RUNNER_TEMP/next-seeded.log"
           exit 1
 
+      # CRON_SECRET is the server step's literal: the deletion flow runs the due jobs with it
+      # (apps/web/tests/e2e/jobs.ts).
       - name: Browser tests against the seeded production server
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          CRON_SECRET: ci-only-cron-secret-0123456789abcdef-not-real
         run: pnpm test:e2e
+
+      # The byte-budget gate of docs/design/PERFORMANCE.md: each key route loaded once in a fresh
+      # Chromium context with Lighthouse's mobile screen, its compressed script transfer and its
+      # total transfer summed from the network events, and the run fails on any route over its
+      # ceiling in apps/web/scripts/perf/budgets.json. Bytes only, never timings, so it does not
+      # flap; it reuses the browser the suite installed and the server the suite ran against.
+      - name: Byte budgets for the key routes against the seeded server
+        run: pnpm --filter web perf:bytes http://127.0.0.1:3000
 
       # The smoke subset also runs against production deployments, which have no seeded users and
       # no test database, so it must pass against a server that has no database at all. This second

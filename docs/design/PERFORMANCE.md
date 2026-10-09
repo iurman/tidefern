@@ -533,3 +533,32 @@ them would fail the gate, which is the point. Running it needs the seeded
 server, so it belongs in CI's `verify` job after the browser suite, not in
 `pnpm check`. Timing metrics stay out of any gate for the reasons in "A
 performance gate" above.
+
+### The byte-budget gate
+
+Added by task J3d: CI's `verify` job runs `pnpm --filter web perf:bytes`
+against the seeded server right after the browser suite, and fails with the
+route, the number and the ceiling when a key route's compressed script
+transfer or total transfer is over its ceiling. The ceilings are the table
+above, kept in `apps/web/scripts/perf/budgets.json` (KB of 1,024 bytes).
+To lower a ceiling, edit that file in the same pull request that made the
+route smaller; a script ceiling above 200 drops to 200 once its route gets
+there. Raising one needs a reason recorded here.
+
+It reads bytes without Lighthouse: each route loads once in a fresh
+Playwright Chromium context (the full browser, not the headless shell, so
+the favicon is fetched as a person's browser would) with Lighthouse's
+mobile screen, and the DevTools network events give each request's
+`encodedDataLength`, the same transfer size Lighthouse reports. That is
+one browser for all ten routes and no simulated timings, about 30 seconds
+locally. Script transfer matches Lighthouse to 0.1 KB on every route.
+Total transfer comes out 29 to 32 KB under Lighthouse's, because
+Lighthouse also fetches `/icon.svg` a second time and the web manifest for
+its own checks; so the total ceilings carry 11 to 14 percent headroom
+rather than 5.
+
+Three runs on the same build and seed gave the same script bytes to the
+byte on every route. Total transfer moved by at most 103 bytes between
+runs, because each HTML document and RSC payload carries a fresh CSP nonce
+that compresses a little differently each time; against ceilings 50 KB or
+more above the measured totals, that cannot change a verdict.

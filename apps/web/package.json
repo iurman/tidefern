@@ -8,13 +8,14 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run && node --test scripts/perf/summary.test.mjs",
+    "test": "vitest run && node --test scripts/perf/summary.test.mjs scripts/perf/bytes-model.test.mjs",
     "test:e2e": "playwright test",
     "brand:sync": "node scripts/sync-brand.mjs",
     "brand:check": "node scripts/sync-brand.mjs --check",
     "perf:lighthouse": "node scripts/perf/lighthouse.mjs",
     "perf:analyze": "ANALYZE=true ANALYZE_MODE=json next build --webpack --experimental-build-mode=compile && node scripts/perf/bundle-summary.mjs",
-    "perf:test": "node --test scripts/perf/summary.test.mjs"
+    "perf:bytes": "node scripts/perf/bytes.mjs",
+    "perf:test": "node --test scripts/perf/summary.test.mjs scripts/perf/bytes-model.test.mjs"
   },
   "dependencies": {
     "@tidefern/api": "workspace:*",
