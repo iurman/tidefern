@@ -27,6 +27,11 @@ export { uuidv7 };
  * tests pass PGlite.
  */
 export interface SharingDependencies {
+  /**
+   * Not read: the sharing routes take the database from `createApp()`'s
+   * `db`, as every area does (`AreaOptions`). Kept so a host that still
+   * passes it type-checks; it should name the same database.
+   */
   db?: ActorDatabase | undefined;
   mailer?: Mailer | undefined;
   /** The https origin links are built on; the request's own origin when unset. */

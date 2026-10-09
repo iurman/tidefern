@@ -19,16 +19,7 @@ import { ACCOUNT_CLOSING } from "../auth";
 import { IDEMPOTENCY_KEY_HEADER } from "../middleware/idempotency";
 import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
-import {
-  CHILD,
-  HOUSEHOLD,
-  KEK,
-  NOTES,
-  TEXTS,
-  TOKENS,
-  createAccountFixture,
-  withInjected,
-} from "../test/account";
+import { CHILD, HOUSEHOLD, KEK, NOTES, TEXTS, TOKENS, createAccountFixture } from "../test/account";
 import type { AccountFixture } from "../test/account";
 import {
   ClosureConfigurationError,
@@ -82,7 +73,7 @@ class Bucket implements ObjectStore {
 
 interface World {
   fixture: AccountFixture;
-  client: ReturnType<typeof withInjected>;
+  client: ReturnType<typeof createApp>;
   inbox: Inbox;
   bucket: Bucket;
   settings: ClosureSettings;
@@ -162,8 +153,7 @@ async function createWorld(): Promise<World> {
     height: 10,
     byteLength: 5,
   });
-  const app = createApp({ auth: fixture.auth, db, log: { sink: () => undefined } });
-  const client = withInjected(app, { db, keys: KEK });
+  const client = createApp({ auth: fixture.auth, db, keys: KEK, log: { sink: () => undefined } });
   const inbox = new Inbox();
   const bucket = new Bucket();
   return {

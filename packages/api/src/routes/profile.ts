@@ -6,7 +6,7 @@ import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { can, listScope, stageAfter } from "@tidefern/core";
 import type { Category, Pregnancy, Stage } from "@tidefern/core";
 import { isActorId, schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
+import type { Transaction } from "@tidefern/db";
 import { enqueue } from "@tidefern/db/jobs";
 import { uuidv7 } from "@tidefern/core";
 import {
@@ -26,6 +26,7 @@ import type { Consent, ConsentBasis, DataCategory, Processor } from "@tidefern/s
 
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
+import type { AreaOptions } from "./index";
 import { problem } from "../problem";
 import { lockClosure, revokeAtClosure } from "./account";
 
@@ -286,17 +287,6 @@ function actorOf(c: Context<ApiEnv>) {
   const actor = c.var.actor;
   if (actor === null) throw new Error("requireActor must run before the profile handlers");
   return actor;
-}
-
-/**
- * The database the routes open the actor's transaction on: the one the
- * host or a test bound as `db` on the Hono environment, or the db package's
- * production client when nothing is bound, which is the handle the Next.js
- * host passes to `createApp` as well.
- */
-export function databaseFor(c: Context<ApiEnv>): ActorDatabase | undefined {
-  const bindings = c.env as unknown as { db?: ActorDatabase } | undefined;
-  return bindings?.db;
 }
 
 function profileBody(row: ProfileRow): Profile {
@@ -970,7 +960,8 @@ async function dataSummary(
 }
 
 /** Adds the profile, consent and data summary routes; called once from the registry. */
-export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
+export function registerProfile(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(getProfileRoute, async (c) => {
     const actor = actorOf(c);
     const [row] = await withActor(
@@ -981,7 +972,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           .from(schema.profiles)
           .where(and(eq(schema.profiles.userId, actor.id), isNull(schema.profiles.deletedAt)))
           .limit(1),
-      databaseFor(c),
+      db,
     );
     if (row === undefined) return problem(c, 404, "not_found");
     c.header("ETag", `"${row.version}"`);
@@ -997,7 +988,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const outcome = await withActor(
       actor.id,
       (tx) => putProfile(tx, actor.id, input, ifMatch, now),
-      databaseFor(c),
+      db,
     );
     switch (outcome.kind) {
       case "created":
@@ -1045,7 +1036,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
             })),
           )
           .returning(),
-      databaseFor(c),
+      db,
     );
     rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const first = rows[0];
@@ -1091,7 +1082,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           )
           .orderBy(asc(schema.consents.id))
           .limit(limit + 1),
-      databaseFor(c),
+      db,
     );
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
@@ -1115,7 +1106,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
         if (decision !== "proceed") return { kind: decision };
         return withdrawAndClose(tx, actor.id, session.id, id, now);
       },
-      databaseFor(c),
+      db,
     );
     switch (outcome.kind) {
       case "missing":
@@ -1142,7 +1133,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(dataSummaryRoute, async (c) => {
     const actor = actorOf(c);
-    const body = await withActor(actor.id, (tx) => dataSummary(tx, actor), databaseFor(c));
+    const body = await withActor(actor.id, (tx) => dataSummary(tx, actor), db);
     return c.json(body, 200);
   });
 }

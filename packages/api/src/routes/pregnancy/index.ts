@@ -10,14 +10,14 @@ import {
   stageAfter,
 } from "@tidefern/core";
 import { createKeyCache } from "@tidefern/crypto";
-import type { KeyProvider } from "@tidefern/crypto";
 import { schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
+import type { Transaction } from "@tidefern/db";
 import { uuidv7 } from "@tidefern/core";
 import type { PregnancyEvent, PregnancyEventTombstone } from "@tidefern/schemas";
 
 import type { RequestActor } from "../../actor";
 import type { ApiEnv } from "../../context";
+import type { AreaOptions } from "../index";
 import { audit, auditActions, auditDay } from "../../middleware/audit";
 import { problem } from "../../problem";
 import {
@@ -66,11 +66,6 @@ export const ID_IN_USE = "id_in_use";
 /** The outbox job a reminder is queued as (I1's `reminder.send`), keyed by the pregnancy it is for. */
 export const REMINDER_JOB_TYPE = "reminder.send";
 export const REMINDER_PAYLOAD_KEY = "pregnancyId";
-
-export interface PregnancyRouteOptions {
-  db?: ActorDatabase | undefined;
-  keys: KeyProvider;
-}
 
 function actorOn(c: Context<ApiEnv>): RequestActor {
   const actor = c.var.actor;
@@ -140,7 +135,7 @@ const badCursor = (c: Context<ApiEnv>) =>
  * view shows is counted to today on the calendar clock (`c.var.clock`); the
  * day a grantee's read is audited under is the real one (`auditDay`).
  */
-export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRouteOptions): void {
+export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
   const { db, keys } = options;
 
   app.openapi(startRoute, async (c) => {

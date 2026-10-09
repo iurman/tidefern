@@ -25,6 +25,18 @@ export interface RouteOptions {
 }
 
 /**
+ * What every area's `register<Area>(app, options)` receives: the host's
+ * database (undefined means `withActor()` opens on the db package's
+ * production client) and the key provider, already resolved. Areas take
+ * both from here and nowhere else: not from the request environment, not
+ * from a context variable, not from a module-level setting.
+ */
+export interface AreaOptions {
+  db: ActorDatabase | undefined;
+  keys: KeyProvider;
+}
+
+/**
  * The resource route registry. Each area (profile, cycle, pregnancy,
  * children, notes, sharing, account) exports a `register<Area>(app, options)`
  * from its own module and adds exactly one line here, so seven areas can
@@ -32,12 +44,12 @@ export interface RouteOptions {
  * internal routes stay in app.ts because the middleware order depends on them.
  */
 export function registerRoutes(app: OpenAPIHono<ApiEnv>, options: RouteOptions = {}): void {
-  const resolved = { db: options.db, keys: options.keys ?? new EnvKeyProvider() };
-  registerNotes(app);
-  registerSharing(app);
+  const resolved: AreaOptions = { db: options.db, keys: options.keys ?? new EnvKeyProvider() };
+  registerNotes(app, resolved);
+  registerSharing(app, resolved);
   registerPregnancy(app, resolved);
-  registerChildren(app);
-  registerAccount(app);
-  registerCycle(app);
-  registerProfile(app);
+  registerChildren(app, resolved);
+  registerAccount(app, resolved);
+  registerCycle(app, resolved);
+  registerProfile(app, resolved);
 }

@@ -4,7 +4,7 @@ import { auditActions as sharedAuditActions, schema, withActor } from "@tidefern
 import { ActivityPage } from "@tidefern/schemas";
 
 import { createApp } from "../app";
-import { KEK, withInjected } from "../test/account";
+import { KEK } from "../test/account";
 import { ANNA, BEN, CARA, TOKENS, createActorFixture } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
 import type { ApiTestDatabase } from "../test/database";
@@ -305,10 +305,12 @@ describe("the session names (task C7)", () => {
         fixture.harness.db,
       );
     }
-    const app = withInjected(
-      createApp({ auth: fixture.auth, db: fixture.harness.db, log: { sink: () => undefined } }),
-      { db: fixture.harness.db, keys: KEK },
-    );
+    const app = createApp({
+      auth: fixture.auth,
+      db: fixture.harness.db,
+      keys: KEK,
+      log: { sink: () => undefined },
+    });
     const activityOf = async (token: string) => {
       const response = await app.request("/api/v1/me/activity", { headers: sessionHeaders(token) });
       expect(response.status).toBe(200);

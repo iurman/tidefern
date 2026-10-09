@@ -9,7 +9,7 @@ import { IDEMPOTENCY_KEY_HEADER } from "./middleware/idempotency";
 import { ANNA, CARA, OWN_ORIGIN, TOKENS, createActorFixture } from "./test/actors";
 import { sessionHeaders } from "./test/auth-fake";
 import type { FakeAuth } from "./test/auth-fake";
-import { KEK, withInjected } from "./test/account";
+import { KEK } from "./test/account";
 import type { ApiTestDatabase } from "./test/database";
 
 /**
@@ -21,7 +21,7 @@ import type { ApiTestDatabase } from "./test/database";
  */
 let harness: ApiTestDatabase;
 let auth: FakeAuth;
-let app: ReturnType<typeof withInjected>;
+let app: ReturnType<typeof createApp>;
 
 const ANNAS_CLOSURE = "018f5e7a-4000-7000-8000-000000000001";
 const CARAS_CLOSURE = "018f5e7a-4000-7000-8000-000000000002";
@@ -29,11 +29,7 @@ const DAY = 24 * 60 * 60_000;
 
 beforeAll(async () => {
   ({ harness, auth } = await createActorFixture());
-  // The account routes read the database from the context, as in E8's suite.
-  app = withInjected(createApp({ auth, db: harness.db, log: { sink: () => undefined } }), {
-    db: harness.db,
-    keys: KEK,
-  });
+  app = createApp({ auth, db: harness.db, keys: KEK, log: { sink: () => undefined } });
   const now = Date.now();
   await harness.db.insert(schema.dataRequests).values([
     {

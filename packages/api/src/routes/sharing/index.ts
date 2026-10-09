@@ -1,6 +1,7 @@
 import type { OpenAPIHono } from "@hono/zod-openapi";
 
 import type { ApiEnv } from "../../context";
+import type { AreaOptions } from "../index";
 import { registerGrantRoutes } from "./grants";
 import { registerInvitationRoutes } from "./invitations";
 
@@ -20,7 +21,7 @@ export {
  * registered first so `/invitations/accept` is matched before any `{id}`
  * pattern could claim the word.
  */
-export function registerSharing(app: OpenAPIHono<ApiEnv>): void {
-  registerInvitationRoutes(app);
-  registerGrantRoutes(app);
+export function registerSharing(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  registerInvitationRoutes(app, options);
+  registerGrantRoutes(app, options);
 }

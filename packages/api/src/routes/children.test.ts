@@ -13,7 +13,9 @@ import type {
   Problem,
 } from "@tidefern/schemas";
 
+import { createApp } from "../app";
 import { FRESH_AUTHENTICATION_REQUIRED } from "../auth";
+import { realCalendarClock } from "../clock";
 import { IDEMPOTENCY_KEY_HEADER, IDEMPOTENCY_REPLAYED_HEADER } from "../middleware/index";
 import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
@@ -24,7 +26,6 @@ import {
   ID_IN_USE,
   LAST_GUARDIAN,
   STALE_VERSION,
-  configureChildren,
   guardianConsentHash,
 } from "./children";
 import { CHILD_CONSENT_NOT_WITHDRAWN_HERE } from "./profile";
@@ -1226,7 +1227,15 @@ describe("the guardian's consent on the child's behalf", () => {
       },
     };
     const quiet = vi.spyOn(console, "error").mockImplementation(() => undefined);
-    configureChildren({ db, keys: broken });
+    // The same database and sessions behind an app whose key provider cannot wrap.
+    const sound = app;
+    app = createApp({
+      auth: fixture.auth,
+      db,
+      keys: broken,
+      log: { sink: () => undefined },
+      clock: realCalendarClock,
+    });
     try {
       const response = await call("POST", "/children", {
         token: CHILDREN_TOKENS.cara,
@@ -1235,7 +1244,7 @@ describe("the guardian's consent on the child's behalf", () => {
       });
       await expectProblem(response, 500, "internal");
     } finally {
-      configureChildren({ db, keys: fixture.keys });
+      app = sound;
       quiet.mockRestore();
     }
     expect(await createFootprint()).toEqual(before);
