@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { brand } from "@tidefern/design-tokens";
+import { HERO_MARK_PATH, MARK_DARK, MARK_LIGHT } from "./brand-mark";
 
 function resolveSiteUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
@@ -72,5 +73,9 @@ export const SOUND_KEY = "tidefern-sound-v1";
  * choice (light or dark; absent means follow the system) and the sound level
  * (all, actions or off; absent means all). Without JavaScript the stylesheet's
  * prefers-color-scheme block already renders the system theme.
+ *
+ * On the hero page, a stored theme that differs from the system theme also gets
+ * a high-priority preload for the mark it shows: the hero's own preloads follow
+ * prefers-color-scheme, which cannot see the stored choice (task J2b).
  */
-export const preferenceScript = `(function(){var r=document.documentElement;r.dataset.js="true";var t=null;try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.themeSource="system"}else{r.dataset.themeSource="user"}r.dataset.theme=t;var s="all";try{var v=localStorage.getItem("${SOUND_KEY}");if(v==="off"||v==="actions"){s=v}}catch(e){}r.dataset.sound=s;})();`;
+export const preferenceScript = `(function(){var r=document.documentElement;r.dataset.js="true";var t=null;try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.themeSource="system"}else{r.dataset.themeSource="user"}r.dataset.theme=t;if(r.dataset.themeSource==="user"&&location.pathname==="${HERO_MARK_PATH}"){var d=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";if(d!==t){var l=document.createElement("link");l.setAttribute("rel","preload");l.setAttribute("as","image");l.setAttribute("href",t==="dark"?"${MARK_DARK}":"${MARK_LIGHT}");l.setAttribute("fetchpriority","high");document.head.appendChild(l)}}var s="all";try{var v=localStorage.getItem("${SOUND_KEY}");if(v==="off"||v==="actions"){s=v}}catch(e){}r.dataset.sound=s;})();`;

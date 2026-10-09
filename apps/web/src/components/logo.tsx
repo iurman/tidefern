@@ -1,8 +1,6 @@
 import Link from "next/link";
 import { preload } from "react-dom";
-
-const LIGHT_MARK = "/brand/tidefern-mark.svg";
-const DARK_MARK = "/brand/tidefern-mark-dark.svg";
+import { MARK_DARK as DARK_MARK, MARK_LIGHT as LIGHT_MARK } from "@/lib/brand-mark";
 
 /**
  * The mark is a hand-authored vector reconstruction of the brand sheet, pending
@@ -19,6 +17,8 @@ export function Mark({
   /**
    * The page's LCP element, such as the home hero mark: each variant at high priority,
    * with a high-priority preload per system theme so the request starts from the head.
+   * A stored theme that differs from the system's gets its preload from the preference
+   * script in the root layout, since a media query cannot see the stored choice.
    */
   priority?: boolean;
 }) {
