@@ -7,7 +7,7 @@ function images(container: HTMLElement) {
 }
 
 describe("Mark", () => {
-  it("leaves both theme variants at the browser's defaults by default", () => {
+  it("makes both theme variants lazy, so only the one the theme shows is fetched", () => {
     const { container } = render(<Mark size={36} />);
     const imgs = images(container);
     expect(imgs.map((img) => img.getAttribute("src"))).toEqual([
@@ -15,7 +15,7 @@ describe("Mark", () => {
       "/brand/tidefern-mark-dark.svg",
     ]);
     for (const img of imgs) {
-      expect(img).not.toHaveAttribute("loading");
+      expect(img).toHaveAttribute("loading", "lazy");
       expect(img).not.toHaveAttribute("fetchpriority");
     }
   });

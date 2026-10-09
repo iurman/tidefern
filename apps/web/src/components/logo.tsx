@@ -17,16 +17,16 @@ export function Mark({
   size?: number;
   className?: string;
   /**
-   * The page's LCP element, such as the home hero mark. Each variant is then lazy, so
-   * only the one the theme shows is fetched (a hidden lazy image never loads), and at
-   * high priority: the pattern the installed Next docs give for theme images. The
-   * header's smaller mark uses the same files and comes first in the document, so its
-   * low-priority request would otherwise be the one the hero shares; a high-priority
-   * preload per system theme makes the shared request early and high (task J2b).
+   * The page's LCP element, such as the home hero mark: each variant at high priority,
+   * with a high-priority preload per system theme so the request starts from the head.
    */
   priority?: boolean;
 }) {
-  const loading = priority ? "lazy" : undefined;
+  // Both variants are lazy, the pattern the installed Next docs give for theme images: a
+  // hidden lazy image is never fetched, so only the variant the theme shows downloads.
+  // Lazy also keeps React from emitting its own low-priority preload for each eager
+  // image, which the hero's preload would otherwise dedupe against, since the header's
+  // mark uses the same files and comes first in the document (task J2b).
   const fetchPriority = priority ? "high" : undefined;
   if (priority) {
     preload(LIGHT_MARK, {
@@ -49,7 +49,7 @@ export function Mark({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="mark-light"
-        loading={loading}
+        loading="lazy"
         fetchPriority={fetchPriority}
         src={LIGHT_MARK}
         alt=""
@@ -59,7 +59,7 @@ export function Mark({
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         className="mark-dark"
-        loading={loading}
+        loading="lazy"
         fetchPriority={fetchPriority}
         src={DARK_MARK}
         alt=""
