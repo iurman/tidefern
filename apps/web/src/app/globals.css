@@ -15,6 +15,8 @@
 }
 html {
   scroll-padding-top: 32px;
+  /* A control focused at the foot of the viewport scrolls up far enough to show its whole ring (2px at 4px). */
+  scroll-padding-bottom: var(--space-4);
   background: var(--page);
 }
 body {

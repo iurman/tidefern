@@ -62,10 +62,16 @@
   background: var(--panel);
 }
 
-/* The twin restates the global :focus-visible rule (2px at 4px) so the chapter shows the ring the product draws. */
+/*
+ * The cells meet the viewport's sides and foot, so a ring 4px outside one would be cut by the
+ * screen edge: the ring is drawn just inside the cell instead. The twin restates it so the
+ * chapter shows the ring the product draws.
+ */
+.link:focus-visible,
+.quickLog:focus-visible,
 [data-specimen-state="focus-visible"] > .bar .link[aria-current="page"] {
   outline: 2px solid var(--focus);
-  outline-offset: 4px;
+  outline-offset: -2px;
 }
 
 .link:active,

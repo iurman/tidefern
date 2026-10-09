@@ -229,6 +229,28 @@ test("the public pages say what is true today: the undo after sign-in, the phone
   await expect(page.getByText(/planned structure/)).toHaveCount(0);
 });
 
+// Review loop 2 (task J3e): Tab scrolls a footer link only just into view,
+// so at the foot of the page its ring (2px at 4px) lost its bottom edge to the
+// screen. The root's scroll padding keeps room for the whole ring.
+test("tabbing down to the footer shows the focused link's whole ring", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/account/delete");
+  const footer = page.getByRole("contentinfo");
+  const target = footer.getByRole("link", { name: "Privacy", exact: true });
+  let reached = false;
+  for (let step = 0; step < 60 && !reached; step++) {
+    await page.keyboard.press("Tab");
+    reached = await target.evaluate((link) => link === document.activeElement);
+  }
+  expect(reached, "Tab reaches the footer's Privacy link").toBe(true);
+  const ring = await target.evaluate((link) => {
+    const style = getComputedStyle(link);
+    const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    return { bottom: link.getBoundingClientRect().bottom + reach, height: window.innerHeight };
+  });
+  expect(ring.bottom, "the ring's bottom edge is on the screen").toBeLessThanOrEqual(ring.height);
+});
+
 /* ------------------------------------------------------------------------ */
 /* The public header's Sign in and its phone menu (task J3b)                 */
 /* ------------------------------------------------------------------------ */

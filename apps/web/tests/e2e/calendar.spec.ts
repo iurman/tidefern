@@ -435,6 +435,36 @@ test("a day's sheet over the calendar: focus moves in, Escape closes it and focu
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
   await expect(trigger).toBeFocused();
+
+  // Review loop 2 (task J3e): Tab scrolled a control only just into the
+  // sheet's scrolling body, so on a 320 px phone the ring around "Share this
+  // note with..." lost its bottom edge to the body's edge.
+  await page.setViewportSize({ width: 320, height: 640 });
+  await trigger.click();
+  await expect(sheet).toBeVisible();
+  const share = sheet.getByRole("button", { name: "Share this note with..." });
+  await expect(share).toBeVisible();
+  let reached = false;
+  for (let step = 0; step < 40 && !reached; step++) {
+    await page.keyboard.press("Tab");
+    reached = await share.evaluate((button) => button === document.activeElement);
+  }
+  expect(reached, "Tab reaches Share this note with...").toBe(true);
+  const ring = await share.evaluate((button) => {
+    const style = getComputedStyle(button);
+    const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    let scroller = button.parentElement;
+    while (scroller && !/auto|scroll/.test(getComputedStyle(scroller).overflowY)) {
+      scroller = scroller.parentElement;
+    }
+    const box = button.getBoundingClientRect();
+    const clip = (scroller ?? document.documentElement).getBoundingClientRect();
+    return { top: box.top - reach - clip.top, bottom: clip.bottom - (box.bottom + reach) };
+  });
+  expect(ring.top, "the ring's top edge shows inside the sheet").toBeGreaterThanOrEqual(0);
+  expect(ring.bottom, "the ring's bottom edge shows inside the sheet").toBeGreaterThanOrEqual(0);
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
 });
 
 test("the view follows the address: the shell's Calendar link from the list lands on the month", async ({
