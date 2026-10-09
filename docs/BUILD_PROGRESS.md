@@ -1457,3 +1457,45 @@ from before the strip.
 Review Phase B's captures and merge H1 to H8 and G9b through the queue,
 then the lead's follow-ups, then J1 to J4.
 
+### The page routes merged (2026-10-08, lead session dfc54107)
+
+Phase B built H1 to H8 and G9b, each with a fresh-context review, a
+skeptic per finding and a fix pass. A weekly usage limit stopped the
+workflow part way (H5's build and most fix passes), and a reboot then
+emptied the session scratch folder (briefs, lead tools, reports and
+evidence). The lead rebuilt the tools and briefs from the session record,
+backed them up outside `/tmp`, and resumed the workflow from its journal,
+so only the failed agents ran again; the builders' worktrees and branches
+had survived.
+
+The permission classifier now refuses merges by subagents, so the merge
+queue prepares each pull request (rebase, regate, push, CI, the preview
+smoke against the head commit's own deployment) and the lead merges it on
+the verified head with `--match-head-commit`. Merged in order, each with
+`pnpm check`, the seeded browser suite and the smoke subset green on the
+rebased head and a green production smoke: the lead's Button fix (#91,
+`8d83c0e`: a button keeps its loading width, which H3 had caught), G9b
+(#84, `75315fa`), H8 (#82), H6 (#83, with its approved line in
+`openapi/BREAKING.md`), H4 (#86), H5 (#85), H7 (#89), H1 (#90), H3 (#80)
+and H2 (#81, `0b31e7d`). The seeded suite grew from 164 to 328 browser
+tests.
+
+Lead rulings recorded: the condensed week list on `/journey` for Phase 1;
+G10's placeholder assertion in `flow.spec.ts` replaced by H1; the
+fresh-account activity empty state covered by unit tests. The lead
+reviewed captures of every page in both themes at desktop and phone.
+
+Follow-ups: storing the terms acceptance on the here-for-someone-else
+onboarding path (an API field); `design-exports.spec.ts` and
+`docs/design/COVERAGE.md` still list the built routes as planned; the
+WeekStrip clips today's warmth box when a period pill continues from
+before the strip; an axe target-size finding under the sticky tab bar at
+390 px; the owner's wording for the `[OWNER]` copy lines the pages
+surfaced (CONTENT.md per-route sections, the F6 range lines, the feeding
+line after a birth).
+
+### Next action
+
+J1 (flow suites) and J2 (Lighthouse and the bundle budget) in parallel,
+then J3 (review loops, folding in the follow-ups above), J4 and J6.
+
