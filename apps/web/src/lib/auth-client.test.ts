@@ -7,6 +7,7 @@ import {
   passkeyAutofillAvailable,
   passkeysAvailable,
   safeNextPath,
+  signInPathFor,
   signedInPath,
 } from "./auth-client";
 
@@ -84,12 +85,58 @@ describe("safeNextPath", () => {
       "/sharing#invitation=abc",
       "/a/../b",
       "/%2e%2e/elsewhere",
+      "/%2F%2Felsewhere.example",
+      "/%2f%2felsewhere.example",
+      "/%5Celsewhere.example",
+      "/%5celsewhere.example",
+      "/%252F%252Felsewhere.example",
+      "/%09/elsewhere.example",
+      "/settings%3Ftab=profile",
+      "/sharing%23invitation=abc",
+      "/\\/elsewhere.example",
+      "http:/elsewhere.example",
+      "data:text/html,hi",
+      "/\u0000/elsewhere.example",
+      "/\u3000elsewhere.example",
       "/api/v1/me/export",
       "/api",
       `/${"a".repeat(512)}`,
     ]) {
       expect(safeNextPath(raw), String(raw)).toBeNull();
     }
+  });
+});
+
+describe("signInPathFor", () => {
+  it("names the page asked for as the next path, encoded once", () => {
+    expect(signInPathFor("/settings")).toBe("/sign-in?next=%2Fsettings");
+    expect(signInPathFor("/family/018f5e7a-5eed-7000-8000-000000000001")).toBe(
+      "/sign-in?next=%2Ffamily%2F018f5e7a-5eed-7000-8000-000000000001",
+    );
+    expect(signInPathFor("/log/2026-10-05")).toBe("/sign-in?next=%2Flog%2F2026-10-05");
+  });
+
+  it("leaves next off for Today and for anything that is not a safe page path", () => {
+    for (const requested of [
+      null,
+      undefined,
+      "",
+      "/today",
+      "//elsewhere.example",
+      "/\\elsewhere.example",
+      "/%2F%2Felsewhere.example",
+      "https://elsewhere.example/settings",
+      "/settings?tab=profile",
+      "/api/v1/me",
+    ]) {
+      expect(signInPathFor(requested), String(requested)).toBe("/sign-in");
+    }
+  });
+
+  it("round-trips: what the sign-in page reads back from next is the page asked for", () => {
+    const href = signInPathFor("/journey");
+    const next = new URL(href, "https://tidefern.invalid").searchParams.get("next");
+    expect(signedInPath(null, next)).toBe("/journey");
   });
 });
 

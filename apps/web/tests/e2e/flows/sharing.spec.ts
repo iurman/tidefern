@@ -15,6 +15,7 @@ import {
   stepHeading,
   zoneAndStage,
 } from "./steps";
+import { signInUrl } from "../sign-in-redirect";
 
 /**
  * Sharing between two new people, across both their browsers (task J1): a
@@ -75,7 +76,7 @@ test("an owner invites a new partner by mail, he accepts after sign-in, sees exa
 
     // Signed out, the link sends him to sign in, which keeps the token out of the address bar.
     await partnerPage.goto(invitation.link);
-    await expect(partnerPage).toHaveURL(/\/sign-in$/);
+    await expect(partnerPage).toHaveURL(signInUrl("/sharing"));
     await signInThroughForm(partnerPage, partner);
     // No profile yet: onboarding holds the invitation and hands it to the sharing screen at the end.
     await expect(partnerPage).toHaveURL(/\/welcome$/);

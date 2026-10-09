@@ -10,6 +10,7 @@ import {
   signInAs,
   type Persona,
 } from "./session";
+import { signInRedirect } from "./sign-in-redirect";
 
 /**
  * /family and /family/[childId] (task H5) against the production build and
@@ -181,7 +182,7 @@ test("a visitor without a session is sent to sign in from both routes", async ({
   for (const path of ["/family", `/family/${ILO}`]) {
     const response = await request.get(path, { maxRedirects: 0 });
     expect(response.status(), path).toBe(307);
-    expect(response.headers()["location"], path).toBe("/sign-in");
+    expect(response.headers()["location"], path).toBe(signInRedirect(path));
   }
 });
 

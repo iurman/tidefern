@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
-import { expectNoAxeViolations } from "./axe";
+import AxeBuilder from "@axe-core/playwright";
+import { expect, test, type Page } from "@playwright/test";
+import { AXE_TAGS, expectNoAxeViolations } from "./axe";
 
 const publicRoutes = [
   "/",
@@ -201,4 +202,220 @@ test("/account/delete shows the signed-out action without a session", async ({ p
   expect(response.headers()["cache-control"], "the action depends on the session").toContain(
     "no-store",
   );
+});
+
+/* ------------------------------------------------------------------------ */
+/* The public header's Sign in and its phone menu (task J3b)                 */
+/* ------------------------------------------------------------------------ */
+
+/** Counts the press drop (a triangle oscillator) the shared SoundProvider plays on a control. */
+async function countPressCues(page: Page): Promise<() => Promise<number>> {
+  await page.addInitScript(() => {
+    const presses = { count: 0 };
+    (window as unknown as { __presses: { count: number } }).__presses = presses;
+    const start = OscillatorNode.prototype.start;
+    OscillatorNode.prototype.start = function (when?: number) {
+      if (this.type === "triangle") presses.count += 1;
+      return start.call(this, when);
+    };
+  });
+  return () =>
+    page.evaluate(() => (window as unknown as { __presses: { count: number } }).__presses.count);
+}
+
+function overflowOf(page: Page): Promise<number> {
+  return page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+}
+
+/**
+ * The header's visible focusable elements, in source order (Tab order, as
+ * none sets a positive tabindex), each paired with whether it paints after
+ * the one before it: further along the same row, or on a lower row.
+ */
+function headerFocusOrder(page: Page) {
+  return page.getByRole("banner").evaluate((banner) => {
+    const focusable = [...banner.querySelectorAll<HTMLElement>("a[href], button, [tabindex]")]
+      .filter((element) => element.tabIndex >= 0)
+      .filter((element) => element.getClientRects().length > 0);
+    return focusable.map((element, index) => {
+      const name = element.getAttribute("aria-label") ?? element.textContent?.trim() ?? "";
+      const tabindex = element.getAttribute("tabindex");
+      if (index === 0) return { name, follows: true, tabindex };
+      const before = focusable[index - 1]!.getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      const lowerRow = box.top >= before.bottom - 1;
+      const sameRowFurther = box.top < before.bottom && box.left >= before.right - 1;
+      return { name, follows: lowerRow || sameRowFurther, tabindex };
+    });
+  });
+}
+
+async function expectHeaderFocusFollowsLayout(page: Page, label: string) {
+  const order = await headerFocusOrder(page);
+  expect(order.length, `${label}: the header has focusable controls`).toBeGreaterThan(2);
+  for (const item of order) {
+    expect(item.tabindex === null || Number(item.tabindex) <= 0, `${label}: ${item.name}`).toBe(
+      true,
+    );
+    expect(
+      item.follows,
+      `${label}: ${item.name} paints after the control Tab visits before it`,
+    ).toBe(true);
+  }
+}
+
+test("the public header links Sign in on every public page, in the bar from desktop width", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  for (const path of publicRoutes) {
+    await page.goto(path);
+    const header = page.getByRole("banner");
+    const signIn = header.getByRole("link", { name: "Sign in", exact: true });
+    await expect(signIn, path).toBeVisible();
+    await expect(signIn, path).toHaveAttribute("href", "/sign-in");
+    await expect(header.getByRole("button", { name: "Menu" }), path).toBeHidden();
+  }
+  await expectHeaderFocusFollowsLayout(page, "1440");
+  await page.goto("/");
+  await page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
+  await expect(
+    page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }),
+  ).toHaveAttribute("aria-current", "page");
+});
+
+test("on a phone the header's links sit behind a disclosure button that Escape closes", async ({
+  page,
+}) => {
+  const presses = await countPressCues(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const header = page.getByRole("banner");
+  const button = header.getByRole("button", { name: "Menu" });
+  const signIn = header.getByRole("link", { name: "Sign in", exact: true });
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  const menu = page.locator(`[id="${await button.getAttribute("aria-controls")}"]`);
+  await expect(menu).toBeHidden();
+  await expect(signIn).toBeHidden();
+
+  // A press before hydration does nothing, so try again until the menu says it is open.
+  await expect(async () => {
+    if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+    await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
+  }).toPass({ timeout: 15_000 });
+  await expect(menu).toBeVisible();
+  await expect(signIn).toBeVisible();
+  await expect(header.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
+  // The cue comes from the shared provider, which hears every button.
+  await expect.poll(presses).toBeGreaterThan(0);
+  // The panel fades and slides in on the disclosure curve (DESIGN.md section 7); check it settled.
+  await expect.poll(() => menu.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+    expect(results.violations, `the open menu in ${theme}`).toEqual([]);
+  }
+
+  // Escape from a link inside closes it and puts focus back on the button.
+  await signIn.focus();
+  await page.keyboard.press("Escape");
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await expect(menu).toBeHidden();
+  await expect(button).toBeFocused();
+
+  // A press outside closes it too; a link inside it navigates and leaves it closed.
+  await button.click();
+  await expect(menu).toBeVisible();
+  await page.getByRole("heading", { level: 1 }).click();
+  await expect(button).toHaveAttribute("aria-expanded", "false");
+  await button.click();
+  await signIn.click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page.getByRole("banner").getByRole("button", { name: "Menu" })).toHaveAttribute(
+    "aria-expanded",
+    "false",
+  );
+
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 700 });
+    await page.goto("/");
+    const toggle = page.getByRole("banner").getByRole("button", { name: "Menu" });
+    await expect(async () => {
+      if ((await toggle.getAttribute("aria-expanded")) !== "true") await toggle.click();
+      await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+    expect(await overflowOf(page), `the open menu at ${width}`).toBeLessThanOrEqual(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expectHeaderFocusFollowsLayout(page, `the closed menu at ${width}`);
+  }
+});
+
+test("the open menu button looks different from the closed one in both themes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const button = page.getByRole("banner").getByRole("button", { name: "Menu" });
+  await expect(button).toBeVisible();
+  const bar = page.locator(".header-bar");
+  const look = () =>
+    button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, border: style.borderTopColor };
+    });
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    const barBackground = await bar.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    if ((await button.getAttribute("aria-expanded")) === "true") await button.click();
+    await page.mouse.move(0, 800);
+    const closed = await look();
+    await expect(async () => {
+      if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+      await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+    // Away from the pointer, so the hover fill plays no part.
+    await page.mouse.move(0, 800);
+    await expect.poll(look, `the open button in ${theme} changes its fill`).not.toEqual(closed);
+    const open = await look();
+    expect(open.background, `the open fill in ${theme} differs from the bar`).not.toBe(
+      barBackground,
+    );
+    expect(open.border, `the open border in ${theme} differs from the closed one`).not.toBe(
+      closed.border,
+    );
+  }
+});
+
+test("without JavaScript the phone header shows its links as a plain list", async ({
+  browser,
+}, info) => {
+  const context = await browser.newContext({
+    ...info.project.use,
+    javaScriptEnabled: false,
+    viewport: { width: 320, height: 700 },
+  });
+  const page = await context.newPage();
+  try {
+    await page.goto("/");
+    const header = page.getByRole("banner");
+    await expect(header.getByRole("button", { name: "Menu" })).toBeHidden();
+    await expect(header.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
+    await expect(header.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
+    expect(await overflowOf(page)).toBeLessThanOrEqual(0);
+    await expectHeaderFocusFollowsLayout(page, "without JavaScript at 320");
+  } finally {
+    await context.close();
+  }
 });

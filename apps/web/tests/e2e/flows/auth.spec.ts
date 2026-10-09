@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { onboard } from "../session";
+import { signInUrl } from "../sign-in-redirect";
 import {
   authAnswer,
   capturedMail,
@@ -14,7 +15,8 @@ import {
  * The auth flow across its pages against the production build (task J1):
  * a person signs up through the form, confirms her email from the captured
  * mail, is refused a wrong password, signs in, signs out, and a protected
- * route sends her to sign in and back into the app. Everything runs in a
+ * route sends her to sign in and back to that same page (task J3b: the
+ * layout carries the path as `?next=`). Everything runs in a
  * browser of her own whose sign-in and sign-up requests are paced against
  * the limiter, on an account nobody else uses; no seeded persona is
  * touched. Against a server without a database the forms say the server
@@ -31,9 +33,10 @@ test("sign up, confirm the captured mail, a wrong password, sign in, sign out, a
   test.setTimeout(180_000);
   const page = await ownBrowser(browser, info);
   try {
-    // A signed-out person asking for a page in the app is sent to sign in before anything renders.
+    // A signed-out person asking for a page in the app is sent to sign in before anything renders,
+    // with that page (its path only) as the way back.
     await page.goto("/settings");
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL(signInUrl("/settings"));
     await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
 
     const account = await signUpThroughForm(page, "Rae", "auth");
@@ -56,7 +59,7 @@ test("sign up, confirm the captured mail, a wrong password, sign in, sign out, a
     await expect(page).toHaveURL(/\/verify\?done=1$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Your email is confirmed");
     await checkState(page, "the confirmed page");
-    await page.getByRole("link", { name: "Sign in" }).click();
+    await page.getByRole("main").getByRole("link", { name: "Sign in" }).click();
 
     // A wrong password keeps her on sign-in and says what to do next.
     await signInThroughForm(page, { email: account.email, password: `${account.password}-wrong` });
@@ -85,12 +88,25 @@ test("sign up, confirm the captured mail, a wrong password, sign in, sign out, a
     await expect(page).toHaveURL(/\/$/);
     expect((await page.request.get("/api/v1/me")).status(), "the session is gone").toBe(401);
 
-    // The protected route again: sign in, and she is back in the app, on Today.
+    // The protected route again: sign in, and she is back on the page she asked for.
     await page.goto("/settings");
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL(signInUrl("/settings"));
     await signInThroughForm(page, account);
-    await expect(page).toHaveURL(/\/today$/);
+    await expect(page).toHaveURL(/\/settings$/);
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
     await expect(page.locator("nav[aria-label='Main']").first()).toBeVisible();
+
+    // A dated page keeps its date, and the query she typed never travels: only the path does.
+    await page.context().clearCookies();
+    await page.goto("/log/2026-10-01?from=calendar");
+    await expect(page).toHaveURL(signInUrl("/log/2026-10-01"));
+    await signInThroughForm(page, account);
+    await expect(page).toHaveURL(/\/log\/2026-10-01$/);
+
+    // Today needs no way back: the sign-in lands there anyway.
+    await page.context().clearCookies();
+    await page.goto("/today");
+    await expect(page).toHaveURL(/\/sign-in$/);
 
     // The way back the app offers after a fresh sign-in: `?next=` returns to the page it names.
     await page.context().clearCookies();
@@ -99,11 +115,13 @@ test("sign up, confirm the captured mail, a wrong password, sign in, sign out, a
     await expect(page).toHaveURL(/\/settings$/);
     await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 
-    // A `next` that leaves the origin is refused, and she lands on Today instead.
-    await page.context().clearCookies();
-    await page.goto("/sign-in?next=%2F%2Felsewhere.example");
-    await signInThroughForm(page, account);
-    await expect(page).toHaveURL(/\/today$/);
+    // A `next` that leaves the origin is refused, and she lands on Today instead; so is an encoded one.
+    for (const next of ["%2F%2Felsewhere.example", "%2F%252F%252Felsewhere.example"]) {
+      await page.context().clearCookies();
+      await page.goto(`/sign-in?next=${next}`);
+      await signInThroughForm(page, account);
+      await expect(page).toHaveURL(/\/today$/);
+    }
     expectLimiterUntouched();
   } finally {
     await page.context().close();

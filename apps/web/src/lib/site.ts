@@ -23,6 +23,14 @@ export function indexingAllowed(): boolean {
 }
 
 /**
+ * The social card's alt text. Next's file convention reads the root card's
+ * alt from `src/app/opengraph-image.alt.txt` and cannot import it, so that
+ * file holds the same words and a unit test (site.test.ts) pins the two
+ * equal: change one, and the test names the other.
+ */
+export const SOCIAL_CARD_ALT = `${site.name}. ${site.tagline}.`;
+
+/**
  * The social card at the app root (`src/app/opengraph-image.png`). Next
  * applies a file-based card only to pages in its own segment, and the home
  * page sits in the (public) route group, whose own openGraph would hide it,
@@ -34,7 +42,7 @@ const socialCard = {
   width: 1200,
   height: 630,
   type: "image/png",
-  alt: `${site.name}. ${site.tagline}.`,
+  alt: SOCIAL_CARD_ALT,
 };
 
 export function pageMetadata(

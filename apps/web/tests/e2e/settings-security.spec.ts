@@ -2,6 +2,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Page, Route } from "@playwright/test";
 import { expectNoAxeViolations } from "./axe";
 import { expect, test } from "./fixtures";
+import { signInUrl } from "./sign-in-redirect";
 
 /**
  * The devices and two-step sign-in routes against the production build.
@@ -160,7 +161,7 @@ test("both routes carry their title, one H1, the settings shell and noindex", as
 test("a visitor without a cookie is sent to sign in before anything renders", async ({ page }) => {
   for (const route of routes) {
     await page.goto(route.path);
-    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page).toHaveURL(signInUrl(route.path));
   }
 });
 

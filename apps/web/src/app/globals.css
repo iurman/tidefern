@@ -204,9 +204,59 @@ img {
     display: block;
   }
 }
+/*
+ * The public navigation (DESIGN.md section 4): the links sit in the bar,
+ * Sign in last as an outlined pill. Below 601 px a disclosure button opens
+ * them as a panel under the bar; without JavaScript (no data-js on the
+ * root) the button stays hidden and the links wrap onto a row of their own.
+ */
+.header-bar {
+  position: relative;
+}
 .site-nav {
   display: flex;
+  margin-inline-start: auto;
+}
+.site-nav-toggle {
+  display: none;
+  min-height: 44px;
+  align-items: center;
+  gap: 6px;
+  padding-inline: 14px 10px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-round);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: var(--type-small);
+  font-weight: 600;
+  transition:
+    background var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+.site-nav-toggle:hover {
+  background: var(--panel);
+}
+/* Open, the button takes the pressed chip's action fill, which reads in both themes. */
+.site-nav-toggle[aria-expanded="true"] {
+  background: var(--action);
+  color: var(--action-text);
+  border-color: var(--action);
+}
+.site-nav-toggle[aria-expanded="true"]:hover {
+  background: var(--action);
+  filter: brightness(1.08);
+}
+.site-nav-toggle:active {
+  transform: scale(0.97);
+}
+.site-nav-list {
+  display: flex;
+  align-items: center;
   gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
 }
 .site-nav a {
   min-height: 44px;
@@ -223,6 +273,9 @@ img {
 .site-nav a[aria-current="page"] {
   background: var(--panel);
   color: var(--accent);
+}
+.site-nav a.site-nav-sign-in {
+  border: 1px solid var(--border);
 }
 .header-controls {
   display: flex;
@@ -303,7 +356,8 @@ img {
 @media (prefers-reduced-motion: reduce) {
   .control,
   .action,
-  .site-nav a {
+  .site-nav a,
+  .site-nav-toggle {
     transition: none;
   }
 }
@@ -446,8 +500,81 @@ img {
   .header-bar {
     padding: 8px 10px 8px 14px;
   }
+  /*
+   * Without JavaScript: the links take a row of their own between the logo
+   * and the controls, so the rows read in the order Tab walks them.
+   */
+  .header-bar {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .header-controls {
+    margin-inline-start: auto;
+  }
   .site-nav {
+    flex-basis: 100%;
+    margin-inline-start: 0;
+  }
+  .site-nav-list {
+    flex-wrap: wrap;
+  }
+  /*
+   * With JavaScript: the disclosure button sits before the controls, as it
+   * does in the source, and the links open in a panel under the bar.
+   */
+  [data-js="true"] .header-bar {
+    flex-wrap: nowrap;
+    gap: 4px;
+  }
+  [data-js="true"] .site-nav {
+    flex-basis: auto;
+    margin-inline-start: auto;
+  }
+  [data-js="true"] .header-controls {
+    margin-inline-start: 0;
+  }
+  [data-js="true"] .site-nav-toggle {
+    display: inline-flex;
+  }
+  [data-js="true"] .site-nav-list {
     display: none;
+    position: absolute;
+    top: calc(100% + 8px);
+    inset-inline: 0;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 4px;
+    padding: 8px;
+    border: 1px solid var(--soft-border);
+    border-radius: var(--radius-card);
+    background: var(--surface);
+    opacity: 0;
+    transform: translateY(-6px);
+    /* DESIGN.md section 7: a disclosure moves on the 280 ms disclosure curve. */
+    transition:
+      opacity var(--duration-disclosure) var(--ease-disclosure),
+      transform var(--duration-disclosure) var(--ease-disclosure),
+      display var(--duration-disclosure) allow-discrete;
+  }
+  [data-js="true"] .site-nav[data-open="true"] .site-nav-list {
+    display: flex;
+    opacity: 1;
+    transform: none;
+  }
+  @starting-style {
+    [data-js="true"] .site-nav[data-open="true"] .site-nav-list {
+      opacity: 0;
+      transform: translateY(-6px);
+    }
+  }
+  /* Reduced motion: the panel lands at once. */
+  @media (prefers-reduced-motion: reduce) {
+    [data-js="true"] .site-nav-list {
+      transition: none;
+    }
+  }
+  [data-js="true"] .site-nav-list a {
+    width: 100%;
   }
   .wordmark {
     font-size: 1.5rem;
@@ -458,6 +585,26 @@ img {
   }
   .token-table th[scope="row"] {
     white-space: normal;
+  }
+}
+/*
+ * A phone fits the logo, the two toggles and the menu button on one bar: the
+ * button drops its icon (its action fill and aria-expanded carry the open
+ * state), and
+ * under 380 px the logo shows the mark alone (the link keeps its name,
+ * "Tidefern home"), so nothing scrolls sideways at 320.
+ */
+@media (max-width: 420px) {
+  .site-nav-toggle {
+    padding-inline: 12px;
+  }
+  .site-nav-toggle svg {
+    display: none;
+  }
+}
+@media (max-width: 379px) {
+  .header-bar .wordmark {
+    display: none;
   }
 }
 

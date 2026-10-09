@@ -2,6 +2,7 @@ import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { runDueJobs } from "../jobs";
 import { MAIL_CAPTURE_PATH, baseOrigin, onboard } from "../session";
+import { signInUrl } from "../sign-in-redirect";
 import {
   api,
   authAnswer,
@@ -167,11 +168,13 @@ test("from /account/delete signed out: sign in, close, the locked view, undo, cl
       noticesBefore + 1,
     );
 
-    // Her session is gone and no page of the app is hers.
+    // Her session is gone and no page of the app is hers. A shell page sends her to sign in
+    // with its path as `?next=` (J3b); /closing sits outside the shell and sends plain /sign-in,
+    // so it goes last and leaves her on the plain sign-in page for the refused sign-in below.
     expect((await page.request.get("/api/v1/me")).status(), "her old session").toBe(401);
-    for (const path of ["/closing", "/today", "/settings/close-account"]) {
+    for (const path of ["/today", "/settings/close-account", "/closing"]) {
       await page.goto(path);
-      await expect(page, path).toHaveURL(/\/sign-in$/);
+      await expect(page, path).toHaveURL(path === "/closing" ? /\/sign-in$/ : signInUrl(path));
     }
 
     // She cannot sign in at all: Better Auth has no such user, so her own password is refused

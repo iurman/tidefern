@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { expectNoAxeViolations } from "./axe";
 import { serverHasDatabase } from "./session";
+import { signInRedirect, signInUrl } from "./sign-in-redirect";
 
 /**
  * The (app) route group's frame against the production build: no public
@@ -106,9 +107,9 @@ test("a visitor without a session is sent to sign in before anything renders", a
   for (const route of appRoutes) {
     const response = await request.get(route.path, { maxRedirects: 0 });
     expect(response.status(), route.path).toBe(307);
-    expect(response.headers()["location"], route.path).toBe("/sign-in");
+    expect(response.headers()["location"], route.path).toBe(signInRedirect(route.path));
     await page.goto(route.path);
-    await expect(page, route.path).toHaveURL(/\/sign-in$/);
+    await expect(page, route.path).toHaveURL(signInUrl(route.path));
     await expect(page.getByRole("banner"), "sign-in keeps the public header").toHaveCount(1);
   }
 });
