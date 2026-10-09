@@ -1499,3 +1499,48 @@ line after a birth).
 J1 (flow suites) and J2 (Lighthouse and the bundle budget) in parallel,
 then J3 (review loops, folding in the follow-ups above), J4 and J6.
 
+### J1 and J2 merged (2026-10-09, lead session dfc54107)
+
+J1 (#94, `7d6b62e`) and J2 (#93, `c1e8032`) were built, reviewed with a
+skeptic per finding and fixed in one workflow; J2b (#95, `41c7936`) made
+the four fixes J2 measured, under the same loop. Each was rebased onto
+the previous merge and regated by the lead before its push: `pnpm check`,
+the seeded suite (354 passed, 18 to 19 minutes, limiter trips 0), the
+database-free smoke (6 passed), CI verify, CodeQL and the preview smoke
+against the head deployment; production smokes 37878856609 (J2) and
+37888756158 (J1) passed.
+
+CodeQL caught a real issue on J1: the e2e limiter state was written to a
+predictable file in the shared temp folder. The lead moved it into the web
+package's ignored `node_modules/.cache` (folder 0700, file 0600) and
+regated. On J2b CodeQL flagged a backtracking regular expression in the
+client-graph guard; the builder replaced it with a linear scan.
+
+Lead rulings: J2 merged as a measurement with its budgets explained; J2b
+was approved as a follow-up outside the plan's rows. The fonts README
+edit, the 12 KB hidden-mark cost when a viewer's theme differs from the
+system, and the +0.37 s lab LCP on Noor's `/today` from no longer
+preloading the italic are accepted. The byte-budget gate goes into CI in
+J3. `@opentelemetry/api` 1.9.1 now resolves as the optional peer of next,
+better-auth and drizzle-orm through the Lighthouse dev dependency; no SDK
+is registered, so nothing the app does changes (PERFORMANCE.md).
+
+Lighthouse at head (lab, one machine): initial transfer and CLS met on
+every key route; first-route JavaScript met signed out and on `/today`
+and `/family`, missed by 7 to 20 KB on `/calendar`, `/sharing` and
+`/settings`; LCP missed everywhere (2.71 to 4.66 s), from render-blocking
+CSS and the roman fonts, a decision on 13.5's optical-size Newsreader.
+
+### Next action
+
+J3 in two rounds. First, in parallel: J3b (the known web defects: the
+sign-in return path, the WeekStrip and month-view pill clipping, the
+public header's Sign in with the phone menu, the social card alt text),
+J3c (the forged-cursor 500, `describeError()` and SQLSTATE, the console
+mailer printing invitation tokens, the terms acceptance on the
+someone-else path, the UUIDv7 minter into `packages/core`, one way for
+route areas to get the database and keys, the turbo test inputs) and J3d
+(deletion proved to removal in the suite, the byte-budget gate in CI).
+Then the five review loops of BUILD_PROMPT.md section 10 over every
+route, logged in `docs/design/QA.md`.
+
