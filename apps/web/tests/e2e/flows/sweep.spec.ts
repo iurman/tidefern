@@ -33,7 +33,9 @@ import {
  *   for every sheet or dialog the route has, it opens from the keyboard,
  *   Escape closes it and focus returns to the control that opened it. A
  *   dialog behind fresh authentication gets a fresh sign-in first, so its
- *   control shows instead of the sign-in-again notice.
+ *   control shows instead of the sign-in-again notice. At 390 the public
+ *   header's menu opens from the keyboard, Tab reaches its links with a
+ *   ring, and Escape closes it with focus back on its button.
  *
  * Checks are batched per page: one context per persona and viewport, and
  * every check for a route runs before the next route loads. A failed check
@@ -472,6 +474,49 @@ async function escapePath(page: Page, opener: Opener, label: string) {
 }
 
 /**
+ * The public header's menu on a phone (task J3b): the disclosure button
+ * opens from the keyboard and says so with `aria-expanded`, Tab walks into
+ * its two links with a visible ring, and Escape closes it with focus back
+ * on the button. A page without the public header (the app shell) has no
+ * such button and is skipped.
+ */
+async function headerMenuPath(page: Page, label: string) {
+  const button = page.getByRole("banner").getByRole("button", { name: "Menu" });
+  if ((await button.count()) === 0) return;
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await recordRestingRings(page);
+  // A press before hydration does nothing, so try again until the menu says it is open.
+  const opened = await expect(async () => {
+    await button.focus();
+    await page.keyboard.press("Enter");
+    await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
+  })
+    .toPass({ timeout: 15_000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  expect.soft(opened, `${label}: the header menu opens from the keyboard`).toBe(true);
+  if (!opened) return;
+  const menu = page.locator(`#${await button.getAttribute("aria-controls")}`);
+  await expect.soft(menu, `${label}: the menu the button controls shows`).toBeVisible();
+  for (const name of ["Design system", "Sign in"]) {
+    await page.keyboard.press("Tab");
+    const focus = await describeFocus(page);
+    expect
+      .soft(focus?.label, `${label}: Tab from the menu button reaches ${name}`)
+      .toBe(`a "${name}"`);
+    expect.soft(focus?.ring, `${label}: ${name} in the menu shows a focus ring`).toBe(true);
+  }
+  await page.keyboard.press("Escape");
+  await expect
+    .soft(button, `${label}: Escape closes the header menu`)
+    .toHaveAttribute("aria-expanded", "false");
+  await expect.soft(menu, `${label}: the closed menu hides its links`).toBeHidden();
+  await expect.soft(button, `${label}: Escape returns focus to the menu button`).toBeFocused();
+}
+
+/**
  * Every check for one route at one width, on the page as it loads. `persona`
  * is who the page is signed in as, for a fresh sign-in before a dialog
  * behind fresh authentication.
@@ -509,6 +554,7 @@ async function sweepRoute(
   });
   // Every element on a phone, where the tab bar can cover one; the frame on a desktop.
   await keyboardPath(page, label, mode === "full" && width === PHONE.width ? "full" : "frame");
+  if (width === PHONE.width) await headerMenuPath(page, label);
   for (const opener of route.openers ?? []) {
     if (!opener.widths.includes(width)) continue;
     // Read-only: a fresh sign-in only starts a new session, and the dialog is closed unconfirmed.

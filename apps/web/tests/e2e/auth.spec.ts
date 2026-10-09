@@ -83,7 +83,7 @@ test("every auth route carries its title, one H1, a form where one belongs, and 
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute("content", /noindex/);
     if (route.path.startsWith("/verify")) {
       await expect(page.locator("form")).toHaveCount(0);
-      await expect(page.getByRole("link", { name: "Sign in" })).toBeVisible();
+      await expect(page.getByRole("main").getByRole("link", { name: "Sign in" })).toBeVisible();
     } else {
       await expect(page.locator("form")).toHaveCount(1);
       await expect(page.locator('button[type="submit"]')).toBeVisible();
@@ -300,7 +300,10 @@ test("the new password form reports success and hands focus to the sentence", as
   await expect(page.getByRole("status")).toContainText("Your password is set");
   await expect(page.locator("form")).toHaveCount(0);
   await expect(page.locator(":focus")).toContainText("Your password is set");
-  await expect(page.getByRole("link", { name: "Sign in" })).toHaveAttribute("href", "/sign-in");
+  await expect(page.getByRole("main").getByRole("link", { name: "Sign in" })).toHaveAttribute(
+    "href",
+    "/sign-in",
+  );
 });
 
 test("the auth routes reflow at 320 px without a horizontal scroll", async ({ page }) => {
