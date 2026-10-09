@@ -982,6 +982,63 @@ describe("measurements", () => {
   });
 });
 
+describe("a cursor neither list issued", () => {
+  /** A cursor as the lists write one: base64url of a JSON object of strings. */
+  const forged = (parts: Record<string, string>) =>
+    Buffer.from(JSON.stringify(parts), "utf8").toString("base64url");
+  const SOME_ID = "018f5e7a-4000-7000-8000-0000000000ff";
+  const MALFORMED = [
+    "not-a-cursor",
+    forged({ i: "not-an-id" }),
+    forged({ d: "2026-02-31", i: SOME_ID }),
+    forged({ d: "yesterday", i: SOME_ID }),
+    Buffer.from("[1,2]", "utf8").toString("base64url"),
+  ];
+  // Shaped like a cursor, but one the other list (or the notes or events list) issues.
+  const FOREIGN_TO_CHILDREN = [
+    forged({ d: DAY_TEN, i: SOME_ID }),
+    forged({ o: "desc", d: DAY_TEN, t: "2026-10-05T05:00:00.000000Z", i: SOME_ID }),
+    Buffer.from(`${DAY_TEN}|${SOME_ID}`, "utf8").toString("base64url"),
+  ];
+  const FOREIGN_TO_MEASUREMENTS = [
+    forged({ i: SOME_ID }),
+    forged({ d: DAY_TEN }),
+    forged({ o: "desc", d: DAY_TEN, t: "2026-10-05T05:00:00.000000Z", i: SOME_ID }),
+    Buffer.from(`${DAY_TEN}|${SOME_ID}`, "utf8").toString("base64url"),
+  ];
+  const OVERSIZED = forged({ i: SOME_ID, pad: "x".repeat(400) });
+
+  it("answers the children list a 422 on the cursor, never a database error", async () => {
+    for (const cursor of [...MALFORMED, ...FOREIGN_TO_CHILDREN, OVERSIZED]) {
+      const response = await call("GET", `/children?cursor=${cursor}`);
+      const body = await expectProblem(response, 422, "validation_failed");
+      expect(body.errors?.map((error) => error.path)).toEqual(["cursor"]);
+    }
+  });
+
+  it("answers the measurements list a 422 on the cursor, never a database error", async () => {
+    for (const cursor of [...MALFORMED, ...FOREIGN_TO_MEASUREMENTS, OVERSIZED]) {
+      const response = await call("GET", `/children/${childId}/measurements?cursor=${cursor}`);
+      const body = await expectProblem(response, 422, "validation_failed");
+      expect(body.errors?.map((error) => error.path)).toEqual(["cursor"]);
+    }
+  });
+
+  it("still pages both lists with the cursors they issue", async () => {
+    const first = await json<{ items: ChildMeasurement[]; nextCursor: string | null }>(
+      await call("GET", `/children/${childId}/measurements?limit=1`),
+    );
+    expect(first.nextCursor).not.toBeNull();
+    const second = await call(
+      "GET",
+      `/children/${childId}/measurements?limit=1&cursor=${first.nextCursor}`,
+    );
+    expect(second.status).toBe(200);
+    const children = await call("GET", `/children?cursor=${forged({ i: SOME_ID })}`);
+    expect(children.status).toBe(200);
+  });
+});
+
 describe("milestones", () => {
   it("serves the checklist for the child's age and for a chosen age, and refuses an age that is not one", async () => {
     const own = await json<MilestoneChecklist>(

@@ -413,7 +413,12 @@ export type MilestoneCheckInput = z.infer<typeof MilestoneCheckInput>;
 
 /** The query of every syncable list (architecture record 5.1). */
 export const ListQuery = z.object({
-  cursor: z.string().optional().describe("Opaque; from the previous page's nextCursor"),
+  cursor: z
+    .string()
+    .min(1)
+    .max(200)
+    .optional()
+    .describe("Opaque; from the previous page's nextCursor"),
   limit: z.coerce.number().int().min(1).max(200).default(50),
 });
 export type ListQuery = z.infer<typeof ListQuery>;

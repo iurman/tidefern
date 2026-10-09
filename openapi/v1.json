@@ -11389,6 +11389,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,
@@ -12985,6 +12987,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,
@@ -14155,6 +14159,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,

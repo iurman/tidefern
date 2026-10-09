@@ -677,6 +677,39 @@ function invalidCursor(c: Context<ApiEnv>) {
 }
 
 /**
+ * The position a children-list cursor names: exactly an id, checked before it
+ * reaches a query, so a cursor this list never issued (a forged id, or another
+ * list's cursor) is a 422 and not a database error. Null means refuse;
+ * undefined means the first page.
+ */
+function childrenCursor(
+  raw: Record<string, string> | null | undefined,
+): { i: string } | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const { i, ...rest } = raw;
+  if (Object.keys(rest).length > 0) return null;
+  if (i === undefined || !Id.safeParse(i).success) return null;
+  return { i };
+}
+
+/**
+ * The position a measurements cursor names: exactly a real day and an id,
+ * checked the same way as `childrenCursor`.
+ */
+function measurementCursor(
+  raw: Record<string, string> | null | undefined,
+): { d: string; i: string } | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const { d, i, ...rest } = raw;
+  if (Object.keys(rest).length > 0) return null;
+  if (d === undefined || !RealCalendarDate.safeParse(d).success) return null;
+  if (i === undefined || !Id.safeParse(i).success) return null;
+  return { d, i };
+}
+
+/**
  * When an event happened, for the newest-first order: its start, or when it
  * was logged when it has none (a diaper or a milestone logged without a
  * time). `created_at` is never null, so neither is this.
@@ -922,7 +955,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
   app.openapi(listChildrenRoute, async (c) => {
     const actor = actorOf(c);
     const { limit, cursor } = c.req.valid("query");
-    const after = decodeCursor(cursor);
+    const after = childrenCursor(decodeCursor(cursor));
     if (after === null) return invalidCursor(c);
     const scopes = new Map<string, Scope>();
     for (const scope of listScope(actor, "summary")) {
@@ -937,7 +970,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           inArray(schema.children.id, [...scopes.keys()]),
           isNull(schema.children.deletedAt),
         ];
-        if (after?.["i"] !== undefined) conditions.push(gt(schema.children.id, after["i"]));
+        if (after !== undefined) conditions.push(gt(schema.children.id, after.i));
         const rows = await tx
           .select()
           .from(schema.children)
@@ -1403,7 +1436,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
     const actor = actorOf(c);
     const { id } = c.req.valid("param");
     const { limit, cursor, from, to, updatedSince } = c.req.valid("query");
-    const after = decodeCursor(cursor);
+    const after = measurementCursor(decodeCursor(cursor));
     if (after === null) return invalidCursor(c);
     const page = await withActor(
       actor.id,
@@ -1419,14 +1452,12 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         if (updatedSince !== undefined) {
           conditions.push(gt(schema.childMeasurements.updatedAt, new Date(updatedSince)));
         }
-        const afterDate = after?.["d"];
-        const afterId = after?.["i"];
-        if (afterDate !== undefined && afterId !== undefined) {
+        if (after !== undefined) {
           const beyond = or(
-            gt(schema.childMeasurements.date, afterDate),
+            gt(schema.childMeasurements.date, after.d),
             and(
-              eq(schema.childMeasurements.date, afterDate),
-              gt(schema.childMeasurements.id, afterId),
+              eq(schema.childMeasurements.date, after.d),
+              gt(schema.childMeasurements.id, after.i),
             ),
           );
           if (beyond !== undefined) conditions.push(beyond);
