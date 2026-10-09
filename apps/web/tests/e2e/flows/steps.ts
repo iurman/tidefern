@@ -6,6 +6,7 @@ import {
   type Page,
   type TestInfo,
 } from "@playwright/test";
+import { AXE_TAGS } from "../axe";
 import {
   MAIL_CAPTURE_PATH,
   baseOrigin,
@@ -23,9 +24,6 @@ import {
 
 export type Theme = "light" | "dark";
 export const THEMES = ["light", "dark"] as const;
-
-/** The tag set of ./axe.ts. */
-export const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
 
 /** Phone and desktop sizes every check uses. */
 export const DESKTOP = { width: 1440, height: 900 } as const;

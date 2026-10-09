@@ -74,7 +74,7 @@ test("sign up, confirm the captured mail, a wrong password, sign in, sign out, a
     await expect(page).toHaveURL(/\/welcome$/);
     await expect(page.getByRole("heading", { level: 1 })).toHaveText("Welcome to Tidefern");
 
-    // With a profile the app keeps her. Signing out is a POST from the policy line, and home.
+    // With a profile the app keeps her. Signing out is the button in Settings' Sign out section, and home.
     await onboard(page, { stage: "cycle", timeZone: "Europe/Berlin", displayName: "Rae" });
     await page.goto("/settings");
     await expect(page).toHaveURL(/\/settings$/);

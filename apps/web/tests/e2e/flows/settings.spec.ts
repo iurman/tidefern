@@ -134,6 +134,13 @@ test("theme and sound stay on the device across a reload and a new session, unit
       .filter({ has: page.getByRole("button", { name: "Sign out this device" }) })
       .last();
     await expect(thisBrowser).toContainText(/Chrome/);
+    // This browser's row comes first: its badge before either row's "Last seen" line.
+    const rowOrder = await page
+      .getByText("This browser", { exact: true })
+      .or(page.getByText(/^Last seen /))
+      .allInnerTexts();
+    expect(rowOrder).toHaveLength(3);
+    expect(rowOrder[0]).toBe("This browser");
     await checkState(page, "the devices list with two sessions");
     expectLimiterUntouched();
   } finally {
