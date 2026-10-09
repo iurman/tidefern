@@ -1007,10 +1007,18 @@ describe("a cursor neither list issued", () => {
     forged({ o: "desc", d: DAY_TEN, t: "2026-10-05T05:00:00.000000Z", i: SOME_ID }),
     Buffer.from(`${DAY_TEN}|${SOME_ID}`, "utf8").toString("base64url"),
   ];
-  const OVERSIZED = forged({ i: SOME_ID, pad: "x".repeat(400) });
+  /**
+   * Over the 200-character bound but otherwise exactly what each list issues:
+   * the right keys and values, with JSON whitespace after them. Only the
+   * length check can refuse these.
+   */
+  const padded = (parts: Record<string, string>) =>
+    Buffer.from(`${JSON.stringify(parts)}${" ".repeat(300)}`, "utf8").toString("base64url");
+  const OVERSIZED_FOR_CHILDREN = padded({ i: SOME_ID });
+  const OVERSIZED_FOR_MEASUREMENTS = padded({ d: DAY_TEN, i: SOME_ID });
 
   it("answers the children list a 422 on the cursor, never a database error", async () => {
-    for (const cursor of [...MALFORMED, ...FOREIGN_TO_CHILDREN, OVERSIZED]) {
+    for (const cursor of [...MALFORMED, ...FOREIGN_TO_CHILDREN, OVERSIZED_FOR_CHILDREN]) {
       const response = await call("GET", `/children?cursor=${cursor}`);
       const body = await expectProblem(response, 422, "validation_failed");
       expect(body.errors?.map((error) => error.path)).toEqual(["cursor"]);
@@ -1018,7 +1026,7 @@ describe("a cursor neither list issued", () => {
   });
 
   it("answers the measurements list a 422 on the cursor, never a database error", async () => {
-    for (const cursor of [...MALFORMED, ...FOREIGN_TO_MEASUREMENTS, OVERSIZED]) {
+    for (const cursor of [...MALFORMED, ...FOREIGN_TO_MEASUREMENTS, OVERSIZED_FOR_MEASUREMENTS]) {
       const response = await call("GET", `/children/${childId}/measurements?cursor=${cursor}`);
       const body = await expectProblem(response, 422, "validation_failed");
       expect(body.errors?.map((error) => error.path)).toEqual(["cursor"]);
