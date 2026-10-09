@@ -85,6 +85,31 @@
   border-inline-end: 2px var(--cell-style) var(--cell-stroke);
 }
 
+/*
+ * A window that runs on past the row: the first day of a row whose window
+ * began earlier, or the last day of a row whose window goes on. The open end
+ * would otherwise stop flat against the grid's edge (or the strip's, over
+ * today's warmth corners) and read as cut off. It stops a 4 px gutter short
+ * of the edge instead, like a rounded end, and fades out over 20 px, so it
+ * reads as continuing without leaving the grid or covering today's mark.
+ * The fade is a mask, so it keeps the texture: solid, dashed and dotted
+ * strokes all thin out the same way in both themes. Only the mask's alpha
+ * counts, so currentColor (always opaque) stands in for a raw color.
+ */
+.host:first-child:is(.edgeMiddle, .edgeEnd)::before,
+.host:first-child:is(.edgeMiddle, .edgeEnd)::after {
+  inset-inline-start: var(--space-1);
+  -webkit-mask-image: linear-gradient(to right, transparent, currentColor 20px);
+  mask-image: linear-gradient(to right, transparent, currentColor 20px);
+}
+
+.host:last-child:is(.edgeMiddle, .edgeStart)::before,
+.host:last-child:is(.edgeMiddle, .edgeStart)::after {
+  inset-inline-end: var(--space-1);
+  -webkit-mask-image: linear-gradient(to left, transparent, currentColor 20px);
+  mask-image: linear-gradient(to left, transparent, currentColor 20px);
+}
+
 .cell {
   position: relative;
   z-index: 1;
