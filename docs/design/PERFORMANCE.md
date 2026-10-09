@@ -362,7 +362,12 @@ lazy image is never fetched, and the hero's preload is then the request.
 After it, the mark loads at High from the head (Lighthouse's "fetchpriority
 should be applied" check passes) and every route downloads one mark file
 instead of two, 12 KB less. A viewer whose chosen theme differs from her
-system's fetches one 12 KB file the page does not show.
+system's still fetches one 12 KB file the page does not show, since the
+media-matched preload sits in the head. The mark she does see is covered
+by the inline preference script in the root layout: on `/`, when the
+stored theme differs from the system theme, it appends a high-priority
+preload for the shown variant before the body parses, so her hero mark
+no longer waits for layout to find a lazy image (review answer, J2b).
 
 The streamed signed-in routes: `/family`, `/journey`, `/activity` and the
 child page already render their heading (or, for the child page, the way
@@ -419,7 +424,8 @@ catalogs. The 0.1 to 0.3 KB growth at step 4 is the mark's priority and preload 
 | /sharing | Noor | 710.2 KB | 666.2 | 567.5 | 482.7 | 459.0 |
 | /settings | Noor | 613.2 KB | 569.2 | 569.2 | 484.3 | 460.7 |
 
-Fonts went from 234 KB on every route to 150 KB (the two roman files),
+Fonts went from 234 KB on every route to 150 KB transferred (the two roman
+files, 152,156 bytes on disk; a KB here is 1,024 bytes of transfer size),
 plus the 64 KB italic only where a page sets the estimate sentence: on
 `/today` for Noor and on `/calendar`, not on `/today` for Mira (no
 prediction yet) or anywhere else measured. Step 4's 11 to 24 KB is the

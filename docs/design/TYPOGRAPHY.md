@@ -62,7 +62,9 @@ serif and Arial for the sans. The reasoning for the weight-only italic
 What ships and what is preloaded changed in task J2b
 (`docs/design/PERFORMANCE.md`, "J2b"):
 
-- The two roman files are the only preloads, 152 KB on every route.
+- The two roman files are the only preloads on every route: 152,156 bytes
+  on disk (132,000 and 20,156), which PERFORMANCE.md measures as 150 KB
+  transferred (its KB is 1,024 bytes of Lighthouse's transfer size).
 - The Newsreader italic is its own `next/font/local` call with
   `preload: false` and the variable `--font-newsreader-italic`; the
   `.estimate` class names it first. The browser fetches it when a page
