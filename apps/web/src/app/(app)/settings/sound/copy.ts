@@ -33,7 +33,7 @@ export const soundCopy = {
     sameTime: "Start and end are the same time, so nothing is silenced.",
     defaults: { start: "22:00", end: "07:00" },
     loading: "Reading your quiet hours.",
-    zone: "Times follow this device's clock until your profile carries a time zone.",
+    zone: "Times follow this device's clock.",
   },
   sample: {
     button: "Play a sample",

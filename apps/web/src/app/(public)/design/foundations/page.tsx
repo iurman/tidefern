@@ -88,7 +88,7 @@ const voice = [
     state: "Destructive",
     rule: "Name the consequence and the undo window",
     example:
-      "Closing your account locks it now and deletes it in 7 days. Signing in again before then cancels this.",
+      "Closing your account locks it now and deletes it in 7 days. Until then, you can sign in and undo it.",
   },
 ];
 

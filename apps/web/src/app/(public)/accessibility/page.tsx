@@ -82,13 +82,8 @@ export default function AccessibilityPage() {
         <p>These are the gaps the build knows about today. Each one is tracked and has an owner.</p>
         <ul>
           <li>
-            On screens narrower than 600 pixels the header hides its navigation links and offers no
-            replacement yet; the pages they lead to are still reachable from the footer.
-          </li>
-          <li>
             Manual keyboard and screen reader passes have not been recorded yet. The automated
-            checks catch many problems but not every one, and the record that will hold the manual
-            results does not exist yet.
+            checks catch many problems but not every one.
           </li>
           <li>
             Windows high contrast mode is designed for in the components, but it is not yet covered

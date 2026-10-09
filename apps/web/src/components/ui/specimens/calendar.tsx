@@ -1,4 +1,5 @@
 import { addDays, predictCycle, type CalendarDate } from "@tidefern/core";
+import { CONTRACEPTION_LINE } from "@/lib/prediction-copy";
 import type { DayMark, DayWindow } from "../calendar-dates";
 import { DateRangeSelection } from "../date-range-selection";
 import { DayCell, daySampleClassNames, dayCellClassNames } from "../day-cell";
@@ -33,7 +34,8 @@ if (prediction?.fertileWindow) {
     start: prediction.fertileWindow.start,
     end: prediction.fertileWindow.end,
     texture: "estimated",
-    words: "fertile window estimated",
+    // Every fertile-window element carries the contraception line (architecture 13.10), here in the day's name.
+    words: `fertile window estimated. ${CONTRACEPTION_LINE}`,
   });
 }
 

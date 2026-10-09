@@ -204,6 +204,31 @@ test("/account/delete shows the signed-out action without a session", async ({ p
   );
 });
 
+test("the public pages say what is true today: the undo after sign-in, the phone menu, and who sees a child", async ({
+  page,
+}) => {
+  // Review loop 1 (task J3e). Closing is undone by a step on the locked view
+  // after signing in (H7), never by the sign-in alone.
+  for (const path of ["/account/delete", "/design/foundations"]) {
+    await page.goto(path);
+    await expect(page.getByText("Until then, you can sign in and undo it.").first()).toBeVisible();
+    await expect(page.getByText(/Signing in again before then cancels/)).toHaveCount(0);
+  }
+  // The header has had its phone menu since J3b, so it is no longer a known gap.
+  await page.goto("/accessibility");
+  await expect(page.getByRole("heading", { level: 2, name: "Known gaps" })).toBeVisible();
+  await expect(page.getByText(/offers no\s+replacement/)).toHaveCount(0);
+  // A child's record also reaches someone a guardian shares it with (the seed's Pia).
+  await page.goto("/");
+  await expect(
+    page.getByText(/every guardian and by no one else until you share them/),
+  ).toBeVisible();
+  await expect(page.getByText(/every guardian and nobody else/)).toHaveCount(0);
+  // The design hub's chapters are all published.
+  await page.goto("/design");
+  await expect(page.getByText(/planned structure/)).toHaveCount(0);
+});
+
 /* ------------------------------------------------------------------------ */
 /* The public header's Sign in and its phone menu (task J3b)                 */
 /* ------------------------------------------------------------------------ */

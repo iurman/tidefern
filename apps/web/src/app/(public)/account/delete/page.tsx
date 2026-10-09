@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 
 const copy = {
   paragraph:
-    "Closing your account locks it now and deletes it in 7 days. Signing in again before then cancels this. Locking ends every session and every grant at once, so nobody you shared with can see anything from the moment you confirm. After the 7 days your records, your notes and the key that encrypted them are deleted, and the database history that could restore them ages out within 7 more days. The processors that hold your email address are told to delete it.",
+    "Closing your account locks it now and deletes it in 7 days. Until then, you can sign in and undo it. Locking ends every session and every grant at once, so nobody you shared with can see anything from the moment you confirm. After the 7 days your records, your notes and the key that encrypted them are deleted, and the database history that could restore them ages out within 7 more days. The processors that hold your email address are told to delete it.",
   signedOut: {
     lede: "Closing happens from your account, so sign in first.",
     action: "Sign in to continue",
