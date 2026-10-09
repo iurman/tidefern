@@ -135,8 +135,25 @@ function sourceFiles(dir: string): string[] {
   return out;
 }
 
+/** Whether the first statement, after any leading comments, is the client directive. */
 function isClientModule(source: string): boolean {
-  return /^\s*(?:\/\/[^\n]*\n|\/\*[\s\S]*?\*\/\s*)*["']use client["']/.test(source);
+  // A linear scan instead of one regular expression over the comments, which can backtrack
+  // exponentially on a source such as "/*" followed by many "*//*".
+  let at = 0;
+  for (;;) {
+    while (at < source.length && /\s/.test(source[at] as string)) at += 1;
+    if (source.startsWith("//", at)) {
+      const end = source.indexOf("\n", at);
+      if (end === -1) return false;
+      at = end + 1;
+    } else if (source.startsWith("/*", at)) {
+      const end = source.indexOf("*/", at + 2);
+      if (end === -1) return false;
+      at = end + 2;
+    } else {
+      return source.startsWith('"use client"', at) || source.startsWith("'use client'", at);
+    }
+  }
 }
 
 describe("the Zod import check", () => {
@@ -178,6 +195,10 @@ describe("the Zod import check", () => {
     expect(isClientModule(`"use client";\nexport {};`)).toBe(true);
     expect(isClientModule(`// note\n'use client';\n`)).toBe(true);
     expect(isClientModule(`export const x = "use client";`)).toBe(false);
+    expect(isClientModule(`/* a */ /** b */\n"use client";`)).toBe(true);
+    expect(isClientModule(`/* unterminated "use client"`)).toBe(false);
+    // The shape that made the old regular expression backtrack exponentially.
+    expect(isClientModule(`/*${"*//*".repeat(50_000)}`)).toBe(false);
   });
 });
 
