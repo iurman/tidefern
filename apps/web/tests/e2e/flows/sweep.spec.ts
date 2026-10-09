@@ -332,7 +332,16 @@ async function sweepRoute(page: Page, route: Route, who: string, mode: "full" | 
       document.documentElement.dataset.theme = value;
       window.scrollTo(0, 0);
     }, theme);
-    const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
+    // Only violations are read, so axe skips collecting every passing node. `options` replaces
+    // the whole options object, so it comes before `withTags`, which adds the tag set to it.
+    const results = await new AxeBuilder({ page })
+      .options({ resultTypes: ["violations"] })
+      .withTags(AXE_TAGS)
+      .analyze();
+    expect(results.toolOptions.runOnly, "axe ran the wcag22aa tag set").toEqual({
+      type: "tag",
+      values: AXE_TAGS,
+    });
     expect.soft(results.violations, `${label} in ${theme}`).toEqual([]);
   }
   await page.evaluate(() => {
