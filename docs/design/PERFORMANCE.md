@@ -49,13 +49,19 @@ effects.
 - Routes: `/`, `/privacy`, `/sign-in`, `/design` signed out; `/today` as
   Noor and as Mira, `/calendar`, `/sharing` and `/settings` as Noor,
   `/family` as Pia. The script signs each persona in once through
-  `POST /api/auth/sign-in/email`, sends the session cookie with
-  `--extra-headers`, replaces Lighthouse's copy of that header with
-  `[redacted]` before a report is written, deletes any report that still
-  contains a cookie value, and refuses a run that ended on another path.
-  Signed-in routes run only against a loopback server.
+  `POST /api/auth/sign-in/email` and sends the session cookie with
+  `--extra-headers`. Lighthouse saves each report with a copy of that
+  header, also on a run that ends in a runtime error and a nonzero exit, so
+  the script rewrites every report Lighthouse leaves with the header
+  replaced by `[redacted]` as soon as Lighthouse exits, before the run
+  counts as passed or failed. It deletes a report it cannot read or that
+  still contains a cookie value, scrubs cookie values from error text, and
+  refuses a run that ended on another path. Signed-in routes run only
+  against a loopback server.
 - Runs: three per route; the table shows the run Lighthouse's own
-  `computeMedianRun` picks (closest to the median FCP and TTI).
+  `computeMedianRun` picks (closest to the median FCP and TTI). A run
+  with no FCP or TTI value is left out of the median and listed as a
+  failure.
 - Script transfer: the sum of `transferSize` over every request of
   resource type `Script` in the navigation's network records, so it is the
   compressed bytes on the wire for the first load. Total transfer is
@@ -70,7 +76,7 @@ Rerun with a seeded production server on a spare port:
 ```sh
 pnpm --filter web perf:lighthouse http://127.0.0.1:3252
 pnpm --filter web perf:analyze   # webpack composition, see Bundle findings
-pnpm --filter web perf:test      # unit tests for the helpers
+pnpm --filter web perf:test      # unit tests for the helpers (also part of the web test script)
 ```
 
 JSON reports and `summary.md` land in `apps/web/perf-reports/<timestamp>/`,
@@ -216,9 +222,14 @@ initial chunks to Next (59 percent of source bytes), React DOM (16), Zod
 
 Outside this task's files; each needs a decision from the lead.
 
-1. Add `"sideEffects": false` to `packages/core/package.json` (measured:
-   minus 49 to 52 KB script on every signed-in route) and confirm no
-   module in the package relies on import side effects.
+1. Add `"sideEffects": false` to `packages/core/package.json` and confirm
+   no module in the package relies on import side effects. What was
+   measured: the flag in both `@tidefern/core` and `@tidefern/schemas`
+   together, on `/today`, `/calendar` and `/family` only, gave minus 49 to
+   52 KB script (see the experiment above). Core alone was not measured,
+   nor were `/settings` and `/sharing`; the drop came from the core chunk
+   leaving while Zod stayed, so most of it is expected from the core flag,
+   but rerun this script after the change to get the real number.
 2. Keep Zod out of client routes: move the constants, labels and types
    that client components use into a Zod-free module of
    `@tidefern/schemas` with its own export path (or mark the package
@@ -232,6 +243,30 @@ Outside this task's files; each needs a decision from the lead.
    section 13.5 and `ASSETS.md`.
 4. Give the home hero mark `fetchpriority="high"` and look at whether the
    streamed routes can paint their headline before the data arrives.
+
+## Dependency side effect of the tooling
+
+Adding Lighthouse brought `@opentelemetry/api@1.9.1` into the install
+tree (through its `@sentry/node` and `@opentelemetry/core` chain). On
+`main` the lockfile only declares it as an optional peer of other
+packages and installs no copy. With a copy present, pnpm now resolves the
+optional peer of `next@16.3.8`, `better-auth@1.7.7`, `drizzle-orm@0.45.3`
+and `vitest` against it, and Vercel installs dev dependencies for the
+build, so the production server resolves it too.
+`next/dist/server/lib/trace/tracer.js` requires `@opentelemetry/api`
+first and falls back to its compiled copy (1.6.0) only when that fails, so
+the server now loads the external 1.9.1 module.
+
+What this changes at runtime, as far as the code shows: nothing the app
+does. `apps/web/src/instrumentation.ts` defines only `onRequestError` and
+no file registers an OpenTelemetry SDK, so every tracer is the API's
+no-op proxy. Both copies keep their registry on the same global key
+(`Symbol.for("opentelemetry.js.api.1")`), so a provider registered later
+by anything would be seen the same way by either copy. What changes is
+which module file is resolved and traced into the server output. Keeping
+it out of the production graph would need a pnpm peer setting in
+`pnpm-workspace.yaml`, outside this task's files; that is a request for
+the lead.
 
 ## A performance gate
 
