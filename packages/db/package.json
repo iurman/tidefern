@@ -13,6 +13,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "generate": "drizzle-kit generate",
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
