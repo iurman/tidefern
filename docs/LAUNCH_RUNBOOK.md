@@ -296,7 +296,8 @@ same value. `pnpm db:grant-login` refuses to run when `VERCEL_ENV` is
 
 ### The seeded topology CI uses
 
-`ci.yml` job `verify` migrates and seeds a `postgres:18.6` service, builds
+`ci.yml` job `verify` migrates a `postgres:18.6` service, runs the pooled
+database check through a PgBouncer service in transaction mode, seeds, builds
 with test-only values, runs the full browser suite against `next start`
 with the job runner, checks the byte budgets, then runs the `@smoke`
 subset against a second server with no database. To reproduce it locally,
@@ -315,7 +316,7 @@ without a database.
 [ -f apps/web/.env.local ] && mv apps/web/.env.local apps/web/.env.local.off
 podman stop tidefern-pg 2> /dev/null || true
 
-export PGPORT=54451 WEBPORT=3281
+export PGPORT=54451 POOLPORT=64451 WEBPORT=3281
 export OWNER_URL=postgresql://postgres:ci-only-postgres-password@127.0.0.1:$PGPORT/tidefern
 export DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$PGPORT/tidefern
 export BETTER_AUTH_SECRET=ci-only-better-auth-secret-0123456789abcdef-not-real
@@ -331,6 +332,17 @@ podman run -d --name tidefern-ci-pg -e POSTGRES_PASSWORD=ci-only-postgres-passwo
 until psql "$OWNER_URL" -tAc 'select 1' > /dev/null 2>&1; do sleep 1; done
 DATABASE_URL_UNPOOLED=$OWNER_URL pnpm db:migrate
 DATABASE_URL_UNPOOLED=$OWNER_URL pnpm db:grant-login
+
+# the pooled check (task J9): PgBouncer in transaction mode in front of the same database
+podman run -d --name tidefern-ci-pool --network host \
+  -e DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$PGPORT/tidefern \
+  -e LISTEN_ADDR=127.0.0.1 -e LISTEN_PORT=$POOLPORT -e POOL_MODE=transaction \
+  -e AUTH_TYPE=scram-sha-256 -e DEFAULT_POOL_SIZE=2 \
+  docker.io/edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
+until pg_isready -h 127.0.0.1 -p $POOLPORT > /dev/null 2>&1; do sleep 1; done
+DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$POOLPORT/tidefern \
+  DATABASE_URL_UNPOOLED=$OWNER_URL pnpm --filter @tidefern/db test:integration
+
 DATABASE_URL=$OWNER_URL pnpm db:seed
 pnpm build
 
@@ -346,7 +358,7 @@ env -u DATABASE_URL -u DATABASE_URL_UNPOOLED pnpm --filter web start --port $WEB
 # in the second shell:
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:$WEBPORT pnpm test:e2e --grep @smoke
 
-podman rm -f tidefern-ci-pg
+podman rm -f tidefern-ci-pool tidefern-ci-pg
 [ -f apps/web/.env.local.off ] && mv apps/web/.env.local.off apps/web/.env.local
 ```
 
@@ -366,6 +378,18 @@ run the same day with a decoy `apps/web/.env.local` holding both database
 URLs: the file moved aside and back, `podman stop` on a missing container
 exited quietly, and the database-free server started with no
 "Environments: .env.local" line and the smoke subset "6 passed (3.0s)".
+
+The pooler runs on the host network so it reaches the database on
+`127.0.0.1:$PGPORT` as CI's reaches it by service name; with `docker`
+on a machine without host networking, put both containers on one network
+and use the database container's name as the host. The suite
+(`packages/db/src/pooled.integration.test.ts`) connects as
+`tidefern_app` through the pooler with the production client, creates
+and removes its own synthetic rows through the owner URL, and fails
+rather than skips when either URL is missing; it is not part of
+`pnpm test`. J9 ran these lines on 2026-10-09 with `PGPORT=54461` and
+`POOLPORT=64461`: "7 passed", with "backends: 2, backends shared by
+both actors: 2".
 
 ## Environment variables
 

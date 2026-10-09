@@ -50,12 +50,29 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
+      pgbouncer:
+        # PgBouncer 1.26.0 in transaction mode in front of the service above, the way Neon's -pooler
+        # endpoint fronts production (architecture 7.2). edoburu/pgbouncer v1.26.0-p0, pinned to the
+        # tag's digest as Docker Hub listed it on 2026-10-09. Only the pooled integration suite in
+        # packages/db (task J9) connects through it; the build, the seed and the browser suite keep
+        # using the database directly. It reaches Postgres by its service name and logs in as
+        # tidefern_app with the same throwaway password as DATABASE_URL below; it connects lazily, so
+        # it starts before the grant-login step gives the role LOGIN. Two server connections, so the
+        # suite's four client connections have to share them.
+        image: edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
+        env:
+          DATABASE_URL: postgresql://tidefern_app:ci-only-app-password@postgres:5432/tidefern
+          POOL_MODE: transaction
+          AUTH_TYPE: scram-sha-256
+          DEFAULT_POOL_SIZE: "2"
+        ports:
+          - 6432:5432
     env:
       # Test-only values for the seeded browser suite. None of them is a secret and none exists
       # anywhere outside this job: the database lives in the service container above and is gone
       # with the job, and CI never holds a real credential (architecture 16.1). Every variable here
       # is listed in turbo.json globalEnv so the build hash keys on it. The owner URL (the service's
-      # postgres superuser) is not job env: it sits on the three database steps that need it and on
+      # postgres superuser) is not job env: it sits on the four database steps that need it and on
       # the seeded server's step, for the job runner, and on nothing else, so the build, the unit
       # tests and the database-free server never see it.
       #
@@ -179,9 +196,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      # The service's postgres superuser is the owner role in CI: it runs the migrations, the grant
-      # and the seed. Its URL is written on these three steps only (the same literal each time; the
-      # workflow has no way to name it once without making it job env).
+      # The service's postgres superuser is the owner role in CI: it runs the migrations, the grant,
+      # the pooled check's own rows and the seed. Its URL is written on these four steps only (the
+      # same literal each time; the workflow has no way to name it once without making it job env).
       - name: Migrate the service database as its owner
         env:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
@@ -195,6 +212,25 @@ jobs:
         env:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: pnpm db:grant-login
+
+      # Architecture 15's pooled check (task J9): two actors at once through the PgBouncer service in
+      # transaction mode, as tidefern_app with NODE_ENV=production, proving each sees only its own
+      # rows and that SET LOCAL ROLE and the actor setting reset after every transaction, a failed
+      # one included. DATABASE_URL here is the pooled URL; the owner URL creates and removes the
+      # suite's own synthetic rows before the seed runs. About a second of tests; the pooler image
+      # pull adds a few seconds to the job's container setup.
+      - name: Pooled database check through PgBouncer in transaction mode
+        env:
+          DATABASE_URL: postgresql://tidefern_app:ci-only-app-password@127.0.0.1:6432/tidefern
+          DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
+        run: |
+          for attempt in $(seq 1 30); do
+            if pg_isready --host 127.0.0.1 --port 6432 --username tidefern_app --dbname tidefern > /dev/null 2>&1; then
+              break
+            fi
+            sleep 1
+          done
+          pnpm --filter @tidefern/db test:integration
 
       # The seed runs through withSystem(), which the app role is refused for, so DATABASE_URL is the
       # owner URL on this step.
