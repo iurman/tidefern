@@ -247,8 +247,11 @@ jobs:
       # Chromium context with Lighthouse's mobile screen, its compressed script transfer and its
       # total transfer summed from the network events, and the run fails on any route over its
       # ceiling in apps/web/scripts/perf/budgets.json. Bytes only, never timings, so it does not
-      # flap; it reuses the browser the suite installed and the server the suite ran against.
+      # flap; it reuses the browser the suite installed and the server the suite ran against. Like
+      # the smoke subset below it is an independent assertion, so it runs even when the suite
+      # failed (the job still fails); only a cancellation skips it.
       - name: Byte budgets for the key routes against the seeded server
+        if: ${{ !cancelled() }}
         run: pnpm --filter web perf:bytes http://127.0.0.1:3000
 
       # The smoke subset also runs against production deployments, which have no seeded users and
