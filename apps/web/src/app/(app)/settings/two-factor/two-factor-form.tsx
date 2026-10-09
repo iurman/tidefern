@@ -268,7 +268,12 @@ export function TwoFactorForm() {
                 ? copy.password.disableLede
                 : copy.password.regenerateLede}
           </p>
-          <form key={`password-${step.purpose}`} className={styles.form} onSubmit={submitPassword}>
+          <form
+            method="post"
+            key={`password-${step.purpose}`}
+            className={styles.form}
+            onSubmit={submitPassword}
+          >
             <FormField label={copy.password.label} help={copy.password.help} required>
               <TextInput
                 name="password"
@@ -322,7 +327,7 @@ export function TwoFactorForm() {
               <CopyCode code={step.totpURI} label={copy.scan.uriLabel} />
             </div>
           </Disclosure>
-          <form key="code" className={styles.form} onSubmit={submitCode}>
+          <form method="post" key="code" className={styles.form} onSubmit={submitCode}>
             <FormField label={copy.scan.code.label} help={copy.scan.code.help} required>
               <TextInput
                 name="code"

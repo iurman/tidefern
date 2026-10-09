@@ -176,6 +176,44 @@ test.describe("the sound chapter", () => {
     expect((await probe(page)).tones).toEqual([]);
   });
 
+  test("stays silent in a hidden tab and says so, then plays once the tab shows", async ({
+    page,
+  }) => {
+    await openChapter(page);
+    // Unlock with a real click first, so only the hidden tab can keep the next cue silent.
+    await page.getByRole("button", { name: "Play success" }).click();
+    await expect(page.getByText("That was the success cue at the current level.")).toBeVisible();
+    const before = (await probe(page)).tones.length;
+
+    // A background tab: the page reports itself hidden, and a cue that lands there (a save that
+    // finishes after she switched away) arrives through a click handler with no pointer on it.
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "hidden",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page
+      .getByRole("button", { name: "Play press drop" })
+      .evaluate((button: HTMLElement) => button.click());
+    await expect(
+      page.getByText("This tab was in the background, so it stayed silent.").first(),
+    ).toBeVisible();
+    expect((await probe(page)).tones.slice(before)).toEqual([]);
+
+    await page.evaluate(() => {
+      Object.defineProperty(document, "visibilityState", {
+        configurable: true,
+        get: () => "visible",
+      });
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+    await page.getByRole("button", { name: "Play press drop" }).click();
+    await expect(page.getByText("That was the press drop cue at the current level.")).toBeVisible();
+    expect((await probe(page)).tones.slice(before).filter(isPress)).toHaveLength(1);
+  });
+
   test("plays the settle cue after Enter on a link and never after back", async ({ page }) => {
     await openChapter(page);
     // Unlock first, so the press and the settle cue both find the context running.

@@ -54,7 +54,7 @@ export function RequestResetForm({ expired }: { expired: boolean }) {
   }
 
   return (
-    <form className={styles.form} onSubmit={submit}>
+    <form method="post" className={styles.form} onSubmit={submit}>
       {expired && state.kind === "idle" ? (
         <InlineFeedback tone="error" className={styles.feedback}>
           {copy.expired}

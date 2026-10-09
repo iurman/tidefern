@@ -74,7 +74,7 @@ export function NewPasswordForm({ token }: { token: string }) {
   const mismatch = state.kind === "mismatch" ? copy.mismatch : undefined;
 
   return (
-    <form className={styles.form} onSubmit={submit}>
+    <form method="post" className={styles.form} onSubmit={submit}>
       <FormField label={copy.password.label} help={copy.password.help} required>
         <TextInput
           name="password"

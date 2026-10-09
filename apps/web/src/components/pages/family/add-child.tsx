@@ -178,7 +178,14 @@ export function AddChild({
         }}
         title={copy.title}
       >
-        <form key={form} ref={formRef} className={styles.sheetForm} onSubmit={submit} noValidate>
+        <form
+          method="post"
+          key={form}
+          ref={formRef}
+          className={styles.sheetForm}
+          onSubmit={submit}
+          noValidate
+        >
           <FormField label={copy.name} help={copy.nameHelp} error={errors.name} required>
             <TextInput
               autoComplete="off"

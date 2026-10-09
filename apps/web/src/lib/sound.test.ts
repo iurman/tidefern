@@ -9,10 +9,12 @@ import {
   DEFAULT_ATTACK_S,
   ENVELOPE_FLOOR,
   envelopeGainAt,
+  haptic,
   hapticSpec,
   hapticsAvailable,
   isQuietNow,
   MASTER_BUS_GAIN,
+  pageHidden,
   play,
   quietHours,
   refreshQuietHours,
@@ -201,6 +203,30 @@ describe("play", () => {
     expect(play("success")).toBe("quiet");
     setQuietHours({ start: "00:00", end: "00:00" });
     expect(play("success")).toBe("locked");
+  });
+
+  it("stays silent and still in a hidden tab, and plays again once it shows", () => {
+    const vibrate = vi.fn(() => true);
+    vi.stubGlobal("navigator", { ...navigator, vibrate });
+    const visibility = vi.spyOn(document, "visibilityState", "get").mockReturnValue("hidden");
+    try {
+      expect(pageHidden()).toBe(true);
+      expect(play("success")).toBe("hidden");
+      expect(play("settle")).toBe("hidden");
+      expect(haptic("success")).toBe(false);
+      expect(vibrate).not.toHaveBeenCalled();
+      // The person's own silence still says so first.
+      setSoundLevel("off");
+      expect(play("success")).toBe("off");
+      setSoundLevel("all");
+      visibility.mockReturnValue("visible");
+      expect(pageHidden()).toBe(false);
+      expect(play("success")).toBe("locked");
+      expect(haptic("success")).toBe(true);
+      expect(vibrate).toHaveBeenCalledWith(hapticSpec("success"));
+    } finally {
+      visibility.mockRestore();
+    }
   });
 
   it("drops the hover tick at the actions level before anything else", () => {

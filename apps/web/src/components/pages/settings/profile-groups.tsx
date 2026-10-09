@@ -98,7 +98,7 @@ export function ProfileForm() {
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
+    <form method="post" className={styles.form} onSubmit={submit} noValidate>
       <FormField
         label={copy.profile.name.label}
         help={copy.profile.name.help}
@@ -168,7 +168,7 @@ export function TimeZoneForm({ now }: { now: string }) {
   }
 
   return (
-    <form className={styles.form} onSubmit={submit} noValidate>
+    <form method="post" className={styles.form} onSubmit={submit} noValidate>
       {/* Keyed by the saved zone: a zone saved here or read back after a refusal starts the field over. */}
       <TimeZoneCombobox
         key={profile.timeZone}

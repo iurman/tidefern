@@ -420,7 +420,18 @@ export function isQuietNow(now: Date = new Date()): boolean {
  * Why a cue did or did not sound. Visible text can say it, because sound
  * never carries meaning alone (architecture 14.1).
  */
-export type PlayResult = "played" | "off" | "quiet" | "locked" | "hover-level" | "hover-gap";
+export type PlayResult =
+  "played" | "off" | "quiet" | "hidden" | "locked" | "hover-level" | "hover-gap";
+
+/**
+ * True while the page is in a background tab or a minimized window. A cue
+ * there would answer nothing the person can see: a save that finishes
+ * after she switched tabs lands its text silently and she reads it when
+ * she comes back (architecture 14.1: background data plays nothing).
+ */
+export function pageHidden(): boolean {
+  return typeof document !== "undefined" && document.visibilityState === "hidden";
+}
 
 type PlayListener = (cue: Cue, spec: CueSpec) => void;
 const playListeners = new Set<PlayListener>();
@@ -433,11 +444,12 @@ export function onPlay(listener: PlayListener): () => void {
   };
 }
 
-/** Play a cue. Silent until the context is running and while the person has sound off. */
+/** Play a cue. Silent until the context is running, while the person has sound off, and in a hidden tab. */
 export function play(cue: Cue): PlayResult {
   if (!soundEnabled()) return "off";
   if (cue === "hover" && soundLevel() !== "all") return "hover-level";
   if (isQuietNow()) return "quiet";
+  if (pageHidden()) return "hidden";
   if (!audioReady()) return "locked";
   if (cue === "hover") {
     const now = performance.now();
@@ -515,7 +527,7 @@ export function hapticsAvailable(): boolean {
  * Safari has no web vibration API, so iOS stays silent. Never gate UX on it.
  */
 export function haptic(kind: HapticKind = "tap"): boolean {
-  if (!hapticsAvailable()) return false;
+  if (!hapticsAvailable() || pageHidden()) return false;
   try {
     return navigator.vibrate(PATTERNS[kind]);
   } catch {

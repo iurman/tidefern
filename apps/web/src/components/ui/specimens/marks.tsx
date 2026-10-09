@@ -90,9 +90,9 @@ const childItems: TimelineItem[] = [
     date: "2026-10-02",
     title: "Rolled over",
     detail: "Back to front, on the rug",
-    href: "/family/child/milestones",
+    href: "/family",
   },
-  { key: "smile", date: "2026-05-14", title: "First smile", href: "/family/child/milestones" },
+  { key: "smile", date: "2026-05-14", title: "First smile", href: "/family" },
   { key: "home", date: "2026-02-12", title: "Came home" },
 ];
 
@@ -143,7 +143,6 @@ export const specimens: SpecimenGroup = {
   prediction={prediction}
   latestStart={latestStartFrom(status)}
   loggedDays={loggedDays}
-  logHref="/log"
 />`,
       keyboard:
         "Not interactive. The ring is an image named by its cycle day; the sentences beside it carry the estimate, the fertile days and the disclaimer. The empty state's action is a link.",
@@ -200,7 +199,7 @@ export const specimens: SpecimenGroup = {
   today="2026-10-05"
   dueDate="2027-01-23"
   method="ultrasound"
-  historyHref="/journey/dating"
+  historyHref="/journey"
 />`,
       keyboard:
         "Tab reaches the History link; Enter follows it. The card itself is not a control. The empty state's action is a link.",
@@ -258,7 +257,7 @@ export const specimens: SpecimenGroup = {
           empty={{
             heading: "Nothing marked yet",
             why: "Most children do these by the ages shown. This is not a screening tool; your pediatrician is.",
-            action: { label: "Mark a milestone", href: "/family/child/milestones" },
+            action: { label: "Mark a milestone", href: "/family" },
           }}
         />
       ),
