@@ -670,3 +670,15 @@ label), a failed page "We could not load more activity. Try again.", no
 answer at all "We could not reach Tidefern. Check your connection and try
 again.", and a failed first page "We could not load your activity just
 now. Reload the page to try again."
+
+### Public header (J3b)
+
+- "Sign in" is the header link the `/` row above names; it shows on every
+  public page for every visitor, signed in or not, because neither this
+  file nor DESIGN.md gives a signed-in visitor anything else. Next to it in
+  the bar: "Design system".
+- `[OWNER]` "Menu", proposed: the label of the disclosure button that holds
+  those two links below 601 px (`apps/web/src/components/public-nav.tsx`).
+- After sign-in a visitor returns to the page they asked for; the address
+  carries only that page's path (`/sign-in?next=%2Fsettings`), never a
+  query or anything they typed.
