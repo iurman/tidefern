@@ -1,9 +1,10 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { createAuthMiddleware } from "better-auth/api";
 
+import { uuidv7 } from "@tidefern/core";
 import { auditActions, schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, AuditAction } from "@tidefern/db";
-import { describeError, jobId as uuidv7 } from "@tidefern/db/jobs";
+import { describeError } from "@tidefern/db/jobs";
 
 /** The id `auth.options.plugins` lists this plugin under. */
 export const SESSION_AUDIT_PLUGIN_ID = "session-audit";
