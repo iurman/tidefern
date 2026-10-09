@@ -26,7 +26,10 @@ jobs:
     # The job name is the required status check in the main ruleset. Keep it exactly "verify".
     name: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The seeded browser suite runs one worker (the auth limiter allows three sign-ins per ten
+    # seconds for the whole run) and grew to about 380 tests with J1 to J3; the job took 29 to
+    # 31 minutes, so 30 cancelled green runs. Lower it again if the suite is sharded.
+    timeout-minutes: 45
     services:
       postgres:
         # postgres 18.6, pinned to the digest of its multi-architecture index like the actions below
