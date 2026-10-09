@@ -1,5 +1,5 @@
 import type { ApiClient } from "@tidefern/api-client";
-import { TERMS_VERSION, childConsentTextVersions } from "@tidefern/schemas";
+import { TERMS_VERSION, childConsentTextVersions } from "@tidefern/schemas/constants";
 import type {
   ChildConsentTextVersion,
   DataCategory,

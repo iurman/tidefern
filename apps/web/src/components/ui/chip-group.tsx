@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState } from "react";
-import { SYMPTOM_CODES, SYMPTOM_LABELS, type SymptomCode } from "@tidefern/schemas";
+import { SYMPTOM_CODES, SYMPTOM_LABELS, type SymptomCode } from "@tidefern/schemas/constants";
 import styles from "./chip-group.module.css";
 
 export interface ChipOption<T extends string = string> {

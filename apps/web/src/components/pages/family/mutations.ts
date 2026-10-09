@@ -1,5 +1,5 @@
 import type { ApiClient, components } from "@tidefern/api-client";
-import { childConsentTextVersions } from "@tidefern/schemas";
+import { childConsentTextVersions } from "@tidefern/schemas/constants";
 import type { ChildEvent, MilestoneCheck } from "./types";
 
 /**

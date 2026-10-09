@@ -10,7 +10,8 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
-import { FLOW_LABELS, MOOD_LABELS, SYMPTOM_LABELS, type Note } from "@tidefern/schemas";
+import { FLOW_LABELS, MOOD_LABELS, SYMPTOM_LABELS } from "@tidefern/schemas/constants";
+import type { Note } from "@tidefern/schemas";
 import { DayLogInline, DayLogSheet } from "@/components/day-log/day-log-sheet";
 import { Button } from "@/components/ui/button";
 import { useQuickLog } from "@/components/ui/quick-log";

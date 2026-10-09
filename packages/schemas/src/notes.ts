@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * The notes area (architecture 8.2 and 9.2). A note is the one place free

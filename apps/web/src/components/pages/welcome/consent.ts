@@ -1,4 +1,4 @@
-import { CONSENT_DISCLOSURES, consentTextVersions } from "@tidefern/schemas";
+import { CONSENT_DISCLOSURES, consentTextVersions } from "@tidefern/schemas/constants";
 import type { ConsentTextVersion, DataCategory, Stage } from "@tidefern/schemas";
 import type { Processor } from "@/components/ui/consent-record";
 

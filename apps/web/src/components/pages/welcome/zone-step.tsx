@@ -1,6 +1,6 @@
 "use client";
 import { useState } from "react";
-import { isSupportedTimeZone } from "@tidefern/schemas";
+import { isSupportedTimeZone } from "@tidefern/schemas/constants";
 import { Button } from "@/components/ui/button";
 import { TimeZoneCombobox } from "@/components/ui/time-zone-combobox";
 import { welcomeCopy } from "./copy";

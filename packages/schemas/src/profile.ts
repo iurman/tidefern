@@ -1,4 +1,5 @@
-import { z } from "zod";
+import * as z from "zod";
+import { childConsentTextVersions, consentTextVersions, isSupportedTimeZone } from "./constants";
 
 /**
  * The profile, consent and data summary shapes of task E2 (architecture
@@ -9,7 +10,26 @@ import { z } from "zod";
  * declared here as local constants and pinned to their twins by
  * profile.test.ts, so a value added to one list fails a test until it is
  * added to the other.
+ *
+ * The time zone check and the consent catalogs live in the Zod-free
+ * ./constants (task J2b) so client components can read them without Zod;
+ * they are re-exported here, so the root entry keeps them.
  */
+export {
+  CHILD_CONSENT_DISCLOSURES,
+  CONSENT_DISCLOSURES,
+  TERMS_VERSION,
+  childConsentTextVersions,
+  consentTextVersions,
+  isSupportedTimeZone,
+} from "./constants";
+export type {
+  ChildConsentDisclosure,
+  ChildConsentTextVersion,
+  ConsentDisclosure,
+  ConsentDisclosureItem,
+  ConsentTextVersion,
+} from "./constants";
 
 const id = z.uuid().describe("Opaque resource identifier");
 const instant = z.iso.datetime().describe("RFC 3339 instant in UTC");
@@ -27,39 +47,6 @@ const dataCategoryValues = [
   "pregnancy.photos",
   "child",
 ] as const;
-
-let supportedTimeZones: ReadonlySet<string> | null = null;
-
-function supported(): ReadonlySet<string> {
-  if (supportedTimeZones === null) {
-    supportedTimeZones = new Set(Intl.supportedValuesOf("timeZone"));
-  }
-  return supportedTimeZones;
-}
-
-/**
- * Whether the name is an IANA time zone this runtime knows. The first test
- * is `Intl.supportedValuesOf("timeZone")`. That list holds one spelling per
- * zone and the spelling follows the runtime's ICU data, not current IANA:
- * Node 26 lists `Asia/Calcutta` and `Europe/Kiev` but not `Asia/Kolkata`,
- * `Europe/Kyiv` or `UTC`, while a browser may report either spelling. So a
- * name missing from the list is still accepted when `Intl.DateTimeFormat`
- * resolves it to a listed zone or to `UTC`, which admits current names and
- * IANA links and still refuses an unknown name or a bare UTC offset (an
- * offset resolves to itself). The name is stored as sent.
- */
-export function isSupportedTimeZone(value: string): boolean {
-  const zones = supported();
-  if (zones.has(value)) return true;
-  if (!/^[A-Za-z]/.test(value)) return false;
-  let resolved: string;
-  try {
-    resolved = new Intl.DateTimeFormat("en-US", { timeZone: value }).resolvedOptions().timeZone;
-  } catch {
-    return false;
-  }
-  return resolved === "UTC" || zones.has(resolved);
-}
 
 /** An IANA time zone the runtime supports; every calendar fact is read in it. */
 export const TimeZone = z
@@ -143,124 +130,7 @@ export type DataCategory = z.infer<typeof DataCategory>;
 export const ConsentBasis = z.enum(["necessary", "consent"]).meta({ id: "ConsentBasis" });
 export type ConsentBasis = z.infer<typeof ConsentBasis>;
 
-/** What a disclosure says about one category: its basis and its purpose sentence. */
-export interface ConsentDisclosureItem {
-  basis: ConsentBasis;
-  purpose: string;
-}
-
-/** One version of the collection consent text as the onboarding page shows it. */
-export interface ConsentDisclosure {
-  /** Every category, so any subset a person is asked about has its sentence. */
-  categories: Readonly<Record<DataCategory, ConsentDisclosureItem>>;
-  /** The processors the page names, as architecture record 9.5 lists them. */
-  processors: readonly string[];
-}
-
-/** The versions of the consent text, oldest first; the last is what the page shows now. */
-export const consentTextVersions = ["2026-10"] as const;
-export type ConsentTextVersion = (typeof consentTextVersions)[number];
-
-/**
- * The version of the terms the onboarding page records beside the consent
- * (`ConsentInput.termsVersion`). A free label, not a catalog key: the terms
- * text is still awaiting the owner and the attorney (docs/design/CONTENT.md,
- * the `[OWNER]` line for it), and this value changes whenever that text does.
- */
-export const TERMS_VERSION = "2026-10";
-
-/**
- * The catalog of consent text, keyed by version. The page renders these
- * sentences and the server writes them into the consent rows, so the
- * plaintext `purpose` column only ever holds the product's own words and
- * never anything a client typed (AGENTS.md: free text only in encrypted
- * fields). A changed sentence is a new version; a version, once shipped, is
- * never edited. The 2026-10 wording is the seed's (packages/db seed) for
- * every category but `child`. The seed's child rows are guardian consents in
- * the words of `CHILD_CONSENT_DISCLOSURES` below; this catalog's `child`
- * sentence leaves out diapers, and changing it is a new version that waits
- * on the owner and the attorney. The owner confirms all of it with the
- * attorney before launch [OWNER].
- */
-export const CONSENT_DISCLOSURES: Readonly<Record<ConsentTextVersion, ConsentDisclosure>> = {
-  "2026-10": {
-    categories: {
-      "cycle.status": {
-        basis: "consent",
-        purpose: "Show a status card to the people you choose.",
-      },
-      "cycle.history": {
-        basis: "necessary",
-        purpose: "Keep the dates you log so the calendar and the estimates work.",
-      },
-      "cycle.symptoms": {
-        basis: "necessary",
-        purpose: "Keep what you log on a day so you can look back at it.",
-      },
-      "journal.private": {
-        basis: "necessary",
-        purpose: "Keep your private notes, readable by you alone.",
-      },
-      "pregnancy.overview": {
-        basis: "necessary",
-        purpose: "Keep your due date, appointments and milestones.",
-      },
-      "pregnancy.photos": {
-        basis: "consent",
-        purpose: "Keep the photos you add to your journey.",
-      },
-      child: {
-        basis: "necessary",
-        purpose: "Keep this child's feeds, sleep, growth and milestones.",
-      },
-    },
-    processors: ["Vercel", "Neon (Databricks, Inc.)", "GitHub", "Resend", "Cloudflare"],
-  },
-};
-
-/**
- * The guardian's consent on a child's behalf (architecture record 8.4,
- * "Children's records", and 7.4). A child's data is the child's consumer
- * health data, so `POST /v1/children` writes one `consents` row in the same
- * transaction as the child and its key: the child is the subject and the
- * guardian adding the child is recorded as the one who consented. It keeps a
- * version line of its own because it is a disclosure of its own, about
- * another subject, given by another person at another moment than the
- * collection consent. The add-a-child form shows the last version's `text`
- * in full before an unchecked box; the client sends only that version, and
- * the server writes the catalog's category, basis and purpose into the row
- * and hashes the whole disclosure. A changed sentence is a new version; a
- * version, once shipped, is never edited.
- *
- * The 2026-10 wording is a draft [OWNER]: the owner's attorney reviews it
- * with the other consent texts before anyone outside the household signs
- * up, a Phase 2 gate (docs/design/CONTENT.md). Withdrawing it is the child's
- * closure path, which is not built yet, so the text does not describe it.
- */
-export const childConsentTextVersions = ["2026-10"] as const;
-export type ChildConsentTextVersion = (typeof childConsentTextVersions)[number];
-
-/** One version of the guardian's consent on a child's behalf. */
-export interface ChildConsentDisclosure {
-  /** What the row files under: the child's own category. */
-  category: "child";
-  basis: ConsentBasis;
-  /** The sentence the row's `purpose` column holds, in the product's own words. */
-  purpose: string;
-  /** The disclosure the form shows in full before the box. */
-  text: string;
-}
-
-export const CHILD_CONSENT_DISCLOSURES: Readonly<
-  Record<ChildConsentTextVersion, ChildConsentDisclosure>
-> = {
-  "2026-10": {
-    category: "child",
-    basis: "necessary",
-    purpose: "Keep this child's feeds, sleep, diapers, growth and milestones.",
-    text: "You are adding this child as their parent or guardian. On the child's behalf, you agree that Tidefern keeps what is logged for them: feeds, sleep, diapers, growth, milestones and notes. Notes are stored encrypted. Every guardian of this child sees all of it, and anyone else only when a guardian shares this child with them.",
-  },
-};
+/* The consent catalogs and their version lines live in the Zod-free ./constants (task J2b); see the re-export at the top. */
 
 /**
  * The guardian's consent as the add-a-child form collected it: the box the

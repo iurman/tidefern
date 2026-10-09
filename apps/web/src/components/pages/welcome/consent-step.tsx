@@ -1,5 +1,5 @@
 "use client";
-import { TERMS_VERSION } from "@tidefern/schemas";
+import { TERMS_VERSION } from "@tidefern/schemas/constants";
 import type { Stage } from "@tidefern/schemas";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { ConsentRecord } from "@/components/ui/consent-record";

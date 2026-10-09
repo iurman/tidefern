@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 /**
  * The pregnancy contract (architecture 7.4, 8.2 and 8.4): one open record

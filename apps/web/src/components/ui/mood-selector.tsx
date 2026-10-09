@@ -1,6 +1,6 @@
 "use client";
 import type { ReactNode } from "react";
-import { MoodCode } from "@tidefern/schemas";
+import { MOOD_CODES, type MoodCode } from "@tidefern/schemas/constants";
 import { SegmentedControl } from "./segmented-control";
 
 export interface MoodSelectorProps {
@@ -27,7 +27,7 @@ export const moodLabels: Record<MoodCode, string> = {
   bright: "Bright",
 };
 
-export const moodOptions = MoodCode.options.map((value) => ({ value, label: moodLabels[value] }));
+export const moodOptions = MOOD_CODES.map((value) => ({ value, label: moodLabels[value] }));
 
 /**
  * Three values, single select, as a segmented radio group on the action

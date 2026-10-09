@@ -1,74 +1,34 @@
-import { z } from "zod";
-import type { FlowLevel, MoodCode, SymptomCode } from "./index";
+import * as z from "zod";
+import {
+  FLOW_CODES,
+  FLOW_LABELS,
+  MOOD_CODES,
+  MOOD_LABELS,
+  SYMPTOM_CODES,
+  SYMPTOM_LABELS,
+} from "./constants";
 
 /**
  * The cycle area of the contract (task E3): the day entry as the API answers
  * it, the write body of the day sheet, the prediction, the derived status
  * and the vocabulary with its labels.
  *
- * Only types come from ./index. The index re-exports this module, so a
- * runtime import from it would be a cycle that leaves every binding in its
- * temporal dead zone while this file evaluates. The three label maps below
- * are instead pinned to the index enums by `satisfies`, so a value added to
- * `FlowLevel`, `SymptomCode` or `MoodCode` fails to compile here until it
- * has a label, and the test proves the code lists match at runtime.
+ * Nothing comes from ./index: the index re-exports this module, so a runtime
+ * import from it would be a cycle that leaves every binding in its temporal
+ * dead zone while this file evaluates. The label maps and code lists live in
+ * the Zod-free ./constants (task J2b), pinned to the index enums by
+ * `satisfies` there, and are re-exported here so the root entry keeps them.
  */
-
-/** Sentence case, plain words, in picker order; the day sheet shows these. */
-export const FLOW_LABELS = {
-  none: "None",
-  spotting: "Spotting",
-  light: "Light",
-  medium: "Medium",
-  heavy: "Heavy",
-} as const satisfies Record<FlowLevel, string>;
-
-export const SYMPTOM_LABELS = {
-  cramps: "Cramps",
-  headache: "Headache",
-  bloating: "Bloating",
-  fatigue: "Fatigue",
-  tender_breasts: "Tender breasts",
-  nausea: "Nausea",
-  backache: "Backache",
-  acne: "Acne",
-  cravings: "Cravings",
-  insomnia: "Trouble sleeping",
-  spotting: "Spotting",
-  discharge: "Discharge",
-  hot_flashes: "Hot flashes",
-  dizziness: "Dizziness",
-  mood_swings: "Mood swings",
-  anxiety: "Anxiety",
-  low_energy: "Low energy",
-  high_energy: "High energy",
-  other: "Something else",
-} as const satisfies Record<SymptomCode, string>;
-
-export const MOOD_LABELS = {
-  low: "Low",
-  steady: "Steady",
-  bright: "Bright",
-} as const satisfies Record<MoodCode, string>;
-
-function codesOf<Code extends string>(labels: Readonly<Record<Code, string>>): [Code, ...Code[]] {
-  return Object.keys(labels) as [Code, ...Code[]];
-}
-
-export const FLOW_CODES = codesOf(FLOW_LABELS);
-export const SYMPTOM_CODES = codesOf(SYMPTOM_LABELS);
-export const MOOD_CODES = codesOf(MOOD_LABELS);
-
-/**
- * The flow levels that make a day a period day. Spotting is not bleeding, so
- * a day of spotting neither starts a period nor extends one; `none` is an
- * explicit "no bleeding today".
- */
-export const PERIOD_FLOWS = ["light", "medium", "heavy"] as const satisfies readonly FlowLevel[];
-
-export function isPeriodFlow(flow: FlowLevel | null | undefined): boolean {
-  return flow !== null && flow !== undefined && (PERIOD_FLOWS as readonly string[]).includes(flow);
-}
+export {
+  FLOW_CODES,
+  FLOW_LABELS,
+  MOOD_CODES,
+  MOOD_LABELS,
+  PERIOD_FLOWS,
+  SYMPTOM_CODES,
+  SYMPTOM_LABELS,
+  isPeriodFlow,
+} from "./constants";
 
 const Uuid = z.uuid().describe("Opaque resource identifier");
 
@@ -244,7 +204,7 @@ export const CycleVocabulary = z
 export type CycleVocabulary = z.infer<typeof CycleVocabulary>;
 
 function items<Code extends string>(labels: Readonly<Record<Code, string>>): VocabularyItem[] {
-  return codesOf(labels).map((code) => ({ code, label: labels[code] }));
+  return (Object.keys(labels) as Code[]).map((code) => ({ code, label: labels[code] }));
 }
 
 /** The vocabulary response, the same for every actor. */

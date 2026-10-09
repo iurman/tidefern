@@ -5,7 +5,7 @@ import {
   SYMPTOM_CODES,
   SYMPTOM_LABELS,
   isPeriodFlow,
-} from "@tidefern/schemas";
+} from "@tidefern/schemas/constants";
 import type {
   CycleEntry,
   CyclePrediction,

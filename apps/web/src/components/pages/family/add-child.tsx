@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, type FormEvent } from "react";
-import { CHILD_CONSENT_DISCLOSURES } from "@tidefern/schemas";
+import { CHILD_CONSENT_DISCLOSURES } from "@tidefern/schemas/constants";
 import { BottomSheet } from "@/components/ui/bottom-sheet";
 import { Button, type ButtonVariant } from "@/components/ui/button";
 import { CheckboxField } from "@/components/ui/checkbox-field";

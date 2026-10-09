@@ -6,7 +6,7 @@ import {
   type ShareCategory,
   type ShareLevel,
   type SharingDescriptions,
-} from "@tidefern/schemas";
+} from "@tidefern/schemas/constants";
 import { play } from "@/lib/sound";
 import { InlineFeedback } from "./inline-feedback";
 import { Switch } from "./switch";

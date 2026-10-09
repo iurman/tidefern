@@ -3,11 +3,11 @@ import type { components, Me } from "@tidefern/api-client";
 import {
   CURRENT_SHARING_DESCRIPTION_VERSION,
   SHARING_DESCRIPTIONS,
-  type InvitableRole,
   type ShareCategory,
   type ShareLevel,
   type Stage,
-} from "@tidefern/schemas";
+} from "@tidefern/schemas/constants";
+import type { InvitableRole } from "@tidefern/schemas";
 import { relationText, sharingCopy as copy } from "./copy";
 
 /**
