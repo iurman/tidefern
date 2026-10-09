@@ -55,6 +55,12 @@ findings and the next concrete action. Resume from the last entry and
     and preview logs keep them), and previews have no capture endpoint.
     Options: a test inbox through the real mailer on previews only, or
     seeded verified accounts on preview branches (J3c).
+14. Word the consent record's "Processed by" lines with the attorney:
+    `PROCESSORS` in `packages/api/src/routes/profile.ts` still carries
+    internal words ("allowlisted request logs", "CI logs", "in Phase 1").
+15. The sentence the sign-in, sign-up and reset forms show without
+    JavaScript (CONTENT.md, J3f), and whether API log lines may keep the
+    resource route template (QA.md, Performance and privacy).
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -1594,4 +1600,51 @@ values, and the browser suite needs the CI test `CRON_SECRET`.
 Round two is running: J3e (copy and visual loops) and J3f (behavior,
 motion and sound, performance and privacy), each logging in
 `docs/design/QA.md`. Then J4 and J6.
+
+### J3 closed (2026-10-09, lead session dfc54107)
+
+Round two ran the five review loops of BUILD_PROMPT.md section 10 over
+every route and state, in two tasks under the build, review and fix loop,
+then the merge queue:
+
+- #104 (`7bb35d8`, the lead): the verify job has 45 minutes. The seeded
+  suite runs one worker because of the auth limiter and passed 30 minutes
+  with about 380 tests, so the old limit cancelled three green runs on
+  #102 with no failing test. Verify now takes 30 to 32 minutes.
+- J3f (#102, `742b53b`, production smoke 37967235952): behavior and
+  accessibility, motion and sound, performance and privacy. A critical
+  finding: 16 forms submitted by GET without JavaScript, so typed input
+  reached the URL; they post, and `privacy.spec.ts` walks every route for
+  every persona and fails on a GET form, a health word in a URL, title,
+  mail subject or link, a third-party origin, a console error or a missing
+  header. API responses on Vercel lacked the security headers; production
+  now answers HSTS for two years, `DENY`, `strict-origin-when-cross-origin`
+  and `private, no-store` (curl of `/api/v1/health` after the merge).
+- J3e (#103, `27c8c3b`): copy and visual at 1440, 1024, 390 and 320 px
+  and 200 percent zoom in both themes, about 1,850 captures inspected, 410
+  kept in `docs/design/qa/` (9.7 MB); three high copy findings (a closure
+  sentence untrue since H7, a childhood privacy claim a grant contradicts,
+  calendar specimens without the contraception line) and the focus-ring,
+  strip, segmented control and back-link defects fixed with tests.
+
+Lead rulings: the CLAIMS.md Childhood row changed with the page text it
+backs; the `data-fertile` token note says estimated windows are dotted;
+architecture 7.3 now says signing in during the seven days shows the
+locked view where the person can undo, since signing in alone cancels
+nothing; the COVERAGE.md edits accepted. The PROCESSORS wording goes to
+the owner and attorney (item 14).
+
+Open follow-ups from the audit (QA.md rows): the page entrance cascade
+DESIGN.md 7 describes is not built; button labels never wrap at 320 px;
+the list view's month links stack at 320 px; the postpartum heading on
+`/journey` sets the age in the sans; `/design` chapter heads repeat the
+breadcrumb; the 404 pages keep another page's metadata (needs Next's
+`global-not-found`); the preview's own noindex header and robots.txt sit
+behind Vercel Authentication and were read only as the 302 answer.
+
+### Next action
+
+J4 (the launch runbook) is building; it was launched before this claim
+landed, which the plan's rule puts first, and the claim is recorded here.
+Then J6, the final handoff.
 
