@@ -1,16 +1,19 @@
-import { expect, test, type BrowserContext, type Cookie, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { expectNoAxeViolations } from "./axe";
+import { serverHasDatabase } from "./session";
 
 /**
  * The (app) route group's frame against the production build: no public
  * header, the tab bar below 1024 px and the rail from it, the current
  * destination marked, the two policy links under every page, and a visitor
  * without a session sent to sign in. The group layout reads the session
- * through GET /api/v1/me in process, so the cookie follows the settings
- * security spec: against a seeded server the suite signs in once as a
- * seeded persona; without a database the read cannot answer and the shell
- * renders for a canned cookie with the always-on destinations. Nothing here
- * is tagged @smoke.
+ * through GET /api/v1/me in process, so the signed-in tests ask for Noor
+ * from the per-worker fixture (./fixtures.ts, task J1), which signs her in
+ * once for the worker: against a seeded server that is a real session;
+ * without a database the read cannot answer and the shell renders for the
+ * canned cookie with the always-on destinations. Nothing here is tagged
+ * @smoke.
  */
 
 const appRoutes = [
@@ -20,31 +23,6 @@ const appRoutes = [
 
 const healthLink = "Consumer Health Data Privacy Policy";
 
-/** A seeded, verified persona (packages/db seed cast), as the settings security spec signs in. */
-const seededPersona = { email: "noor@example.test", password: "tidefern-seed-noor" };
-
-/** Read once per worker: null when the server has no seeded users, undefined until tried. */
-let seededCookies: Cookie[] | null | undefined;
-
-type CookiesToAdd = Parameters<BrowserContext["addCookies"]>[0];
-
-async function sessionCookies(page: Page, origin: string): Promise<CookiesToAdd> {
-  if (seededCookies === undefined) {
-    // page.request shares the context's cookie jar and is never answered by page.route.
-    const response = await page.request.post("/api/auth/sign-in/email", { data: seededPersona });
-    seededCookies = response.ok() ? await page.context().cookies(origin) : null;
-  }
-  if (seededCookies !== null) return seededCookies;
-  return [{ name: "better-auth.session_token", value: "e2e-canned", url: origin }];
-}
-
-/** Adds the session cookies; true when they belong to a real seeded session. */
-async function signedIn(page: Page): Promise<boolean> {
-  const base = test.info().project.use.baseURL ?? "http://127.0.0.1:3000";
-  await page.context().addCookies(await sessionCookies(page, new URL(base).origin));
-  return seededCookies !== null;
-}
-
 /** CSS locators, because role queries skip whichever navigation is hidden at this width. */
 function shellNavigation(page: Page) {
   const main = page.locator("nav[aria-label='Main']");
@@ -52,9 +30,8 @@ function shellNavigation(page: Page) {
 }
 
 test("an authenticated route shows no public header and keeps both policy links", async ({
-  page,
+  noor: page,
 }) => {
-  await signedIn(page);
   for (const route of appRoutes) {
     await page.goto(route.path);
     await expect(page, route.path).toHaveURL(new RegExp(`${route.path}$`));
@@ -74,9 +51,8 @@ test("an authenticated route shows no public header and keeps both policy links"
 });
 
 test("the rail shows at 1440 px and the tab bar at 390 px, the current destination marked", async ({
-  page,
+  noor: page,
 }) => {
-  await signedIn(page);
   for (const route of appRoutes) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto(route.path);
@@ -107,8 +83,8 @@ test("the rail shows at 1440 px and the tab bar at 390 px, the current destinati
   }
 });
 
-test("the quick-log action shows on Today and nowhere else", async ({ page }) => {
-  const seeded = await signedIn(page);
+test("the quick-log action shows on Today and nowhere else", async ({ noor: page }) => {
+  const seeded = serverHasDatabase() === true;
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/today");
   const quickLog = shellNavigation(page).bar.getByRole("button", { name: "Log today" });
@@ -138,8 +114,7 @@ test("a visitor without a session is sent to sign in before anything renders", a
 });
 
 for (const theme of ["light", "dark"] as const) {
-  test(`today in the shell has no axe violations in ${theme} mode`, async ({ page }) => {
-    await signedIn(page);
+  test(`today in the shell has no axe violations in ${theme} mode`, async ({ noor: page }) => {
     await expectNoAxeViolations(page, "/today", theme);
   });
 }

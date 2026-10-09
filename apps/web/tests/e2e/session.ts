@@ -1,4 +1,7 @@
 import { createHmac, randomUUID } from "node:crypto";
+import { readFileSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import {
   test,
   type APIResponse,
@@ -7,6 +10,7 @@ import {
   type Page,
 } from "@playwright/test";
 import { consentTextVersions, TERMS_VERSION, type Stage } from "@tidefern/schemas";
+import { limiterPath, nextSlot, parseBuckets, type Bucket } from "./limiter";
 
 /**
  * One way for every browser spec to get a session (task G10).
@@ -98,6 +102,15 @@ const CONSENT_CATEGORIES: Readonly<Record<Stage, readonly string[]>> = {
 /** Whether the server has a database: unknown until a sign-in or a sign-up answers. */
 let databaseBacked: boolean | undefined;
 
+/**
+ * Whether a sign-in or a sign-up has shown this worker a database: true or
+ * false once one answered, undefined before. The per-flow fixtures read it
+ * to pick the database-free branch, as the helpers' null answers do.
+ */
+export function serverHasDatabase(): boolean | undefined {
+  return databaseBacked;
+}
+
 /** Each persona's cookies from one real sign-in, kept for the worker. */
 const jar = new Map<Persona, Cookie[]>();
 
@@ -138,18 +151,101 @@ export function retryAfterMs(
   return (Number.isFinite(seconds) && seconds > 0 ? seconds : 10) * 1000 + 500;
 }
 
-/** One request, and once more after the wait the limiter names if it answered 429. */
-async function patiently(call: () => Promise<APIResponse>): Promise<APIResponse> {
+/**
+ * Where the limiter's count per path is kept (./limiter.ts), one file per
+ * server, outside the repository. A file and not memory, because Playwright
+ * starts a new worker after a failed test and the server keeps counting
+ * across that restart, and across runs a few seconds apart too. The suite
+ * runs one worker (playwright.config.ts), so nothing writes it at once.
+ */
+function bucketFile(): string {
+  return join(tmpdir(), `tidefern-e2e-limiter-${encodeURIComponent(baseOrigin())}.json`);
+}
+
+function readBuckets(): Record<string, Bucket> {
+  try {
+    return parseBuckets(readFileSync(bucketFile(), "utf8"));
+  } catch {
+    return {};
+  }
+}
+
+function writeBucket(path: string, bucket: Bucket): void {
+  writeFileSync(bucketFile(), JSON.stringify({ ...readBuckets(), [path]: bucket }));
+}
+
+/** Every sign-in and sign-up request this worker sent, by limiter path, for the run's report. */
+export const authRequests: string[] = [];
+
+/**
+ * Every 429 the limiter answered this worker, by path. The limiter must
+ * never trip in a run (architecture 15): the pacing below keeps it from
+ * happening, each one is printed where the run's log shows it, and the
+ * per-flow suites assert none happened.
+ */
+export const rateLimited: string[] = [];
+
+function noteRateLimited(path: string): void {
+  rateLimited.push(path);
+  console.warn(`[session] the limiter answered 429 for ${path}; waiting it out`);
+}
+
+/**
+ * Waits until the limiter will take one more request on `path` and counts
+ * it as sent. Every sign-in and sign-up this suite makes goes through here
+ * first: the helpers' own calls, the sign-in form (`submitSignInForm`), and
+ * the browser's calls in a context `paceBrowserAuth` watches.
+ */
+export async function paceAuthCall(path: string): Promise<void> {
+  const slot = nextSlot(readBuckets()[path], Date.now());
+  writeBucket(path, slot.next);
+  authRequests.push(path);
+  if (slot.waitMs > 0) await wait(slot.waitMs);
+}
+
+/** Contexts whose own sign-in and sign-up requests `paceBrowserAuth` already paces. */
+const paced = new WeakSet<BrowserContext>();
+
+/** After a 429 the server starts its count again with the retried request. */
+function restartBucket(path: string): void {
+  writeBucket(path, { count: 1, last: Date.now() });
+}
+
+/**
+ * Paces the sign-in and sign-up requests the pages in a context send
+ * themselves (a form submitted by a click), the same way as the helpers'
+ * own. Other auth calls pass untouched. A spec that routes the same paths
+ * registers its own routes after this one, which then win.
+ */
+export async function paceBrowserAuth(context: BrowserContext): Promise<void> {
+  if (paced.has(context)) return;
+  paced.add(context);
+  context.on("response", (response) => {
+    const path = limiterPath(response.url());
+    if (path !== null && response.status() === 429) noteRateLimited(`${path} (browser)`);
+  });
+  await context.route("**/api/auth/**", async (route) => {
+    const path = limiterPath(route.request().url());
+    if (path !== null && route.request().method() === "POST") await paceAuthCall(path);
+    await route.fallback();
+  });
+}
+
+/** One request, paced, and once more after the wait the limiter names if it answered 429. */
+async function patiently(path: string, call: () => Promise<APIResponse>): Promise<APIResponse> {
+  await paceAuthCall(path);
   const first = await call();
   if (first.status() !== 429) return first;
+  noteRateLimited(path);
   await wait(retryAfterMs(first));
+  restartBucket(path);
   return call();
 }
 
 /** A JSON POST to Better Auth with the Origin it checks. `page.request` shares the context's cookies. */
 function authPost(page: Page, path: string, data: unknown): Promise<APIResponse> {
   const origin = baseOrigin();
-  return patiently(() =>
+  return patiently(path, () =>
     page.request.post(`${origin}/api/auth${path}`, { data, headers: { origin } }),
   );
 }
@@ -346,10 +442,13 @@ export async function submitSignInForm(page: Page, account: Account): Promise<vo
     const answer = page.waitForResponse(
       (response) => new URL(response.url()).pathname === "/api/auth/sign-in/email",
     );
+    if (!paced.has(page.context())) await paceAuthCall("/sign-in/email");
     await page.locator('form button[type="submit"]').click();
     const response = await answer;
     if (response.status() !== 429) return;
+    noteRateLimited("/sign-in/email (form)");
     await wait(retryAfterMs(response));
+    restartBucket("/sign-in/email");
   }
   throw new Error(`signing in as ${account.email} through the form was rate limited twice`);
 }
