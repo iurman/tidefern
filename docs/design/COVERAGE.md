@@ -104,16 +104,17 @@ Gaps:
   Actions and feedback, Forms, Structure and overlays, Calendar, Marks and
   charts, Patterns, and Patterns continues to Motion.
 
-## Links the specimens make to routes that do not exist yet
+## Links the specimens make
 
-Specimens use the product's real destinations with synthetic data. These
-answer 404 on main because no route serves them yet: `/journey/dating`,
-`/journey/start`, `/family/child/milestones` and `/log` (the day page lives
-at `/log/<date>`). The link check allows a 404 only for those exact paths.
-Every other internal link must answer 200, or 307 to `/sign-in` for a
-signed-in route (`/today`, `/calendar`, `/journey`, `/family`, `/sharing`,
-`/settings`, `/settings/sound`, `/log/<date>`); task J1 took the routes H2
-to H7 built off the list, so the check holds them to that.
+Specimens use the product's real destinations with synthetic data, and
+every one of them is a built route: the week card and the ring's empty
+action link to `/journey` and `/log/<date>`, and the family specimens to
+`/family`. The link check allows no 404 (task J3f removed the allowance it
+kept for `/journey/dating`, `/journey/start`, `/family/child/milestones` and
+`/log`). Every internal link must answer 200, or, for a signed-in route
+(`/today`, `/calendar`, `/journey`, `/family`, `/sharing`, `/settings`,
+`/settings/sound`, `/log/<date>`), the redirect to sign-in that carries the
+path to return to.
 
 ## Not checked here
 

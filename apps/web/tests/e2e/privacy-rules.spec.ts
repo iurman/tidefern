@@ -8,6 +8,7 @@ import {
   htmlProblems,
   isPrivateNoStore,
   isThirdParty,
+  mailProblems,
   titleProblems,
   urlProblems,
 } from "./privacy-rules";
@@ -138,4 +139,33 @@ test("health data in a title", () => {
     expect(titleProblems(title), title).toEqual([]);
   for (const title of ["Period day 2 | Tidefern", "Week 12 | Tidefern", "Pregnancy | Tidefern"])
     expect(titleProblems(title), title).toHaveLength(1);
+});
+
+test("health data in a mail: the subject, the link's path or a link value", () => {
+  const link = `${origin}/api/auth/verify-email?token=abc&callbackURL=%2Fwelcome`;
+  for (const subject of [
+    "Confirm your email",
+    "Reset your Tidefern password",
+    "Your Tidefern reminder",
+    "A security notice for your Tidefern account",
+    "An invitation to Tidefern",
+  ])
+    expect(mailProblems({ to: "a@example.test", subject, link }), subject).toEqual([]);
+  expect(mailProblems({ to: "a@example.test", subject: "Your period starts tomorrow" })).toEqual([
+    'the subject "Your period starts tomorrow" names a health fact',
+  ]);
+  expect(
+    mailProblems({
+      to: "a@example.test",
+      subject: "Your Tidefern reminder",
+      link: `${origin}/pregnancy`,
+    }),
+  ).toEqual(["the link path /pregnancy names a health fact"]);
+  expect(
+    mailProblems({
+      to: "a@example.test",
+      subject: "Your Tidefern reminder",
+      link: `${origin}/today?next=ovulation`,
+    }),
+  ).toEqual([`the link's "next" value names a health fact`]);
 });

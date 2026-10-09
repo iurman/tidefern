@@ -8,10 +8,19 @@ import {
   htmlProblems,
   isPrivateNoStore,
   isThirdParty,
+  mailProblems,
   titleProblems,
+  type CapturedMail,
   urlProblems,
 } from "./privacy-rules";
-import { baseOrigin, freshAccount, onboard, serverHasDatabase, type Persona } from "./session";
+import {
+  MAIL_CAPTURE_PATH,
+  baseOrigin,
+  freshAccount,
+  onboard,
+  serverHasDatabase,
+  type Persona,
+} from "./session";
 
 /**
  * The privacy and performance walk (task J3f; BUILD_PROMPT section 10,
@@ -413,7 +422,7 @@ for (const persona of ["noor", "mira", "pia", "theo", "lena"] as const) {
   });
 }
 
-test("a new account's empty states keep the rules, and every link they offer leads somewhere", async ({
+test("a new account's mail and empty states keep the rules, and every link they offer leads somewhere", async ({
   browser,
 }, info) => {
   test.setTimeout(180_000);
@@ -425,6 +434,17 @@ test("a new account's empty states keep the rules, and every link they offer lea
     const record = await watch(page);
     await walk(page, record, { path: "/welcome" }, "new account:", true);
     if (account === null) return;
+    // The mail the routes sent (architecture 10.2): the capture holds the
+    // sign-up's verification mail and whatever followed the last clear.
+    const capture = await page.request.get(`${baseOrigin()}${MAIL_CAPTURE_PATH}`);
+    expect(capture.ok(), "the mail capture answers").toBe(true);
+    const { messages } = (await capture.json()) as { messages: CapturedMail[] };
+    expect(
+      messages.some((message) => message.to === account.email),
+      "the sign-up's verification mail is in the capture",
+    ).toBe(true);
+    for (const message of messages)
+      expect(mailProblems(message), `mail "${message.subject}" to ${message.to}`).toEqual([]);
     // A cycle profile with nothing logged: every screen shows its empty state.
     await onboard(page, { stage: "cycle", timeZone: "Europe/Berlin", displayName: "Sam" });
     for (const path of ["/today", "/calendar", "/sharing", "/activity", "/journey", "/settings"])

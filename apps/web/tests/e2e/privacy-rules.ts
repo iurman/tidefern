@@ -189,3 +189,34 @@ export function urlProblems(url: string, { checkPath }: { checkPath: boolean }):
 export function titleProblems(title: string): string[] {
   return HEALTH_WORDS.test(title) ? [`the title "${title}" names a health fact`] : [];
 }
+
+/** A captured mail as the e2e capture reports it: the address, the subject and the one link. */
+export interface CapturedMail {
+  to: string;
+  subject: string;
+  link?: string;
+}
+
+/**
+ * What is wrong with a mail the routes sent (architecture 10.2): a health
+ * word in the subject, in the link's path or in any of its query values.
+ * The link's parameter names belong to the auth library, so only the
+ * values are judged.
+ */
+export function mailProblems(mail: CapturedMail): string[] {
+  const problems: string[] = [];
+  if (HEALTH_WORDS.test(mail.subject))
+    problems.push(`the subject "${mail.subject}" names a health fact`);
+  if (mail.link === undefined) return problems;
+  let parsed: URL;
+  try {
+    parsed = new URL(mail.link);
+  } catch {
+    return [...problems, `unparsable link in "${mail.subject}"`];
+  }
+  if (HEALTH_WORDS.test(decodeURIComponent(parsed.pathname)))
+    problems.push(`the link path ${parsed.pathname} names a health fact`);
+  for (const [name, value] of parsed.searchParams)
+    if (HEALTH_WORDS.test(value)) problems.push(`the link's "${name}" value names a health fact`);
+  return problems;
+}
