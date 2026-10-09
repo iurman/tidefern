@@ -1,6 +1,9 @@
+import { readFileSync } from "node:fs";
+import { dirname, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { MARK_DARK, MARK_LIGHT } from "./brand-mark";
-import { THEME_KEY, preferenceScript } from "./site";
+import { SOCIAL_CARD_ALT, THEME_KEY, pageMetadata, preferenceScript } from "./site";
 
 type Run = { stored: string | null; systemDark: boolean; pathname: string };
 
@@ -52,5 +55,22 @@ describe("preferenceScript", () => {
   it("adds nothing on a page without the hero mark", () => {
     run({ stored: "dark", systemDark: false, pathname: "/today" });
     expect(heroPreloads()).toEqual([]);
+  });
+});
+
+describe("the social card's alt text", () => {
+  // A path string, because jsdom's URL is not Node's.
+  const altFile = resolve(
+    dirname(fileURLToPath(import.meta.url)),
+    "../app/opengraph-image.alt.txt",
+  );
+
+  it("is the same words in site.ts and in the file Next reads for the root card", () => {
+    expect(readFileSync(altFile, "utf8").trim()).toBe(SOCIAL_CARD_ALT);
+  });
+
+  it("is what the home page's own card carries", () => {
+    const images = pageMetadata("/", "Tidefern", "description").openGraph?.images;
+    expect(images).toEqual([expect.objectContaining({ alt: SOCIAL_CARD_ALT })]);
   });
 });
