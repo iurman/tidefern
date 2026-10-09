@@ -148,7 +148,8 @@ describe("the API host", () => {
 
     for (const overrides of [
       { E2E_JOBS_SCHEDULED_ONLY: "true", VERCEL_ENV: "preview" },
-      { E2E_JOBS_SCHEDULED_ONLY: "true", VERCEL_ENV: "production" },
+      // CI's job env sets TIDEFERN_FAKE_NOW, which the clock refuses in production.
+      { E2E_JOBS_SCHEDULED_ONLY: "true", VERCEL_ENV: "production", TIDEFERN_FAKE_NOW: undefined },
       { E2E_JOBS_SCHEDULED_ONLY: "1" },
       { E2E_JOBS_SCHEDULED_ONLY: "" },
     ]) {
