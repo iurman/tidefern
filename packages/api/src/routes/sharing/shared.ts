@@ -31,6 +31,9 @@ export interface SharingDependencies {
    * Not read: the sharing routes take the database from `createApp()`'s
    * `db`, as every area does (`AreaOptions`). Kept so a host that still
    * passes it type-checks; it should name the same database.
+   *
+   * @deprecated Pass the database to `createApp({ db })` instead. This field
+   * is ignored and goes once the host stops passing it.
    */
   db?: ActorDatabase | undefined;
   mailer?: Mailer | undefined;
