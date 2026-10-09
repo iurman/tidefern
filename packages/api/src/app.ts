@@ -1,5 +1,4 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { secureHeaders } from "hono/secure-headers";
 import type { KeyProvider } from "@tidefern/crypto";
 import type { ActorDatabase } from "@tidefern/db";
 import { withSession } from "./auth";
@@ -8,7 +7,14 @@ import { calendarClock } from "./clock";
 import type { CalendarClock } from "./clock";
 import type { ApiEnv, Defer, DrainJobs } from "./context";
 import { drainEnqueued } from "./jobs/index";
-import { crossSite, idempotency, logger, rateLimit, routeTemplate } from "./middleware/index";
+import {
+  crossSite,
+  idempotency,
+  logger,
+  rateLimit,
+  routeTemplate,
+  securityHeaders,
+} from "./middleware/index";
 import type { CrossSiteOptions, LoggerOptions } from "./middleware/index";
 import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
@@ -142,7 +148,7 @@ export function createApp(options: ApiOptions = {}) {
     c.set("clock", clock);
     await next();
   });
-  app.use("*", secureHeaders());
+  app.use("*", securityHeaders());
   app.use("*", async (c, next) => {
     await next();
     // Nothing from the API is ever cacheable by a shared cache.
