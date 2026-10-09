@@ -11,6 +11,7 @@ them current when a documented pattern changes.
 | `CONTENT.md`    | Stage 2           | Route inventory: visitor question, content, action and destination, navigation, indexability, metadata, missing owner facts                                                              |
 | `ASSETS.md`     | Stage 2           | Every font, vector, icon, image and data table with source, license, dimensions and whether final or temporary                                                                           |
 | `QA.md`         | Stage 6           | Findings as `location                                                                                                                                                                    | severity | evidence | correction | verification`, plus the recorded tool conditions for performance runs |
+| `PERFORMANCE.md` | Stage 6 (task J2) | Lighthouse lab runs of the key routes against the section 15 budgets, the conditions, the bundle findings and the proposed fixes |
 | `qa/`           | Stages 2 and 6    | Screenshot captures from `apps/web/scripts/capture.mjs` (both themes, desktop and phone)                                                                                                 |
 
 Brand facts and tokens live in `packages/design-tokens`; the decisions

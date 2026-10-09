@@ -8,10 +8,13 @@
     "start": "next start",
     "lint": "eslint . --max-warnings=0",
     "typecheck": "next typegen && tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/perf/summary.test.mjs",
     "test:e2e": "playwright test",
     "brand:sync": "node scripts/sync-brand.mjs",
-    "brand:check": "node scripts/sync-brand.mjs --check"
+    "brand:check": "node scripts/sync-brand.mjs --check",
+    "perf:lighthouse": "node scripts/perf/lighthouse.mjs",
+    "perf:analyze": "ANALYZE=true ANALYZE_MODE=json next build --webpack --experimental-build-mode=compile && node scripts/perf/bundle-summary.mjs",
+    "perf:test": "node --test scripts/perf/summary.test.mjs"
   },
   "dependencies": {
     "@tidefern/api": "workspace:*",
@@ -30,6 +33,7 @@
   },
   "devDependencies": {
     "@axe-core/playwright": "4.13.0",
+    "@next/bundle-analyzer": "16.3.8",
     "@playwright/test": "1.63.0",
     "@tailwindcss/postcss": "4.3.3",
     "@testing-library/jest-dom": "7.0.1",
@@ -43,6 +47,7 @@
     "eslint": "9.39.5",
     "eslint-config-next": "16.3.8",
     "jsdom": "30.1.1",
+    "lighthouse": "13.5.0",
     "postcss": "8.5.28",
     "tailwindcss": "4.3.3",
     "typescript": "6.0.3",
