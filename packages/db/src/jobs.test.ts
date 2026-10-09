@@ -268,6 +268,48 @@ describe("fail", () => {
     expect(describeError("boom")).toBe("string");
   });
 
+  test("keeps a wrapped Postgres error's SQLSTATE and constraint, never its parameters or values", async () => {
+    const jobIdValue = await enqueueAt("reminder.send", NOW);
+    // A real failed query: Drizzle throws its own error (plain `Error`, whose
+    // message quotes the statement and its parameters) with the driver's
+    // error as the cause, which carries the SQLSTATE and the constraint.
+    const refused = await harness.db
+      .insert(schema.jobs)
+      .values({ id: jobIdValue, type: "reminder.send", payloadJson: { subjectId: ANNA } })
+      .then(
+        () => null,
+        (error: unknown) => error,
+      );
+    expect(refused).toBeInstanceOf(Error);
+    const described = describeError(refused);
+    expect(described).toMatch(/^Error \S+ 23505 constraint=jobs_pkey$/);
+    expect(described).not.toContain(jobIdValue);
+    expect(described).not.toContain(ANNA);
+    expect(described).not.toContain("insert");
+
+    // A cause with a routine and no constraint keeps the routine.
+    const cause = Object.assign(new Error(`relation "x" quotes ${ANNA}`), {
+      code: "42501",
+      routine: "aclcheck_error",
+      detail: `Key (subject_id)=(${ANNA}) exists`,
+    });
+    cause.name = "DatabaseError";
+    const wrapped = new Error(`Failed query: select 1\nparams: ${ANNA}`, { cause });
+    expect(describeError(wrapped)).toBe("Error DatabaseError 42501 routine=aclcheck_error");
+
+    // A name that is not an identifier is left out rather than quoted.
+    const odd = Object.assign(new Error("x"), { code: "23514", constraint: `has (${ANNA})` });
+    odd.name = "DatabaseError";
+    expect(describeError(odd)).toBe("DatabaseError 23514");
+
+    // Recorded on the row the same way.
+    await claimDue(harness.db, 1, NOW);
+    await fail(harness.db, jobIdValue, wrapped, NOW);
+    expect((await jobRow(jobIdValue))?.lastError).toBe(
+      "Error DatabaseError 42501 routine=aclcheck_error",
+    );
+  });
+
   test("answers null for a job that is not running", async () => {
     const jobIdValue = await enqueueAt("reminder.send", NOW);
     expect(await fail(harness.db, jobIdValue, new Error("x"), NOW)).toBeNull();
