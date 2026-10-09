@@ -330,6 +330,25 @@ test("Mira's children: the timeline, Sol's care sentence, Ilo's approximate capt
   await expectNoOverflow(page, `/family/${SOL} growth as Mira`);
 });
 
+test("the child page's Timeline, Growth and Milestones switch stays on one row down to 320 pixels", async ({
+  page,
+}) => {
+  // Review loop 2 (task J3e): at 320 px Milestones wrapped to a second row
+  // inside the switch's pill.
+  if (!(await as(page, "mira"))) return expectFailedRead(page, `/family/${ILO}`);
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 844 });
+    await open(page, `/family/${ILO}`);
+    const tops = await Promise.all(
+      ["Timeline", "Growth", "Milestones"].map(async (name) => {
+        const box = await page.getByRole("radio", { name, exact: true }).boundingBox();
+        return box === null ? Number.NaN : Math.round(box.y);
+      }),
+    );
+    expect(new Set(tops).size, `the three options' tops at ${width}: ${tops.join(", ")}`).toBe(1);
+  }
+});
+
 test("Lena, a guardian too, sees both children and the care sentence on Sol", async ({ page }) => {
   if (!(await as(page, "lena"))) return expectFailedRead(page, "/family");
   await open(page, "/family");

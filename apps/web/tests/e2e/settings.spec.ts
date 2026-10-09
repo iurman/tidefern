@@ -761,6 +761,32 @@ test("on phones each group opens its own screen with the way back, and every scr
   }
 });
 
+test("sound, devices and two-step sign-in each open with the way back to Settings, like every other group", async ({
+  page,
+}) => {
+  // Review loop 2 (task J3e): these three screens predate the group frame and
+  // opened with no way back on a phone, where the rail is not there.
+  const noor = await signInAs(page, "noor");
+  if (noor === null) {
+    await expectFailedReads(page);
+    return;
+  }
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const [path, heading] of [
+    ["/settings/sound", "Sound"],
+    ["/settings/devices", "Devices"],
+    ["/settings/two-factor", "Two-step sign-in"],
+  ] as const) {
+    await page.goto(path);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText(heading);
+    await page.getByRole("link", { name: "Back to Settings" }).click();
+    await expect(page).toHaveURL(/\/settings$/);
+  }
+  // Quiet hours follow the device's clock; the line no longer waits on a profile time zone she has.
+  await page.goto("/settings/sound");
+  await expect(page.getByText("Times follow this device's clock.", { exact: true })).toBeVisible();
+});
+
 test("Pia's imperial units, her empty consent record, and Mira's children's consents without an action", async ({
   page,
 }) => {

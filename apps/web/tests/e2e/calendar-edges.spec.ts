@@ -132,3 +132,37 @@ test("a pill that runs on past a row stops inside the grid and the strip and fad
     }
   }
 });
+
+/** The end radius of a day's pill, read from its own pseudo-element. */
+function endRadius(page: Page, selector: string): Promise<number> {
+  return page.evaluate((selector) => {
+    const cell = document.querySelector(selector);
+    if (cell === null) return Number.NaN;
+    return parseFloat(getComputedStyle(cell, "::before").borderStartEndRadius);
+  }, selector);
+}
+
+test("the week strip rounds a window's end like the month grid, clear of the weekday above the number", async ({
+  page,
+}) => {
+  // Review loop 2 (task J3e): a strip item is taller than a month cell, and an
+  // unbounded radius swept today's end arc through "Mo" at 320 px.
+  const session = await signInAs(page, "noor");
+  if (session === null) {
+    await page.goto(NOOR_OCTOBER);
+    await expect(page.getByText("We could not load your calendar. Try again.")).toBeVisible();
+    return;
+  }
+  for (const width of [390, 320]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto(NOOR_OCTOBER);
+    await expect(page.getByRole("grid", { name: "October 2026" })).toBeVisible();
+    // Monday Oct 5, today, is the logged period's last day, so its end rounds.
+    const month = await endRadius(page, "table td[aria-current='date']");
+    await page.goto(`${NOOR_OCTOBER}&view=list`);
+    await expect(page.getByRole("list", { name: "This week" })).toBeVisible();
+    const strip = await endRadius(page, "ol[aria-label='This week'] li[aria-current='date']");
+    expect(month, `the month cell's end radius at ${width}`).toBeLessThanOrEqual(18);
+    expect(strip, `the strip item's end radius at ${width}`).toBe(month);
+  }
+});
