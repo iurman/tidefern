@@ -33,9 +33,12 @@ jobs:
     services:
       postgres:
         # postgres 18.6, pinned to the digest of its multi-architecture index like the actions below
-        # (resolved from Docker Hub on 2026-10-05). The browser suite signs in against seeded users
-        # on it (architecture 15 and 16.1); unit tests keep using PGlite.
-        image: postgres:18.6@sha256:6737476511d43c91c7cee9aa027b5d30458b7ed0f3af663ff8715c14ce4355b6
+        # (resolved from Docker Hub on 2026-10-05). Pulled from the official-image mirror on Amazon
+        # ECR Public, which serves the same index under the same digest (checked 2026-10-09):
+        # anonymous Docker Hub pulls from shared runners met its rate limit (run 37991468945). The
+        # browser suite signs in against seeded users on it (architecture 15 and 16.1); unit tests
+        # keep using PGlite.
+        image: public.ecr.aws/docker/library/postgres:18.6@sha256:6737476511d43c91c7cee9aa027b5d30458b7ed0f3af663ff8715c14ce4355b6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: ci-only-postgres-password
@@ -132,8 +135,8 @@ jobs:
       # dropped path) fails the pull request, because installed clients keep calling v1 for months.
       # Removing an optional response field is info level in oasdiff and passes; whether it should
       # fail is a 16.1 decision, not this step's. The base copy goes under node_modules/.cache,
-      # which no later step formats, lints or builds, inside the workspace the action's container
-      # mounts. The commit-message step above already fetched the base branch.
+      # which no later step formats, lints or builds. The commit-message step above already
+      # fetched the base branch.
       - name: Read the base branch's contract (pull requests)
         if: github.event_name == 'pull_request'
         env:
@@ -142,21 +145,30 @@ jobs:
           mkdir -p node_modules/.cache/oasdiff
           git show "origin/$BASE_REF:openapi/v1.json" > node_modules/.cache/oasdiff/base-v1.json
 
-      # review: false keeps both specs in CI (the default uploads them to oasdiff.com), and with it
-      # the action sends no telemetry and posts no comment; the empty token makes sure of the
-      # latter, so the job keeps contents: read. The result is in the step log and as annotations
-      # on the changed lines; fail-on: ERR fails the job on any error-level change except one the
-      # lead approved in openapi/BREAKING.md (err-ignore: a dated line per change, with its reason).
+      # The oasdiff release binary, checked against a pinned SHA-256, rather than
+      # oasdiff/oasdiff-action, whose container is built from tufin/oasdiff on Docker Hub: anonymous
+      # pulls from shared runners met 429 Too Many Requests on three attempts in a row (run
+      # 37990905516), which failed verify without a change to the contract. The same release
+      # (1.33.0, the image the action used) and the same inputs: fail-on ERR fails the job on any
+      # error-level change except one the lead approved in openapi/BREAKING.md (err-ignore: a dated
+      # line per change, with its reason). Nothing is uploaded and no comment is posted; the result
+      # is in the step log and as annotations on the changed lines.
       - name: No breaking change to the v1 contract (pull requests)
         if: github.event_name == 'pull_request'
-        uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
-        with:
-          base: node_modules/.cache/oasdiff/base-v1.json
-          revision: openapi/v1.json
-          fail-on: ERR
-          err-ignore: openapi/BREAKING.md
-          review: false
-          github-token: ""
+        env:
+          OASDIFF_VERSION: 1.33.0
+          # sha256 of oasdiff_1.33.0_linux_amd64.tar.gz, matching the release's checksums.txt (2026-10-09).
+          OASDIFF_SHA256: 43a4e328e2d13ba1552d760aa68d2485c75c5621f309f6ff64ae895188345247
+        run: |
+          dir="$RUNNER_TEMP/oasdiff"
+          mkdir -p "$dir"
+          archive="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 --output "$dir/$archive" \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/${archive}"
+          echo "${OASDIFF_SHA256}  $dir/$archive" | sha256sum --check --strict
+          tar -xzf "$dir/$archive" -C "$dir" oasdiff
+          "$dir/oasdiff" breaking node_modules/.cache/oasdiff/base-v1.json openapi/v1.json \
+            --fail-on ERR --err-ignore openapi/BREAKING.md --format githubactions
 
       - name: Lint
         run: pnpm lint
