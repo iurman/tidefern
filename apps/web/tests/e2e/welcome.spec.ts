@@ -1,6 +1,7 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Cookie, type Page, type Request, type Route } from "@playwright/test";
 import { baseOrigin, freshAccount, signInAs } from "./session";
+import { TERMS_VERSION } from "@tidefern/schemas/constants";
 
 /**
  * Onboarding at /welcome (task H1) against the production build.
@@ -441,6 +442,13 @@ test("here for someone else: no dates, no consent recorded, and an invitation la
   await expectProfile(page, "none");
   const consents = await api<{ items: ConsentRow[] }>(page, "/api/v1/me/consents");
   expect(consents.items).toEqual([]);
+  // The terms she accepted are recorded on the profile, though no consent is.
+  const profile = await api<{ termsVersion: string | null; termsAcceptedAt: string | null }>(
+    page,
+    "/api/v1/me/profile",
+  );
+  expect(profile.termsVersion).toBe(TERMS_VERSION);
+  expect(profile.termsAcceptedAt).not.toBeNull();
 });
 
 /** Walks the shared account to the consent step of the cycle path. */

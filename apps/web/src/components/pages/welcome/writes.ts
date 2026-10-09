@@ -164,7 +164,16 @@ export function profileMatches(saved: ProfileBody, body: ProfileBody): boolean {
 }
 
 /**
- * PUT /v1/me/profile, creating it with the age attestation. A retry after a
+ * What every profile write from this page carries beside her choices: the
+ * age attestation and the terms version she accepted. Both are ticked on the
+ * agreement step on every path, the here-for-someone-else one included,
+ * where no consent is asked and so no consent record carries the terms.
+ */
+const AGREED = { ageAttested: true, termsVersion: TERMS_VERSION } as const;
+
+/**
+ * PUT /v1/me/profile, creating it with the age attestation and the terms
+ * version accepted. A retry after a
  * create whose answer never arrived meets a profile that exists: the API
  * then asks for its version (`if_match_required`), so the page reads the
  * profile once. When it holds what she chose, the write is done instead of
@@ -173,9 +182,7 @@ export function profileMatches(saved: ProfileBody, body: ProfileBody): boolean {
  * the saved profile follows her latest choice rather than the one she undid.
  */
 export async function createProfile(client: ApiClient, body: ProfileBody): Promise<WriteOutcome> {
-  const sent = await answer(
-    client.PUT("/api/v1/me/profile", { body: { ...body, ageAttested: true } }),
-  );
+  const sent = await answer(client.PUT("/api/v1/me/profile", { body: { ...body, ...AGREED } }));
   if (sent.status === 200 || sent.status === 201) return DONE;
   if (sent.status !== 422 || detailOf(sent.body) !== IF_MATCH_REQUIRED) {
     return failure(sent.status, sent.body);
@@ -188,7 +195,7 @@ export async function createProfile(client: ApiClient, body: ProfileBody): Promi
   const replaced = await answer(
     client.PUT("/api/v1/me/profile", {
       params: { header: { "if-match": String(saved.version) } },
-      body: { ...body, ageAttested: true },
+      body: { ...body, ...AGREED },
     }),
   );
   return replaced.status === 200 ? DONE : failure(replaced.status, replaced.body);

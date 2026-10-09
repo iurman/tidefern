@@ -1,6 +1,7 @@
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { TERMS_VERSION } from "@tidefern/schemas/constants";
 import type { Processor } from "@/components/ui/consent-record";
 
 const leave = vi.hoisted(() => vi.fn());
@@ -306,7 +307,12 @@ describe("onboarding", () => {
 
     await waitFor(() => expect(leave).toHaveBeenCalledWith("/today"));
     expect(calls.map((call) => `${call.method} ${call.path}`)).toEqual(["PUT /api/v1/me/profile"]);
-    expect(calls[0]?.body).toMatchObject({ stage: "none", ageAttested: true });
+    // The terms she accepted are recorded although no consent is asked on this path.
+    expect(calls[0]?.body).toMatchObject({
+      stage: "none",
+      ageAttested: true,
+      termsVersion: TERMS_VERSION,
+    });
   });
 
   it("dates a pregnancy from a scan, method first, and retries with the same id and key", async () => {

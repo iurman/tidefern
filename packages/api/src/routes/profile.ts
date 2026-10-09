@@ -307,6 +307,8 @@ function profileBody(row: ProfileRow): Profile {
     units: row.units,
     notificationDetail: row.notificationDetail,
     ageAttestedAt: row.ageAttestedAt.toISOString(),
+    termsVersion: row.termsVersion,
+    termsAcceptedAt: row.termsAcceptedAt === null ? null : row.termsAcceptedAt.toISOString(),
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -518,6 +520,9 @@ async function putProfile(
         userId: actorId,
         ...fields,
         ageAttestedAt: now,
+        ...(input.termsVersion === undefined
+          ? {}
+          : { termsVersion: input.termsVersion, termsAcceptedAt: now }),
         createdAt: now,
         updatedAt: now,
         version: 1,
@@ -548,9 +553,14 @@ async function putProfile(
   if (refusal !== null) {
     return { kind: "refused", detail: refusal.detail, path: "stage", message: refusal.message };
   }
+  // A new terms version is a new acceptance; the same one, or none, keeps the last.
+  const terms =
+    input.termsVersion === undefined || input.termsVersion === existing.termsVersion
+      ? {}
+      : { termsVersion: input.termsVersion, termsAcceptedAt: now };
   const [row] = await tx
     .update(schema.profiles)
-    .set({ ...fields, updatedAt: now, version: existing.version + 1 })
+    .set({ ...fields, ...terms, updatedAt: now, version: existing.version + 1 })
     .where(and(eq(schema.profiles.userId, actorId), eq(schema.profiles.version, existing.version)))
     .returning();
   // The version guard in the WHERE lost a race with another writer.
