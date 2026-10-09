@@ -269,14 +269,25 @@ describe("two actors at once on shared server connections", () => {
   });
 
   test("a reused backend carries no role and no actor after a commit", async () => {
-    await withActor(ANNA, async () => undefined, first.db);
-    await withActor(BEN, async () => undefined, second.db);
+    // Four overlapping actor transactions so both pooled backends host an
+    // actor in this test, whatever ran before it.
+    const committed = await Promise.all([
+      actorRound(ANNA, BEN, first.db),
+      actorRound(BEN, ANNA, second.db),
+      actorRound(ANNA, BEN, second.db),
+      actorRound(BEN, ANNA, first.db),
+    ]);
+    const usedHere = new Set<number>();
+    committed.forEach((result, index) => {
+      expectActorRound(result, index % 2 === 0 ? ANNA : BEN);
+      usedHere.add(result.before.pid);
+    });
     const after = await Promise.all(
       Array.from({ length: 8 }, (_, index) => bareRound(index % 2 === 0 ? first : second)),
     );
     for (const result of after) {
       expectClean(result);
-      expect(actorPids.has(result.facts.pid)).toBe(true);
+      expect(usedHere.has(result.facts.pid)).toBe(true);
     }
   });
 });
