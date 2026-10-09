@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto";
+import { uuidv7 } from "@tidefern/core/uuid";
 
 import {
   and,
@@ -106,26 +106,12 @@ export class SweepRoleError extends Error {
 }
 
 /**
- * A UUIDv7 (RFC 9562): 48 bits of Unix milliseconds, then random bits with
- * the version and variant set. Time-ordered ids keep the claim scan
- * (`run_after, id`) cheap and let a dead row be dated at a glance.
+ * A job's id: a UUIDv7 from the one minter in `@tidefern/core`. Time-ordered
+ * ids keep the claim scan (`run_after, id`) cheap and let a dead row be
+ * dated at a glance.
  */
 export function jobId(now: number = Date.now()): string {
-  const bytes = randomBytes(16);
-  // 48 bits of milliseconds as a 16-bit high word and a 32-bit low word, so
-  // no BigInt is needed and the web build's lower target type-checks this.
-  const high = Math.floor(now / 0x1_0000_0000);
-  const low = now % 0x1_0000_0000;
-  bytes[0] = (high >>> 8) & 0xff;
-  bytes[1] = high & 0xff;
-  bytes[2] = (low >>> 24) & 0xff;
-  bytes[3] = (low >>> 16) & 0xff;
-  bytes[4] = (low >>> 8) & 0xff;
-  bytes[5] = low & 0xff;
-  bytes[6] = ((bytes[6] as number) & 0x0f) | 0x70;
-  bytes[8] = ((bytes[8] as number) & 0x3f) | 0x80;
-  const hex = bytes.toString("hex");
-  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+  return uuidv7(now);
 }
 
 export function isJobType(value: string): value is JobType {

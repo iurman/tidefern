@@ -19,6 +19,7 @@
     "grant-login": "tsx scripts/grant-login.ts"
   },
   "dependencies": {
+    "@tidefern/core": "workspace:*",
     "@tidefern/schemas": "workspace:*",
     "@vercel/functions": "3.9.11",
     "drizzle-orm": "0.45.3",

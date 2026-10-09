@@ -20,7 +20,7 @@ import type {
 } from "@tidefern/core";
 import { schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 import {
   CycleEntry,
   CycleEntryList,

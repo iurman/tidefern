@@ -1,7 +1,7 @@
 import type { Context } from "hono";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 
 import type { ApiEnv } from "../../context";
 import type { Mailer } from "../../jobs/notice";

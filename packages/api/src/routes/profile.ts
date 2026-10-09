@@ -7,7 +7,8 @@ import { can, listScope, stageAfter } from "@tidefern/core";
 import type { Category, Pregnancy, Stage } from "@tidefern/core";
 import { isActorId, schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
+import { enqueue } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 import {
   CONSENT_DISCLOSURES,
   ConsentInput,

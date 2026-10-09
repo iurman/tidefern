@@ -14,7 +14,7 @@ import {
 import type { KeyCache, KeyProvider } from "@tidefern/crypto";
 import { schema, withActor } from "@tidefern/db";
 import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 import {
   Id,
   Note,

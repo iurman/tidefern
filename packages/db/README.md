@@ -617,7 +617,8 @@ person opens `withActor` itself.
   `reminder.send`, `account.delete`, `export.step` and so on) and the
   payload is checked to hold UUIDs only, as strings or lists under camelCase
   keys; anything else is a `JobPayloadError`. The id is a UUIDv7 from
-  `jobId()` unless the caller mints one.
+  `jobId()` unless the caller mints one; `jobId()` calls `uuidv7` from
+  `@tidefern/core`, the one minter the API and the client share.
 - `claimDue(db, limit, now)` claims up to `limit` jobs that are `queued` or
   `failed` with `run_after` in the past, plus any `running` row whose lock
   is older than `CLAIM_LOCK_TIMEOUT_MS` (15 minutes, a drain that died). The

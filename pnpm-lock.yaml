@@ -184,6 +184,9 @@ importers:
 
   packages/api-client:
     dependencies:
+      '@tidefern/core':
+        specifier: workspace:*
+        version: link:../core
       openapi-fetch:
         specifier: 0.17.0
         version: 0.17.0
@@ -191,9 +194,6 @@ importers:
       '@tidefern/config':
         specifier: workspace:*
         version: link:../config
-      '@tidefern/db':
-        specifier: workspace:*
-        version: link:../db
       '@types/node':
         specifier: 24.19.1
         version: 24.19.1
@@ -322,6 +322,9 @@ importers:
 
   packages/db:
     dependencies:
+      '@tidefern/core':
+        specifier: workspace:*
+        version: link:../core
       '@tidefern/crypto':
         specifier: workspace:*
         version: link:../crypto

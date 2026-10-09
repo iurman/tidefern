@@ -2,7 +2,7 @@ import { sql } from "drizzle-orm";
 import { todayIn } from "@tidefern/core";
 import { auditActions, isAuditAction, schema } from "@tidefern/db";
 import type { AuditAction, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 
 /**
  * The neutral action names the audit log holds (architecture 8.3 step 6).
