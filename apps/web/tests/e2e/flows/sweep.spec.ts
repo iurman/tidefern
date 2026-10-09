@@ -2,8 +2,17 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Locator, Page } from "@playwright/test";
 import { buildCatalog } from "../../../src/lib/design-catalog";
 import { expect, test } from "../fixtures";
-import type { Persona } from "../session";
-import { AXE_TAGS, DESKTOP, PHONE, THEMES, expectLimiterUntouched, projectOptions } from "./steps";
+import { AXE_TAGS } from "../axe";
+import { serverHasDatabase, signInAs, type Persona } from "../session";
+import {
+  DESKTOP,
+  PHONE,
+  THEMES,
+  addDays,
+  api,
+  expectLimiterUntouched,
+  projectOptions,
+} from "./steps";
 
 /**
  * The cross-route sweep (task J1): every public route signed out, and every
@@ -12,36 +21,45 @@ import { AXE_TAGS, DESKTOP, PHONE, THEMES, expectLimiterUntouched, projectOption
  *
  * - axe with the `wcag22aa` tag set of ../axe.ts in both themes, at 1440
  *   and at 390, at the top of the page as it loads (below 1024 px the
- *   shell's tab bar is sticky over the foot of the viewport, and whatever
+ *   shell's tab bar is fixed over the foot of the viewport, and whatever
  *   it covers at that scroll position is what a person sees);
  * - no sideways scroll at 320;
  * - a keyboard path: Tab from the top reaches the skip link first and
  *   Enter on it moves focus to main; every focusable element of the frame
  *   (the shell's navigation and policy line, or the public header and
  *   footer) is reached by Tab, every element Tab reaches shows a focus
- *   ring, and none is left entirely under the tab bar; where the route
- *   has a sheet or a dialog, it opens from the keyboard, Escape closes it
- *   and focus returns to the control that opened it.
+ *   ring that it did not draw at rest (a visible outline or a box shadow
+ *   that changed on focus), and none is left entirely under the tab bar;
+ *   for every sheet or dialog the route has, it opens from the keyboard,
+ *   Escape closes it and focus returns to the control that opened it. A
+ *   dialog behind fresh authentication gets a fresh sign-in first, so its
+ *   control shows instead of the sign-in-again notice.
  *
  * Checks are batched per page: one context per persona and viewport, and
  * every check for a route runs before the next route loads. A failed check
  * is recorded softly with its route, so one run reports every route.
  * The personas only read: nothing here saves, and a dialog is only ever
- * closed with Escape. On a server without a database the persona pages
+ * closed with Escape, never confirmed. On a server without a database the persona pages
  * render their failed-read state, which is still swept for axe, reflow and
  * the keyboard. Nothing here is tagged @smoke.
  */
 
 interface Opener {
+  /** What it opens, for the failure message. */
+  name: string;
   /** The control that opens the sheet or dialog. */
   control: (page: Page) => Locator;
   /** The widths where the control shows. */
   widths: readonly number[];
+  /** Whether the control shows only within the fresh-authentication window. */
+  fresh?: boolean;
+  /** What has to happen on the loaded page before the control shows, such as choosing a tab. */
+  prepare?: (page: Page) => Promise<void>;
 }
 
 interface Route {
   path: string;
-  opener?: Opener;
+  openers?: Opener[];
 }
 
 const catalog = buildCatalog();
@@ -64,31 +82,52 @@ const publicRoutes: Route[] = [
 
 const bothWidths = [DESKTOP.width, PHONE.width] as const;
 
-/** Each persona's routes; the child pages are added from the API at run time. */
+/** The event editor's form, from the add control of the pregnancy the persona sees. */
+const addAppointment: Opener = {
+  name: "the appointment form",
+  control: (page) => page.getByRole("button", { name: "Add an appointment" }),
+  widths: bothWidths,
+};
+
+/**
+ * Each persona's routes. Noor's day page and every child page are added at
+ * run time: the day from the API's `today`, the children from the API's list.
+ */
 const personaRoutes: Record<Persona, Route[]> = {
   noor: [
     {
       path: "/today",
-      opener: {
-        control: (page) =>
-          page.locator("nav[aria-label='Main']").last().getByRole("button", { name: "Log today" }),
-        widths: [PHONE.width],
-      },
+      openers: [
+        {
+          name: "the quick-log sheet",
+          control: (page) =>
+            page
+              .locator("nav[aria-label='Main']")
+              .last()
+              .getByRole("button", { name: "Log today" }),
+          widths: [PHONE.width],
+        },
+      ],
     },
     {
       path: "/calendar",
-      opener: {
-        control: (page) => page.getByRole("grid").getByRole("button", { name: /^Today, / }),
-        widths: bothWidths,
-      },
+      openers: [
+        {
+          name: "the day sheet",
+          control: (page) => page.getByRole("grid").getByRole("button", { name: /^Today, / }),
+          widths: bothWidths,
+        },
+      ],
     },
-    { path: "/log/2026-10-04" },
     {
       path: "/sharing",
-      opener: {
-        control: (page) => page.getByRole("button", { name: "Remove Theo" }),
-        widths: bothWidths,
-      },
+      openers: [
+        {
+          name: "the remove confirmation",
+          control: (page) => page.getByRole("button", { name: "Remove Theo" }),
+          widths: bothWidths,
+        },
+      ],
     },
     { path: "/activity" },
     { path: "/settings" },
@@ -98,22 +137,55 @@ const personaRoutes: Record<Persona, Route[]> = {
     { path: "/settings/theme" },
     { path: "/settings/sound" },
     { path: "/settings/notifications" },
-    { path: "/settings/devices" },
+    {
+      path: "/settings/devices",
+      openers: [
+        {
+          name: "the sign-out confirmation",
+          // The first row is this browser's; the confirmation is only closed, so nothing signs out.
+          control: (page) => page.getByRole("button", { name: "Sign out this device" }).first(),
+          widths: bothWidths,
+        },
+      ],
+    },
     { path: "/settings/two-factor" },
     { path: "/settings/export" },
-    { path: "/settings/consent" },
-    { path: "/settings/close-account" },
+    {
+      path: "/settings/consent",
+      openers: [
+        {
+          name: "the withdraw confirmation",
+          control: (page) => page.getByRole("button", { name: "Withdraw consent" }),
+          widths: bothWidths,
+          fresh: true,
+        },
+      ],
+    },
+    {
+      path: "/settings/close-account",
+      openers: [
+        {
+          name: "the close confirmation",
+          control: (page) => page.getByRole("button", { name: "Close my account" }),
+          widths: bothWidths,
+          fresh: true,
+        },
+      ],
+    },
     { path: "/journey" },
   ],
   mira: [
     { path: "/today" },
-    { path: "/journey" },
+    { path: "/journey", openers: [addAppointment] },
     {
       path: "/family",
-      opener: {
-        control: (page) => page.getByRole("button", { name: "Diaper for Ilo" }),
-        widths: bothWidths,
-      },
+      openers: [
+        {
+          name: "the diaper sheet",
+          control: (page) => page.getByRole("button", { name: "Diaper for Ilo" }),
+          widths: bothWidths,
+        },
+      ],
     },
     { path: "/calendar" },
     { path: "/sharing" },
@@ -124,15 +196,38 @@ const personaRoutes: Record<Persona, Route[]> = {
     { path: "/today" },
     {
       path: "/journey",
-      opener: {
-        control: (page) => page.getByRole("button", { name: "Add an appointment" }),
-        widths: bothWidths,
-      },
+      openers: [
+        addAppointment,
+        {
+          name: "the end-of-pregnancy form",
+          control: (page) => page.getByRole("button", { name: "My pregnancy ended" }),
+          widths: bothWidths,
+        },
+      ],
     },
     { path: "/family" },
     { path: "/calendar" },
   ],
 };
+
+/** The growth sheet on a child page, for a guardian who can add a measurement. */
+const addMeasurement: Opener = {
+  name: "the measurement sheet",
+  control: (page) =>
+    page.locator("[data-panel='growth']").getByRole("button", { name: "Add a measurement" }),
+  widths: bothWidths,
+  // A press before hydration checks the radio only, so choose the tab until its panel shows.
+  prepare: async (page) => {
+    const panel = page.locator("[data-panel='growth']");
+    await expect(async () => {
+      await page.getByRole("radio", { name: "Growth", exact: true }).click();
+      await expect(panel).toBeVisible({ timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+  },
+};
+
+/** Personas who are a guardian with write access on every child the API lists for them. */
+const writesGrowth: ReadonlySet<Persona> = new Set(["mira"]);
 
 /** What the page says about the element that has focus, measured in the page. */
 interface Focused {
@@ -178,15 +273,67 @@ function markFrame(page: Page): Promise<string[]> {
   });
 }
 
+/** How an element draws its outline and box shadow, compared before and after focus. */
+interface RingStyle {
+  outline: string;
+  shadow: string;
+}
+
+/**
+ * Records, before the first Tab, the resting outline and box shadow of
+ * every focusable element and of the boxes that may draw a hidden input's
+ * ring (the next sibling, the label, the parent), so a focused element only
+ * counts as ringed when what it draws changed on focus.
+ */
+function recordRestingRings(page: Page): Promise<void> {
+  return page.evaluate(() => {
+    const focusable =
+      "a[href], button, input, select, textarea, summary, [tabindex]:not([tabindex='-1'])";
+    const rest = new WeakMap<Element, RingStyle>();
+    const record = (element: Element | null) => {
+      // An element focused now is not at rest; blurring it would move where Tab starts.
+      if (element === null || element === document.activeElement || rest.has(element)) return;
+      const style = getComputedStyle(element);
+      rest.set(element, {
+        outline: `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`,
+        shadow: style.boxShadow,
+      });
+    };
+    for (const element of document.querySelectorAll(focusable)) {
+      record(element);
+      record(element.nextElementSibling);
+      record(element.closest("label"));
+      record(element.parentElement);
+    }
+    (window as unknown as { sweepRest: WeakMap<Element, RingStyle> }).sweepRest = rest;
+  });
+}
+
 function describeFocus(page: Page): Promise<Focused | null> {
   return page.evaluate(() => {
     const element = document.activeElement as HTMLElement | null;
     if (element === null || element === document.body) return null;
+    const rest = (window as unknown as { sweepRest?: WeakMap<Element, RingStyle> }).sweepRest;
+    // A color with zero alpha, in any of the forms getComputedStyle may give it.
+    const clear = (color: string) =>
+      color === "transparent" ||
+      /^rgba\(.*,\s*0(\.0*)?\)$/.test(color) ||
+      /\/\s*0(\.0*)?\)$/.test(color);
+    // A ring shows (a visible outline or a box shadow) and is not what the box draws at rest.
     const drawsRing = (candidate: Element | null) => {
       if (candidate === null) return false;
       const style = getComputedStyle(candidate);
-      const outline = style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0;
-      return outline || style.boxShadow !== "none";
+      const before = rest?.get(candidate);
+      const outline = `${style.outlineStyle} ${style.outlineWidth} ${style.outlineColor} ${style.outlineOffset}`;
+      const outlineShows =
+        style.outlineStyle !== "none" &&
+        parseFloat(style.outlineWidth) > 0 &&
+        !clear(style.outlineColor);
+      const shadowShows = style.boxShadow !== "none";
+      return (
+        (outlineShows && outline !== before?.outline) ||
+        (shadowShows && style.boxShadow !== before?.shadow)
+      );
     };
     // A visually hidden input draws its ring on the box beside it or on its label.
     const box = element.getBoundingClientRect();
@@ -235,6 +382,7 @@ function describeFocus(page: Page): Promise<Focused | null> {
  */
 async function keyboardPath(page: Page, label: string, mode: "full" | "frame") {
   const frame = await markFrame(page);
+  await recordRestingRings(page);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.keyboard.press("Tab");
   const first = await describeFocus(page);
@@ -314,15 +462,27 @@ async function escapePath(page: Page, opener: Opener, label: string) {
       () => true,
       () => false,
     );
-  expect.soft(opened, `${label}: the sheet or dialog opens from the keyboard`).toBe(true);
+  expect.soft(opened, `${label}: ${opener.name} opens from the keyboard`).toBe(true);
   if (!opened) return;
   await page.keyboard.press("Escape");
-  await expect.soft(dialog, `${label}: Escape closes it`).toBeHidden();
-  await expect.soft(control, `${label}: focus returns to the control that opened it`).toBeFocused();
+  await expect.soft(dialog, `${label}: Escape closes ${opener.name}`).toBeHidden();
+  await expect
+    .soft(control, `${label}: focus returns to the control that opened ${opener.name}`)
+    .toBeFocused();
 }
 
-/** Every check for one route at one width, on the page as it loads. */
-async function sweepRoute(page: Page, route: Route, who: string, mode: "full" | "frame") {
+/**
+ * Every check for one route at one width, on the page as it loads. `persona`
+ * is who the page is signed in as, for a fresh sign-in before a dialog
+ * behind fresh authentication.
+ */
+async function sweepRoute(
+  page: Page,
+  route: Route,
+  who: string,
+  mode: "full" | "frame",
+  persona?: Persona,
+) {
   const width = page.viewportSize()?.width ?? DESKTOP.width;
   const label = `${who} ${route.path} at ${width}`;
   await page.goto(route.path);
@@ -349,10 +509,16 @@ async function sweepRoute(page: Page, route: Route, who: string, mode: "full" | 
   });
   // Every element on a phone, where the tab bar can cover one; the frame on a desktop.
   await keyboardPath(page, label, mode === "full" && width === PHONE.width ? "full" : "frame");
-  if (route.opener?.widths.includes(width)) {
+  for (const opener of route.openers ?? []) {
+    if (!opener.widths.includes(width)) continue;
+    // Read-only: a fresh sign-in only starts a new session, and the dialog is closed unconfirmed.
+    if (opener.fresh === true && persona !== undefined && serverHasDatabase() !== false) {
+      await signInAs(page, persona, { fresh: true });
+    }
     await page.goto(route.path);
     await page.waitForLoadState("networkidle");
-    await escapePath(page, route.opener, label);
+    await opener.prepare?.(page);
+    await escapePath(page, opener, label);
   }
   if (width === PHONE.width) {
     await page.setViewportSize({ width: 320, height: PHONE.height });
@@ -365,11 +531,24 @@ async function sweepRoute(page: Page, route: Route, who: string, mode: "full" | 
 }
 
 /** A seeded persona's child pages, from the children the API lists for them. */
-async function childRoutes(page: Page): Promise<Route[]> {
+async function childRoutes(page: Page, persona: Persona): Promise<Route[]> {
   const response = await page.request.get("/api/v1/children");
   if (!response.ok()) return [];
   const { items } = (await response.json()) as { items: { id: string }[] };
-  return items.map((child) => ({ path: `/family/${child.id}` }));
+  return items.map((child) => ({
+    path: `/family/${child.id}`,
+    ...(writesGrowth.has(persona) ? { openers: [addMeasurement] } : {}),
+  }));
+}
+
+/** The routes that depend on run-time facts: Noor's day page for yesterday, from the API's `today`. */
+async function runtimeRoutes(page: Page, persona: Persona): Promise<Route[]> {
+  const routes = await childRoutes(page, persona);
+  if (persona === "noor") {
+    const { today } = await api<{ today: string }>(page, "/api/v1/me");
+    routes.unshift({ path: `/log/${addDays(today, -1)}` });
+  }
+  return routes;
 }
 
 for (const size of [DESKTOP, PHONE]) {
@@ -394,8 +573,8 @@ for (const persona of ["noor", "mira", "pia", "theo", "lena"] as const) {
     }) => {
       test.setTimeout(600_000);
       const page = await asPersona(persona, { viewport: size });
-      const routes = [...personaRoutes[persona], ...(await childRoutes(page))];
-      for (const route of routes) await sweepRoute(page, route, `${persona}:`, "full");
+      const routes = [...personaRoutes[persona], ...(await runtimeRoutes(page, persona))];
+      for (const route of routes) await sweepRoute(page, route, `${persona}:`, "full", persona);
       expectLimiterUntouched();
     });
   }
