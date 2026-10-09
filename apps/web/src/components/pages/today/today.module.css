@@ -1,0 +1,323 @@
+/*
+ * Today (DESIGN.md 1.2 composition A and 3.3): tokens only, so both themes
+ * come from the semantic roles and nothing is inverted. The page is its own
+ * size container, so the hero and the cards follow the width the shell
+ * leaves them; the open card follows the shell itself, because the rail and
+ * the quick-log behavior switch with it at 1024 px.
+ */
+
+.page {
+  container: today / inline-size;
+  display: grid;
+  gap: var(--space-8);
+  max-width: var(--size-container);
+}
+
+/* ------------------------------------------------------------------ */
+/* The hero: the ring on the left, the eyebrow and the sentences beside */
+/* ------------------------------------------------------------------ */
+
+.hero {
+  display: grid;
+  grid-template-areas: "ring" "facts";
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.facts {
+  grid-area: facts;
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ringCell {
+  grid-area: ring;
+  min-width: 0;
+}
+
+/*
+ * The ring draws; the sentences beside it say every fact (DESIGN.md 6.1).
+ * CycleRing carries its own caption and a numeral in the dial, which this
+ * composition sets beside the ring instead (3.3), so both are hidden here
+ * and the column renders each of them once: the cycle day as the numeral
+ * (the ring's accessible name keeps "of about 28"), "Period logged", and
+ * the 13.10 sentences from lib/prediction-copy. hero.test.tsx checks the
+ * column against the caption, so a caption sentence cannot go missing.
+ */
+.ringCell > .ring {
+  width: min(100%, 260px);
+  margin: 0;
+}
+
+.ringCell > .ring > figcaption,
+.ringCell > .ring > div > p {
+  display: none;
+}
+
+@container today (max-width: 599px) {
+  .ringCell > .ring {
+    width: min(100%, 220px);
+    margin-inline: auto;
+  }
+}
+
+/* Top aligned, so opening "How this is estimated" grows the column without moving the ring. */
+@container today (min-width: 600px) {
+  .hero[data-ring] {
+    grid-template-columns: 260px minmax(0, 1fr);
+    grid-template-areas: "ring facts";
+    column-gap: var(--space-12);
+    align-items: start;
+  }
+
+  .hero[data-ring] .ringCell {
+    padding-top: var(--space-6);
+  }
+}
+
+/* The page's one heading, set as the date eyebrow; "Today, " is read before it. */
+.eyebrow {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+/* Signature move 4: a display numeral in Figtree beside a Newsreader label, never alone. */
+.dayLine {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: var(--space-3);
+  margin: 0;
+}
+
+.numeral {
+  font-family: var(--font-sans);
+  font-size: clamp(3.25rem, 9cqi, 5rem);
+  font-weight: var(--weight-numeral);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.numeralLabel {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.childName {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.agePart {
+  display: inline-flex;
+  align-items: baseline;
+  column-gap: var(--space-2);
+}
+
+.estimateLine {
+  margin: 0;
+  max-width: 40ch;
+}
+
+.fact {
+  margin: 0;
+  max-width: 56ch;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.disclosure {
+  max-width: 34rem;
+  margin-top: var(--space-2);
+}
+
+.disclosure p {
+  margin: 0;
+}
+
+.failure {
+  margin: 0;
+  max-width: 56ch;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.emptyAction {
+  display: flex;
+  margin-top: var(--space-2);
+}
+
+.quiet {
+  display: grid;
+  gap: var(--space-3);
+  max-width: var(--size-reading);
+}
+
+.weekCard {
+  max-width: 34rem;
+}
+
+/* ------------------------------------------------------------------ */
+/* The cards under the tide line                                       */
+/* ------------------------------------------------------------------ */
+
+.cards {
+  display: grid;
+  gap: var(--space-6);
+  align-items: start;
+  min-width: 0;
+}
+
+.side {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+@container today (min-width: 880px) {
+  .cards {
+    grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
+  }
+}
+
+.card {
+  display: grid;
+  align-content: start;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-6);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+}
+
+/* Signature move 5: the one highlighted thing on the screen. It never hosts a control (DESIGN.md 8). */
+.warmth {
+  border-color: transparent;
+  background: var(--warmth);
+}
+
+.cardHeading {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+  letter-spacing: var(--tracking-heading);
+}
+
+.cardDate {
+  margin: calc(var(--space-2) * -1) 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.cardText {
+  margin: 0;
+}
+
+/* The open card: the form in the page from 1024 px, a summary and a button that opens the sheet below it. */
+.logInline {
+  display: none;
+  min-width: 0;
+}
+
+.logCompact {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-4);
+}
+
+@container shell (min-width: 1024px) {
+  .logInline {
+    display: block;
+  }
+
+  .logCompact {
+    display: none;
+  }
+}
+
+.lines {
+  display: grid;
+  gap: var(--space-3);
+  margin: 0;
+}
+
+.lines > div {
+  display: grid;
+  gap: var(--space-1);
+}
+
+.lines dt {
+  font-weight: var(--weight-sans-strong);
+}
+
+.lines dd {
+  margin: 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.55;
+}
+
+/* A summary's facts are the card's content, not a description of it: full size and full contrast. */
+.summaryLines dd {
+  color: var(--text);
+  font-size: var(--type-body);
+}
+
+.cardFoot {
+  margin: var(--space-2) 0 0;
+  color: var(--muted);
+  font-size: var(--type-small);
+}
+
+.cardAction {
+  display: flex;
+  margin-top: var(--space-1);
+}
+
+.summaryList {
+  display: grid;
+  gap: var(--space-6);
+}
+
+@container today (min-width: 720px) {
+  .summaryList {
+    grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
+  }
+}
+
+.footer {
+  margin: 0;
+  max-width: 72ch;
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.6;
+}
+
+@media print {
+  .logCompact,
+  .cardAction {
+    display: none;
+  }
+}

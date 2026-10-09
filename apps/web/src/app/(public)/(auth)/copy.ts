@@ -94,11 +94,6 @@ export const authCopy = {
     signIn: "Sign in",
     requestAgain: "Request a new link",
   },
-  today: {
-    title: "Today",
-    description: "Your home screen.",
-    signOut: "Sign out",
-  },
 } as const;
 
 /**
@@ -172,6 +167,6 @@ export function describeAuthFailure(
 }
 
 /** Strips spaces from a code someone pasted from an authenticator app or a saved backup list. */
-export function normaliseCode(code: string): string {
+export function normalizeCode(code: string): string {
   return code.replace(/\s+/g, "");
 }
