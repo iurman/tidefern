@@ -333,12 +333,29 @@ until psql "$OWNER_URL" -tAc 'select 1' > /dev/null 2>&1; do sleep 1; done
 DATABASE_URL_UNPOOLED=$OWNER_URL pnpm db:migrate
 DATABASE_URL_UNPOOLED=$OWNER_URL pnpm db:grant-login
 
-# the pooled check (task J9): PgBouncer in transaction mode in front of the same database
+# the pooled check (task J9): PgBouncer in transaction mode in front of the same database,
+# the image and configuration CI's pooled step uses, with the local ports
+mkdir -p /tmp/tidefern-ci-pool
+cat > /tmp/tidefern-ci-pool/pgbouncer.ini <<INI
+[databases]
+tidefern = host=127.0.0.1 port=$PGPORT dbname=tidefern
+
+[pgbouncer]
+listen_addr = 127.0.0.1
+listen_port = $POOLPORT
+unix_socket_dir =
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer-ci/userlist.txt
+pool_mode = transaction
+default_pool_size = 2
+INI
+echo '"tidefern_app" "ci-only-app-password"' > /tmp/tidefern-ci-pool/userlist.txt
+chmod 755 /tmp/tidefern-ci-pool
+chmod 644 /tmp/tidefern-ci-pool/pgbouncer.ini /tmp/tidefern-ci-pool/userlist.txt
 podman run -d --name tidefern-ci-pool --network host \
-  -e DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$PGPORT/tidefern \
-  -e LISTEN_ADDR=127.0.0.1 -e LISTEN_PORT=$POOLPORT -e POOL_MODE=transaction \
-  -e AUTH_TYPE=scram-sha-256 -e DEFAULT_POOL_SIZE=2 \
-  docker.io/edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
+  -v /tmp/tidefern-ci-pool:/etc/pgbouncer-ci:ro,Z \
+  ghcr.io/cloudnative-pg/pgbouncer:1.26.0@sha256:ce54f1133c509f1db8a8092c3f1c761d8c9292065ed6b6698786bb966da4dab9 \
+  /etc/pgbouncer-ci/pgbouncer.ini
 until pg_isready -h 127.0.0.1 -p $POOLPORT > /dev/null 2>&1; do sleep 1; done
 DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$POOLPORT/tidefern \
   DATABASE_URL_UNPOOLED=$OWNER_URL pnpm --filter @tidefern/db test:integration
@@ -359,6 +376,7 @@ env -u DATABASE_URL -u DATABASE_URL_UNPOOLED pnpm --filter web start --port $WEB
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:$WEBPORT pnpm test:e2e --grep @smoke
 
 podman rm -f tidefern-ci-pool tidefern-ci-pg
+rm -rf /tmp/tidefern-ci-pool
 [ -f apps/web/.env.local.off ] && mv apps/web/.env.local.off apps/web/.env.local
 ```
 
@@ -379,10 +397,18 @@ URLs: the file moved aside and back, `podman stop` on a missing container
 exited quietly, and the database-free server started with no
 "Environments: .env.local" line and the smoke subset "6 passed (3.0s)".
 
-The pooler runs on the host network so it reaches the database on
-`127.0.0.1:$PGPORT` as CI's reaches it by service name; with `docker`
-on a machine without host networking, put both containers on one network
-and use the database container's name as the host. The suite
+The pooler runs on the host network and reaches the database on
+`127.0.0.1:$PGPORT`, as CI's does on the runner. It is CloudNativePG's
+PgBouncer 1.26.0 image from GitHub's registry
+(`ghcr.io/cloudnative-pg/pgbouncer`), pinned to the digest of its
+multi-architecture index as `skopeo inspect --raw` gave it on 2026-10-09,
+so neither CI nor this reproduction pulls it from Docker Hub. The image
+takes no environment configuration: its entrypoint is `pgbouncer` and its
+argument the configuration file, so the lines above write
+`pgbouncer.ini` and the user list and mount them (`Z` relabels the folder
+for SELinux; drop it under `docker` without SELinux). With `docker` on a
+machine without host networking, put both containers on one network and
+use the database container's name as the host. The suite
 (`packages/db/src/pooled.integration.test.ts`) connects as
 `tidefern_app` through the pooler with the production client, creates
 and removes its own synthetic rows through the owner URL, and fails

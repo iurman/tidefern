@@ -50,23 +50,6 @@ jobs:
           --health-interval 5s
           --health-timeout 5s
           --health-retries 12
-      pgbouncer:
-        # PgBouncer 1.26.0 in transaction mode in front of the service above, the way Neon's -pooler
-        # endpoint fronts production (architecture 7.2). edoburu/pgbouncer v1.26.0-p0, pinned to the
-        # tag's digest as Docker Hub listed it on 2026-10-09. Only the pooled integration suite in
-        # packages/db (task J9) connects through it; the build, the seed and the browser suite keep
-        # using the database directly. It reaches Postgres by its service name and logs in as
-        # tidefern_app with the same throwaway password as DATABASE_URL below; it connects lazily, so
-        # it starts before the grant-login step gives the role LOGIN. Two server connections, so the
-        # suite's four client connections have to share them.
-        image: edoburu/pgbouncer:v1.26.0-p0@sha256:b17551c776ef7e5769ef80b956d20f85e2fd25dd8912d31d58f782aad495b711
-        env:
-          DATABASE_URL: postgresql://tidefern_app:ci-only-app-password@postgres:5432/tidefern
-          POOL_MODE: transaction
-          AUTH_TYPE: scram-sha-256
-          DEFAULT_POOL_SIZE: "2"
-        ports:
-          - 6432:5432
     env:
       # Test-only values for the seeded browser suite. None of them is a secret and none exists
       # anywhere outside this job: the database lives in the service container above and is gone
@@ -213,24 +196,61 @@ jobs:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: pnpm db:grant-login
 
-      # Architecture 15's pooled check (task J9): two actors at once through the PgBouncer service in
+      # Architecture 15's pooled check (task J9): two actors at once through PgBouncer 1.26.0 in
       # transaction mode, as tidefern_app with NODE_ENV=production, proving each sees only its own
       # rows and that SET LOCAL ROLE and the actor setting reset after every transaction, a failed
       # one included. DATABASE_URL here is the pooled URL; the owner URL creates and removes the
-      # suite's own synthetic rows before the seed runs. About a second of tests; the pooler image
-      # pull adds a few seconds to the job's container setup.
+      # suite's own synthetic rows before the seed runs. The pooler is CloudNativePG's PgBouncer
+      # image from GitHub's registry, pinned to the digest of its multi-architecture index
+      # (resolved with skopeo on 2026-10-09), so it needs no Docker Hub pull; it runs here rather
+      # than as a service because its configuration is a file, which a service container cannot
+      # mount before checkout. It shares the runner's network, reaches the service Postgres on
+      # 127.0.0.1:5432 and logs in as tidefern_app with the same throwaway password; two server
+      # connections, so the suite's four client connections have to share them. About a second of
+      # tests plus the image pull.
       - name: Pooled database check through PgBouncer in transaction mode
         env:
           DATABASE_URL: postgresql://tidefern_app:ci-only-app-password@127.0.0.1:6432/tidefern
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: |
+          conf="$RUNNER_TEMP/pgbouncer"
+          mkdir -p "$conf"
+          cat > "$conf/pgbouncer.ini" <<'INI'
+          [databases]
+          tidefern = host=127.0.0.1 port=5432 dbname=tidefern
+
+          [pgbouncer]
+          listen_addr = 127.0.0.1
+          listen_port = 6432
+          unix_socket_dir =
+          auth_type = scram-sha-256
+          auth_file = /etc/pgbouncer-ci/userlist.txt
+          pool_mode = transaction
+          default_pool_size = 2
+          INI
+          echo '"tidefern_app" "ci-only-app-password"' > "$conf/userlist.txt"
+          chmod 755 "$conf"
+          chmod 644 "$conf/pgbouncer.ini" "$conf/userlist.txt"
+          docker run -d --name pgbouncer --network host -v "$conf:/etc/pgbouncer-ci:ro" \
+            ghcr.io/cloudnative-pg/pgbouncer:1.26.0@sha256:ce54f1133c509f1db8a8092c3f1c761d8c9292065ed6b6698786bb966da4dab9 \
+            /etc/pgbouncer-ci/pgbouncer.ini
+          ready=false
           for attempt in $(seq 1 30); do
-            if pg_isready --host 127.0.0.1 --port 6432 --username tidefern_app --dbname tidefern > /dev/null 2>&1; then
+            if pg_isready --host 127.0.0.1 --port 6432 --dbname tidefern > /dev/null 2>&1; then
+              ready=true
               break
             fi
             sleep 1
           done
+          if [ "$ready" != true ]; then
+            echo "PgBouncer did not answer on 127.0.0.1:6432; its log follows" >&2
+            docker logs pgbouncer >&2
+            exit 1
+          fi
+          docker exec pgbouncer pgbouncer --version
           pnpm --filter @tidefern/db test:integration
+          docker logs pgbouncer 2>&1 | tail -5
+          docker rm -f pgbouncer > /dev/null
 
       # The seed runs through withSystem(), which the app role is refused for, so DATABASE_URL is the
       # owner URL on this step.
