@@ -21,6 +21,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeMedianRun, filterToValidRuns } from "lighthouse/core/lib/median-run.js";
+import { signIn } from "./cast.mjs";
 import {
   budgets,
   finalPath,
@@ -36,14 +37,6 @@ import {
 const here = path.dirname(fileURLToPath(import.meta.url));
 const webRoot = path.resolve(here, "../..");
 const require = createRequire(path.join(webRoot, "package.json"));
-
-// The synthetic seed cast (packages/db README, "The cast"); these accounts exist only in a
-// database seeded by `pnpm db:seed`, never in production.
-const personas = {
-  noor: { email: "noor@example.test", password: "tidefern-seed-noor" },
-  mira: { email: "mira@example.test", password: "tidefern-seed-mira" },
-  pia: { email: "pia@example.test", password: "tidefern-seed-pia" },
-};
 
 // The key routes: signed out first, then each signed-in route with the persona whose seeded
 // data fills it.
@@ -95,22 +88,6 @@ const machine = {
   os: `${os.type()} ${os.release()} ${os.arch()}`,
   node: process.version,
 };
-
-/** Signs a persona in through the API and returns the Cookie header value. */
-async function signIn(name) {
-  const persona = personas[name];
-  const response = await fetch(`${origin}/api/auth/sign-in/email`, {
-    method: "POST",
-    headers: { "content-type": "application/json", origin },
-    body: JSON.stringify({ email: persona.email, password: persona.password }),
-  });
-  if (!response.ok) {
-    throw new Error(`sign-in as ${name} answered ${response.status}`);
-  }
-  const cookies = response.headers.getSetCookie().map((line) => line.split(";")[0]);
-  if (!cookies.length) throw new Error(`sign-in as ${name} set no cookie`);
-  return cookies.join("; ");
-}
 
 /**
  * Runs the Lighthouse CLI once and resolves with its exit code and error output, whatever the
@@ -185,7 +162,7 @@ for (const { persona } of selected) {
     );
     break;
   }
-  const cookie = await signIn(persona);
+  const cookie = await signIn(origin, persona);
   cookies.set(persona, cookie);
   for (const pair of cookie.split("; ")) secrets.push(pair.slice(pair.indexOf("=") + 1));
 }

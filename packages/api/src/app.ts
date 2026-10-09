@@ -55,7 +55,8 @@ export interface ApiOptions {
    * The job runner (architecture 10.1): the owner-role connection, the
    * handler registry, `CRON_SECRET`, and the mailer and address for the
    * dead-queue notice. Without it the inline drain is a no-op and
-   * `/api/internal/jobs/run` is not mounted.
+   * `/api/internal/jobs/run` is not mounted; with `inlineDrain: false` only
+   * the inline drain is a no-op.
    */
   jobs?: JobsOptions;
   /**
@@ -101,17 +102,18 @@ export function createApp(options: ApiOptions = {}) {
   const defer: Defer = options.defer ?? ((task) => void task());
   const clock = options.clock ?? calendarClock(process.env);
   const jobs = options.jobs;
-  const drainJobs: DrainJobs = jobs
-    ? (ids) =>
-        defer(async () => {
-          try {
-            await drainEnqueued(jobs.db, ids, jobs.handlers ?? {}, new Date(), clock);
-          } catch (error) {
-            // A failed claim, not a failed job: those are recorded on the row.
-            console.error("jobs_drain_error", { name: (error as Error).name });
-          }
-        })
-    : () => undefined;
+  const drainJobs: DrainJobs =
+    jobs && jobs.inlineDrain !== false
+      ? (ids) =>
+          defer(async () => {
+            try {
+              await drainEnqueued(jobs.db, ids, jobs.handlers ?? {}, new Date(), clock);
+            } catch (error) {
+              // A failed claim, not a failed job: those are recorded on the row.
+              console.error("jobs_drain_error", { name: (error as Error).name });
+            }
+          })
+      : () => undefined;
   const app = new OpenAPIHono<ApiEnv>({
     defaultHook: (result, c) => {
       if (!result.success) {

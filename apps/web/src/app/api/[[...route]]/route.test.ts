@@ -65,8 +65,8 @@ vi.mock("@tidefern/api", async (importOriginal) => {
 });
 
 // What the route reads when it loads, with the runner switched on. The
-// Vercel and capture variables are cleared so the outer environment (CI sets
-// E2E_MAIL_CAPTURE) changes nothing here.
+// Vercel and test-switch variables are cleared so the outer environment (CI
+// sets E2E_MAIL_CAPTURE) changes nothing here.
 const RUNNER_ENVIRONMENT: Record<string, string | undefined> = {
   DATABASE_URL_UNPOOLED: OWNER_URL,
   CRON_SECRET,
@@ -74,6 +74,7 @@ const RUNNER_ENVIRONMENT: Record<string, string | undefined> = {
   LOG_HMAC_SECRET,
   SITE_URL,
   E2E_MAIL_CAPTURE: undefined,
+  E2E_JOBS_SCHEDULED_ONLY: undefined,
   VERCEL_ENV: undefined,
   VERCEL_URL: undefined,
   VERCEL_PROJECT_PRODUCTION_URL: undefined,
@@ -136,7 +137,26 @@ describe("the API host", () => {
       ownerEmail: OWNER_EMAIL,
       // Half the route's limit, so the sweep and the notice still fit after the last batch.
       drainBudgetMs: (route.maxDuration * 1000) / 2,
+      // The inline drain runs after a request that enqueued work, as on every deployment.
+      inlineDrain: true,
     });
+  });
+
+  it("turns off only the inline drain for the browser suite's server, and never on Vercel", async () => {
+    await loadRoute({ E2E_JOBS_SCHEDULED_ONLY: "true" });
+    expect(optionsGiven().jobs).toMatchObject({ cronSecret: CRON_SECRET, inlineDrain: false });
+
+    for (const overrides of [
+      { E2E_JOBS_SCHEDULED_ONLY: "true", VERCEL_ENV: "preview" },
+      // CI's job env sets TIDEFERN_FAKE_NOW, which the clock refuses in production.
+      { E2E_JOBS_SCHEDULED_ONLY: "true", VERCEL_ENV: "production", TIDEFERN_FAKE_NOW: undefined },
+      { E2E_JOBS_SCHEDULED_ONLY: "1" },
+      { E2E_JOBS_SCHEDULED_ONLY: "" },
+    ]) {
+      vi.clearAllMocks();
+      await loadRoute(overrides);
+      expect(optionsGiven().jobs?.inlineDrain, JSON.stringify(overrides)).toBe(true);
+    }
   });
 
   it("answers the scheduled run only to the cron's bearer, and runs it on the owner pool", async () => {

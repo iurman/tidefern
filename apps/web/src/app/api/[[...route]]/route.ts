@@ -53,11 +53,19 @@ const ownerEmail = process.env.OWNER_EMAIL;
 // work. Its connection is a one-connection pool on the owner role's direct
 // string, because the sweep, the reminder step and the closure job work
 // under withSystem across every person's rows (7.2). Where
-// DATABASE_URL_UNPOOLED is unset (CI, a local server started without it)
-// the host passes no runner and behaves as before: the endpoint answers 404
-// and the inline drain is a no-op. With it set, the endpoint still answers
-// 404 until CRON_SECRET is set and the bearer matches. None of these values
-// is ever logged.
+// DATABASE_URL_UNPOOLED is unset (the build, the unit tests and the
+// database-free server in CI, a local server started without it) the host
+// passes no runner and behaves as before: the endpoint answers 404 and the
+// inline drain is a no-op. With it set, the endpoint still answers 404
+// until CRON_SECRET is set and the bearer matches. None of these values is
+// ever logged.
+//
+// CI's seeded server has the runner, and E2E_JOBS_SCHEDULED_ONLY=true there
+// turns off the inline drain alone, so a closure waits for the scheduled run:
+// the browser suite sees the deleting view in a stable state and then runs
+// the job itself through the endpoint (task J3d). Like E2E_MAIL_CAPTURE it is
+// refused on any Vercel deployment, where the inline drain always runs.
+const scheduledOnly = process.env.E2E_JOBS_SCHEDULED_ONLY === "true" && !process.env.VERCEL_ENV;
 const ownerUrl = process.env.DATABASE_URL_UNPOOLED;
 const jobs: JobsOptions | undefined = ownerUrl
   ? {
@@ -71,6 +79,7 @@ const jobs: JobsOptions | undefined = ownerUrl
       // ends at maxDuration: a run stops starting batches halfway there, which
       // leaves the rest for the batch in flight, the sweep and the notice.
       drainBudgetMs: (maxDuration * 1000) / 2,
+      inlineDrain: !scheduledOnly,
     }
   : undefined;
 

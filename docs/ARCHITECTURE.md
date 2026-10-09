@@ -1626,6 +1626,7 @@ what, why, checks run, evidence, build-plan task ids.
 | `TIDEFERN_KEK_V1` | all, sensitive | Phase 1 key encryption key, base64 of 32 random bytes; different per environment; the suffix is the `kek_version` stored in `subject_keys` |
 | `LOG_HMAC_SECRET` | all, sensitive | Keys the HMAC of user ids in log lines |
 | `E2E_MAIL_CAPTURE` | local and CI only | Exposes a test-only endpoint that returns the last verification link; never set on Vercel |
+| `E2E_JOBS_SCHEDULED_ONLY` | CI's seeded server only | Exactly `true` turns off the job runner's inline drain, so work a request enqueues waits for the scheduled run and the browser suite runs it through `/api/internal/jobs/run` (task J3d); refused on any Vercel deployment, where the inline drain always runs |
 | `RESEND_API_KEY`, `EMAIL_FROM` | production only | Transactional email; previews and local use the console transport, so a preview can never send real mail from a seeded persona |
 | `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions: the seed and the API's calendar clock (`packages/api/src/clock.ts`, task E11) honor it outside production for every decision the API makes about which calendar day it is, never for a stored instant; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
 | `BETTER_AUTH_TELEMETRY` | all, value `0` | Keeps Better Auth's opt-in telemetry off explicitly |

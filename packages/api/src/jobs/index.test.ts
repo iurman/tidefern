@@ -207,6 +207,44 @@ describe("the inline drain through the app", () => {
     expect(calendars).toEqual([new Date("2026-03-15T12:00:00Z")]);
   });
 
+  test("is a no-op when the runner turns the inline drain off, and the job waits for the scheduled run", async () => {
+    const deferred: Array<() => Promise<void>> = [];
+    const ran: string[] = [];
+    const app = createApp({
+      defer: (task) => deferred.push(task),
+      jobs: {
+        db: database.db,
+        cronSecret: "a-cron-secret-for-the-tests",
+        inlineDrain: false,
+        handlers: {
+          "reminder.send": async (job) => {
+            ran.push(job.id);
+          },
+        },
+      },
+    });
+    app.get("/v1/probe", async (c) => {
+      const id = await database.db.transaction((tx) =>
+        enqueue(tx, "reminder.send", { subjectId: ANNA }),
+      );
+      c.var.drainJobs([id]);
+      return c.json({ id });
+    });
+
+    const response = await app.request("/api/v1/probe");
+    const { id } = (await response.json()) as { id: string };
+    expect(deferred).toEqual([]);
+    expect((await row(id))?.status).toBe("queued");
+    expect(ran).toEqual([]);
+
+    const scheduled = await app.request("/api/internal/jobs/run", {
+      headers: { authorization: "Bearer a-cron-secret-for-the-tests" },
+    });
+    expect(scheduled.status).toBe(200);
+    expect((await row(id))?.status).toBe("done");
+    expect(ran).toEqual([id]);
+  });
+
   test("is a no-op when the app has no job runner", async () => {
     const deferred: Array<() => Promise<void>> = [];
     const app = createApp({ defer: (task) => deferred.push(task) });

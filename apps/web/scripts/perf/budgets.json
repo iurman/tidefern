@@ -1,0 +1,15 @@
+{
+  "$comment": "Byte ceilings per key route for the CI gate (scripts/perf/bytes.mjs, docs/design/PERFORMANCE.md). KB is 1,024 bytes of transfer (encoded body plus headers). scriptKB caps the compressed script transfer of the first load, totalKB everything the load fetched. Lower a ceiling when a route gets smaller; raise one only with a reason recorded in PERFORMANCE.md. A script ceiling above 200 is a ratchet for a route still over the architecture's 200 KB budget and drops to 200 when the route gets there.",
+  "routes": [
+    { "route": "/", "persona": null, "scriptKB": 173, "totalKB": 450 },
+    { "route": "/privacy", "persona": null, "scriptKB": 178, "totalKB": 460 },
+    { "route": "/sign-in", "persona": null, "scriptKB": 200, "totalKB": 477 },
+    { "route": "/design", "persona": null, "scriptKB": 178, "totalKB": 460 },
+    { "route": "/today", "persona": "noor", "scriptKB": 200, "totalKB": 544 },
+    { "route": "/today", "persona": "mira", "scriptKB": 200, "totalKB": 474 },
+    { "route": "/calendar", "persona": "noor", "scriptKB": 231, "totalKB": 560 },
+    { "route": "/family", "persona": "pia", "scriptKB": 200, "totalKB": 463 },
+    { "route": "/sharing", "persona": "noor", "scriptKB": 221, "totalKB": 482 },
+    { "route": "/settings", "persona": "noor", "scriptKB": 218, "totalKB": 484 }
+  ]
+}
