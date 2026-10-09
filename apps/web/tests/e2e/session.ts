@@ -1,7 +1,6 @@
 import { createHmac, randomUUID } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import {
   test,
   type APIResponse,
@@ -153,13 +152,19 @@ export function retryAfterMs(
 
 /**
  * Where the limiter's count per path is kept (./limiter.ts), one file per
- * server, outside the repository. A file and not memory, because Playwright
- * starts a new worker after a failed test and the server keeps counting
- * across that restart, and across runs a few seconds apart too. The suite
- * runs one worker (playwright.config.ts), so nothing writes it at once.
+ * server, in the web package's ignored `node_modules/.cache` rather than the
+ * shared temp folder, where another user could plant the file first. A file
+ * and not memory, because Playwright starts a new worker after a failed test
+ * and the server keeps counting across that restart, and across runs a few
+ * seconds apart too. The suite runs one worker (playwright.config.ts), so
+ * nothing writes it at once.
  */
 function bucketFile(): string {
-  return join(tmpdir(), `tidefern-e2e-limiter-${encodeURIComponent(baseOrigin())}.json`);
+  const configFile = test.info().config.configFile;
+  if (!configFile) throw new Error("the suite runs from apps/web/playwright.config.ts");
+  const folder = join(dirname(configFile), "node_modules/.cache/tidefern-e2e");
+  mkdirSync(folder, { recursive: true, mode: 0o700 });
+  return join(folder, `limiter-${encodeURIComponent(baseOrigin())}.json`);
 }
 
 function readBuckets(): Record<string, Bucket> {
@@ -171,7 +176,9 @@ function readBuckets(): Record<string, Bucket> {
 }
 
 function writeBucket(path: string, bucket: Bucket): void {
-  writeFileSync(bucketFile(), JSON.stringify({ ...readBuckets(), [path]: bucket }));
+  writeFileSync(bucketFile(), JSON.stringify({ ...readBuckets(), [path]: bucket }), {
+    mode: 0o600,
+  });
 }
 
 /** Every sign-in and sign-up request this worker sent, by limiter path, for the run's report. */
