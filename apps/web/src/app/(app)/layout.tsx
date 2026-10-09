@@ -1,9 +1,11 @@
+import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import { PolicyLine } from "@/components/policy-line";
 import type { ShellProfile } from "@/components/ui/shell-destinations";
 import { sessionMe } from "@/lib/api-server";
-import { CLOSING_PATH, SIGN_IN_PATH, WELCOME_PATH } from "@/lib/auth-client";
+import { CLOSING_PATH, WELCOME_PATH, signInPathFor } from "@/lib/auth-client";
+import { REQUESTED_PATH_HEADER } from "@/lib/requested-path";
 import { CurrentShell } from "./current-shell";
 import styles from "./layout.module.css";
 
@@ -18,7 +20,9 @@ const fallbackProfile: ShellProfile = { stage: "none", hasChild: false };
  * 2). The session is read once per request through GET /api/v1/me on the
  * in-process client (`sessionMe` in lib/api-server.ts, which pages call too
  * and get the same answer). A visitor without a session is sent to sign
- * in, a person whose account is closing to the locked view at /closing,
+ * in with the page they asked for as `?next=` (its path only, which the
+ * proxy hands over in a header; `signInPathFor` validates it), so the
+ * sign-in returns them there; a person whose account is closing to the locked view at /closing,
  * and a person without a profile to /welcome; the last two live in the
  * (flow) group, outside the shell.
  *
@@ -44,7 +48,9 @@ const fallbackProfile: ShellProfile = { stage: "none", hasChild: false };
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const lookup = await sessionMe();
-  if (lookup.kind === "anonymous") redirect(SIGN_IN_PATH);
+  if (lookup.kind === "anonymous") {
+    redirect(signInPathFor((await headers()).get(REQUESTED_PATH_HEADER)));
+  }
   if (lookup.kind === "closing") redirect(CLOSING_PATH);
   let profile = fallbackProfile;
   if (lookup.kind === "ok") {

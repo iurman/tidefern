@@ -31,20 +31,23 @@ const NEXT_BASE = "https://next.invalid";
 
 /**
  * Whether a `?next=` value is a page on this origin that a sign-in may
- * return to (the way back after a fresh sign-in): a path only, starting
- * with exactly one slash; no backslash, no query, no fragment, no space or
- * control character (a browser drops tabs and newlines from a URL, so
- * "/\t/elsewhere.example" would become "//elsewhere.example"); already
- * normalized, so no dot segment or encoding trick resolves somewhere else;
- * and never the API. Returns the path, or null for anything else, and the
- * person then lands on Today.
+ * return to (the way back after a fresh sign-in, or to the page a
+ * signed-out visitor asked for): a path only, starting with exactly one
+ * slash; no backslash, no query, no fragment, no space or control
+ * character (a browser drops tabs and newlines from a URL, so
+ * "/\t/elsewhere.example" would become "//elsewhere.example"); no percent
+ * sign, so no encoded slash, backslash or dot reaches anything that decodes
+ * it again (the app's paths are dates and opaque ids, never encoded);
+ * already normalized, so no dot segment resolves somewhere else; and never
+ * the API. Returns the path, or null for anything else, and the person
+ * then lands on Today.
  */
 export function safeNextPath(raw: string | null | undefined): string | null {
   if (typeof raw !== "string" || raw.length === 0 || raw.length > MAX_NEXT_LENGTH) return null;
   if (raw[0] !== "/" || raw[1] === "/") return null;
   for (const character of raw) {
     const code = character.charCodeAt(0);
-    if (code <= 0x20 || code === 0x7f || "\\?#".includes(character)) return null;
+    if (code <= 0x20 || code === 0x7f || "\\?#%".includes(character)) return null;
   }
   let url: URL;
   try {
@@ -67,6 +70,20 @@ export function safeNextPath(raw: string | null | undefined): string | null {
 export function signedInPath(invitation: string | null, next: string | null | undefined): string {
   const landing = invitation === null ? null : invitationLanding(invitation);
   return landing ?? safeNextPath(next) ?? SIGNED_IN_PATH;
+}
+
+/**
+ * Where a protected page sends a signed-out visitor: the sign-in page with
+ * the page they asked for in `?next=`, so the sign-in returns them to it.
+ * Only the path travels, never the original query or fragment (a fragment
+ * the browser keeps across the redirect on its own, which is how an
+ * invitation's token survives), and only a path `safeNextPath` accepts;
+ * Today needs no `next`, since a sign-in lands there anyway.
+ */
+export function signInPathFor(requested: string | null | undefined): string {
+  const next = safeNextPath(requested);
+  if (next === null || next === SIGNED_IN_PATH) return SIGN_IN_PATH;
+  return `${SIGN_IN_PATH}?${new URLSearchParams({ next }).toString()}`;
 }
 
 /**

@@ -10,6 +10,7 @@ import {
   signInAs,
   type Account,
 } from "./session";
+import { signInRedirect, signInUrl } from "./sign-in-redirect";
 
 /**
  * /sharing against the production build (task H6): every person and
@@ -214,13 +215,13 @@ test("a visitor without a session is sent to sign in, and an invitation link's t
 }) => {
   const response = await request.get("/sharing", { maxRedirects: 0 });
   expect(response.status()).toBe(307);
-  expect(response.headers()["location"]).toBe("/sign-in");
+  expect(response.headers()["location"]).toBe(signInRedirect("/sharing"));
 
   const token = unknownToken();
   const sent = recordRequests(page);
   await page.goto(`/sharing#invitation=${token}`);
   // The browser kept the fragment across the redirect; sign-in takes it out of the address bar.
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL(signInUrl("/sharing"));
   await expect(page.getByRole("heading", { level: 1, name: "Sign in" })).toBeVisible();
   for (const line of sent) expect(line).not.toContain(token);
   expect(await storageOf(page)).not.toContain(token);

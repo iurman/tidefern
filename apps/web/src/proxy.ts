@@ -1,4 +1,5 @@
 import { NextResponse, type NextRequest } from "next/server";
+import { REQUESTED_PATH_HEADER } from "@/lib/requested-path";
 
 /**
  * Per-request Content Security Policy with a nonce and strict-dynamic, so no
@@ -7,6 +8,10 @@ import { NextResponse, type NextRequest } from "next/server";
  * scripts; the root layout applies it to the preference script. Every page
  * is therefore rendered per request, which is the documented trade-off for a
  * nonce-based policy and the right one for a health product.
+ *
+ * It also hands the page's path (never its query) to the server render in
+ * a request header, which the (app) layout reads to send a signed-out
+ * visitor to sign in and back to the page they asked for.
  */
 export function proxy(request: NextRequest) {
   const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
@@ -30,6 +35,7 @@ export function proxy(request: NextRequest) {
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set("x-nonce", nonce);
   requestHeaders.set("Content-Security-Policy", csp);
+  requestHeaders.set(REQUESTED_PATH_HEADER, request.nextUrl.pathname);
 
   const response = NextResponse.next({ request: { headers: requestHeaders } });
   response.headers.set("Content-Security-Policy", csp);

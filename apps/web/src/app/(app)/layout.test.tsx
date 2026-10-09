@@ -9,8 +9,15 @@ const session = vi.hoisted(() => {
       super(`redirected to ${path}`);
     }
   }
-  return { lookup: { kind: "anonymous" } as unknown, Redirected };
+  return { lookup: { kind: "anonymous" } as unknown, requested: null as string | null, Redirected };
 });
+
+vi.mock("next/headers", () => ({
+  headers: async () =>
+    new Headers(
+      session.requested === null ? {} : { "x-tidefern-requested-path": session.requested },
+    ),
+}));
 
 vi.mock("next/navigation", () => ({
   redirect: (path: string) => {
@@ -60,11 +67,26 @@ async function redirectOf(): Promise<string | null> {
 
 beforeEach(() => {
   given({ kind: "anonymous" });
+  session.requested = null;
 });
 
 describe("the (app) layout", () => {
   it("sends a visitor without a session to sign in", async () => {
     expect(await redirectOf()).toBe("/sign-in");
+  });
+
+  it("carries the page a signed-out visitor asked for to sign in as its next path", async () => {
+    session.requested = "/settings";
+    expect(await redirectOf()).toBe("/sign-in?next=%2Fsettings");
+    session.requested = "/log/2026-10-05";
+    expect(await redirectOf()).toBe("/sign-in?next=%2Flog%2F2026-10-05");
+  });
+
+  it("drops a requested path that is Today or not a safe page path", async () => {
+    for (const requested of ["/today", "//elsewhere.example", "/%2F%2Felsewhere.example", ""]) {
+      session.requested = requested;
+      expect(await redirectOf(), requested).toBe("/sign-in");
+    }
   });
 
   it("sends a person whose account is closing to the locked view, outside the shell", async () => {

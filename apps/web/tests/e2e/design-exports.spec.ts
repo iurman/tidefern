@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { buildCatalog, designChapters } from "../../src/lib/design-catalog";
+import { signInRedirect } from "./sign-in-redirect";
 
 const repository = resolve(__dirname, "../../../..");
 const catalog = buildCatalog();
@@ -157,7 +158,7 @@ test("every internal link on every /design page answers 200 and every fragment r
     const response = await request.get(path, { maxRedirects: 0 });
     const status = response.status();
     // A signed-in route seen signed out sends the visitor to sign in; that is the route working.
-    const toSignIn = status === 307 && response.headers()["location"] === "/sign-in";
+    const toSignIn = status === 307 && response.headers()["location"] === signInRedirect(path);
     if (status === 404 && isPlannedProductRoute(path) && fragments.size === 0) continue;
     if (status !== 200 && !toSignIn) {
       broken.push(`${path} answered ${status}`);

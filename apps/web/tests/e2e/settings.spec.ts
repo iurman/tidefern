@@ -3,6 +3,7 @@ import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { expectNoAxeViolations, type Theme } from "./axe";
 import { baseOrigin, freshAccount, onboard, signInAs } from "./session";
+import { signInUrl } from "./sign-in-redirect";
 
 /**
  * /settings, its group screens and the locked /closing view against the
@@ -620,7 +621,7 @@ test("closing with the undo window on a fresh account locks it, the locked view 
   await group(page, "Sign out").getByRole("button", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/$/);
   await page.goto("/settings");
-  await expect(page).toHaveURL(/\/sign-in$/);
+  await expect(page).toHaveURL(signInUrl("/settings"));
 });
 
 test("delete now on another fresh account is confirmed in its own words and offers no undo", async ({

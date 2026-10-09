@@ -11,6 +11,7 @@ import {
   signInAs,
   type Persona,
 } from "./session";
+import { signInRedirect } from "./sign-in-redirect";
 
 /**
  * /activity against the production build (task H8): the person's audit
@@ -247,7 +248,7 @@ test("a visitor without a session is sent to sign in before anything renders", a
 }) => {
   const response = await request.get("/activity", { maxRedirects: 0 });
   expect(response.status()).toBe(307);
-  expect(response.headers()["location"]).toBe("/sign-in");
+  expect(response.headers()["location"]).toBe(signInRedirect("/activity"));
 });
 
 test("Noor reads her sign-in, the grants she gave and revoked, her invitations and Theo's reads, newest first in her zone, under Settings", async ({
