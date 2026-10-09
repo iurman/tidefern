@@ -14,8 +14,15 @@ describe("ConsoleMailer", () => {
     expect(lines).toEqual([
       'mail to=someone@example.com subject="Confirm your email"',
       "https://tidefern.example/[link withheld]",
-      expect.stringContaining("E2E_MAIL_CAPTURE=true"),
+      expect.stringMatching(/^Locally, .*E2E_MAIL_CAPTURE=true/),
     ]);
+  });
+
+  test("names the local capture endpoint only when it withheld a link", async () => {
+    const lines: string[] = [];
+    const mailer = new ConsoleMailer((line) => lines.push(line));
+    await mailer.send({ to: "a@example.com", subject: "A note", text: "Nothing to open here." });
+    expect(lines).toEqual(['mail to=a@example.com subject="A note"', "Nothing to open here."]);
   });
 
   test("never prints a token, in a query, a path or a fragment, from any template", async () => {

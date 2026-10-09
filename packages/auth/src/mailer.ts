@@ -23,9 +23,13 @@ export interface Mailer {
 /** Every http or https URL in a plain text body. */
 const URL_IN_TEXT = /\bhttps?:\/\/[^\s<>"]+/g;
 
-/** Where a developer reads the withheld links instead. */
+/**
+ * Where a developer reads the withheld links instead. The capture endpoint is
+ * mounted only off Vercel, so the hint names a local run; a preview has no
+ * such endpoint.
+ */
 const CONSOLE_LINK_HINT =
-  "Links carry a credential and are not printed. Run with E2E_MAIL_CAPTURE=true and read GET /api/internal/e2e/mail for them.";
+  "Locally, links are not printed because they carry a credential: run with E2E_MAIL_CAPTURE=true and read GET /api/internal/e2e/mail for them.";
 
 /**
  * A link reduced to its origin. A verification, reset or invitation link
@@ -53,8 +57,14 @@ export class ConsoleMailer implements Mailer {
 
   async send(message: MailMessage): Promise<void> {
     this.write(`mail to=${message.to} subject=${JSON.stringify(message.subject)}`);
-    this.write(message.text.replace(URL_IN_TEXT, withheld));
-    this.write(CONSOLE_LINK_HINT);
+    let withheldAny = false;
+    this.write(
+      message.text.replace(URL_IN_TEXT, (url) => {
+        withheldAny = true;
+        return withheld(url);
+      }),
+    );
+    if (withheldAny) this.write(CONSOLE_LINK_HINT);
   }
 }
 
