@@ -1,5 +1,5 @@
 import { bodyQuestionsFor } from "@tidefern/core";
-import { CONSENT_DISCLOSURES } from "@tidefern/schemas";
+import { CONSENT_DISCLOSURES } from "@tidefern/schemas/constants";
 import type { DataCategory, Stage } from "@tidefern/schemas";
 import { grantCopy } from "@/components/ui/grant-row";
 import { CONSENT_CATEGORIES, asksConsent, currentConsentVersion } from "./consent";

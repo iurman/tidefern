@@ -1,6 +1,6 @@
 import type { ApiClient, Me } from "@tidefern/api-client";
 import { addDays, compareDates } from "@tidefern/core";
-import { isPeriodFlow } from "@tidefern/schemas";
+import { isPeriodFlow } from "@tidefern/schemas/constants";
 import type {
   Child,
   CycleEntry,

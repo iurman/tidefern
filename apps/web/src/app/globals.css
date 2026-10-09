@@ -557,8 +557,9 @@ img {
   outline: 2px solid var(--focus);
   outline-offset: 4px;
 }
+/* The italic face is its own next/font family so it is not preloaded (task J2b). */
 .estimate {
-  font-family: var(--font-newsreader), Georgia, serif;
+  font-family: var(--font-newsreader-italic), var(--font-newsreader), Georgia, serif;
   font-style: italic;
   font-size: var(--type-intro);
   line-height: 1.45;

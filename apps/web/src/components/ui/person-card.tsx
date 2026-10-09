@@ -1,6 +1,6 @@
 "use client";
 import { useId, useState, type ReactNode } from "react";
-import { fillSharingWords, type ShareCategory } from "@tidefern/schemas";
+import { fillSharingWords, type ShareCategory } from "@tidefern/schemas/constants";
 import { Dialog } from "./dialog";
 import { formatCalendarDate } from "./format-date";
 import { GrantRow, grantCopy, privateNotesSentence, sharingWords, useErrorCue } from "./grant-row";

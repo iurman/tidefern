@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useEffect, useId, useRef, useState, useTransition } from "react";
-import { InvitationAcceptInput, type HouseholdChoice } from "@tidefern/schemas";
+import type { HouseholdChoice } from "@tidefern/schemas";
+import { isInvitationToken } from "@tidefern/schemas/constants";
 import { Button } from "@/components/ui/button";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
 import { browserApiClient } from "@/lib/api-browser";
@@ -15,7 +16,7 @@ const copy = sharingCopy.accept;
 
 /** Whether a token has the shape the accept route takes (the API stays the judge of whether it is real). */
 export function acceptableToken(token: string): boolean {
-  return InvitationAcceptInput.shape.token.safeParse(token).success;
+  return isInvitationToken(token);
 }
 
 /** Whether a location hash came from an invitation link at all, token or not. */

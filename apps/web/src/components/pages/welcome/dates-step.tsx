@@ -1,7 +1,7 @@
 "use client";
 import { bodyQuestionsFor } from "@tidefern/core";
 import type { BodyQuestionId } from "@tidefern/core";
-import { CHILD_CONSENT_DISCLOSURES, FLOW_LABELS, PERIOD_FLOWS } from "@tidefern/schemas";
+import { CHILD_CONSENT_DISCLOSURES, FLOW_LABELS, PERIOD_FLOWS } from "@tidefern/schemas/constants";
 import type { Stage } from "@tidefern/schemas";
 import { CheckboxField } from "@/components/ui/checkbox-field";
 import { FormField } from "@/components/ui/form-field";

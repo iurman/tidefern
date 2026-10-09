@@ -1,7 +1,8 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useId, useState, useTransition, type FormEvent } from "react";
-import { InvitationInput, type InvitableRole } from "@tidefern/schemas";
+import type { InvitableRole } from "@tidefern/schemas";
+import { isInviteeEmail } from "@tidefern/schemas/constants";
 import { Button } from "@/components/ui/button";
 import { FormField } from "@/components/ui/form-field";
 import { InlineFeedback } from "@/components/ui/inline-feedback";
@@ -18,7 +19,7 @@ export const INVITE_EMAIL_ID = "invite-email";
 
 /** Whether an address has the shape the API takes (`InvitationInput.inviteeEmail`). */
 export function invitableEmail(address: string): boolean {
-  return InvitationInput.shape.inviteeEmail.safeParse(address).success;
+  return isInviteeEmail(address);
 }
 
 type Outcome =

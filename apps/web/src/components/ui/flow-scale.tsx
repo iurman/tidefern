@@ -1,5 +1,5 @@
 "use client";
-import { FlowLevel } from "@tidefern/schemas";
+import { FLOW_CODES, type FlowLevel } from "@tidefern/schemas/constants";
 import { SegmentedControl } from "./segmented-control";
 
 export interface FlowScaleProps {
@@ -23,7 +23,7 @@ export const flowLabels: Record<FlowLevel, string> = {
   heavy: "Heavy",
 };
 
-export const flowOptions = FlowLevel.options.map((value) => ({ value, label: flowLabels[value] }));
+export const flowOptions = FLOW_CODES.map((value) => ({ value, label: flowLabels[value] }));
 
 /**
  * The five-value single select for a day's flow (DESIGN.md 5.1): a segmented

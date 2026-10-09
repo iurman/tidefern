@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { useId, useRef, useState, useTransition, type ReactNode } from "react";
-import { CURRENT_SHARING_DESCRIPTION_VERSION } from "@tidefern/schemas";
+import { CURRENT_SHARING_DESCRIPTION_VERSION } from "@tidefern/schemas/constants";
 import { Button } from "@/components/ui/button";
 import { EmptyState } from "@/components/ui/empty-state";
 import { grantLevelText } from "@/components/ui/grant-row";

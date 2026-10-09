@@ -1,6 +1,6 @@
 import type { ApiClient } from "@tidefern/api-client";
 import { addDays, compareDates, isCalendarDate } from "@tidefern/core";
-import { SYMPTOM_CODES, isPeriodFlow } from "@tidefern/schemas";
+import { SYMPTOM_CODES, isPeriodFlow } from "@tidefern/schemas/constants";
 import type {
   CycleEntry,
   CycleEntryWrite,
