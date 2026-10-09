@@ -250,6 +250,38 @@ neither is repeated below.
   again.", "This note was already shared somewhere else.", "This note was
   deleted somewhere else.", "We could not delete this note. Try again."
 
+The titles, both empty states and the postpartum card are the rows
+above, word for word; the prediction sentences are architecture 13.10's
+and the day sheet's are G9's. The calendar adds these, each proposed for
+the owner to confirm or rewrite:
+
+- `[OWNER]` Meta descriptions, with no date and no health word: `/calendar`
+  "Your days, month by month."; `/log/[date]` "One day in your calendar."
+- `[OWNER]` The calendar's failed read, under the shell's own notice: "We
+  could not load your calendar. Try again." with a Try again link that
+  reads the page again. `/log/[date]` uses the day sheet's "We could not
+  load this day. Try again."
+- `[OWNER]` A day after today pressed in the month grid opens no sheet (a
+  day that has not happened has nothing to log, G9's ruling) and says "You
+  can log a day once it has come." A `/log/` address for such a day, or for
+  the `none` stage, is the not-found page inside the shell.
+- `[OWNER]` The postpartum calendar's line that cycles often return later
+  while feeding (architecture 8.4). The page shows a marked placeholder in
+  its place until the owner writes it; the child's age above the card is
+  `formatChildAge`'s wording after the name ("Ilo, 6 weeks").
+- `[OWNER]` During a pregnancy the API offers no prediction, so the calendar
+  shows the logged days with no prediction sentence and no footer. A line
+  saying why is the owner's to write, if one is wanted.
+- `[OWNER]` The words each day adds to its name for screen readers: "period
+  logged", "period expected", "ovulation estimated", and on every fertile
+  day "fertile window estimated. An estimate from your logged dates. Not a
+  form of contraception." A list row and a logged day's name say what was
+  logged in the API's own labels ("Heavy flow, cramps, fatigue, low mood,
+  note"; "No flow" for the flow None; "Spotting").
+- `[OWNER]` Interface labels: "Calendar view" (the hidden name of the Month
+  and List switch), "This week", "Previous month", "Next month", "Today",
+  and the list's name, "Days logged in October 2026".
+
 ### `/journey` (H4)
 
 The route uses the rows above word for word (the title, "No pregnancy
