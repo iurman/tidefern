@@ -36,7 +36,7 @@ with `noindex`, like the rest of the design reference.
 | Body and reading width  | The footer sentence at the body size and reading width, the estimate sentence, and a caption        | Reading width stays inside 45 to 68 characters; the estimate italic is readable at the intro size and nowhere smaller |
 | Navigation and controls | Six navigation labels with a current item, a primary action, a quiet action and two chip buttons    | Figtree 600 at the small size carries labels and chips in both themes with the measured contrast of the roles        |
 | Numerals                | The same four values set proportional and tabular, then display numerals beside a serif label        | Tabular figures align in a column where proportional ones drift; the numeral-beside-label move (signature move 4)    |
-| Provenance              | The four font files with family, axes, size and licence                                             | Everything the page uses is self-hosted and OFL                                                                      |
+| Provenance              | The three font files with family, axes, size and licence                                            | Everything the page uses is self-hosted and OFL                                                                      |
 
 The specimen chip buttons are real `<button type="button" aria-pressed>`
 elements rather than styled spans; the first axe run on the page failed
@@ -50,7 +50,6 @@ product's own accessibility gate is not a specimen.
 | `newsreader-latin-opsz-normal.woff2`    | Newsreader, optical size 6 to 72, weight 200 to 800 | 132 KB | OFL 1.1 |
 | `newsreader-latin-wght-italic.woff2`    | Newsreader italic, weight 200 to 800              | 64 KB  | OFL 1.1 |
 | `figtree-latin-wght-normal.woff2`       | Figtree, weight 300 to 900                        | 20 KB  | OFL 1.1 |
-| `figtree-latin-wght-italic.woff2`       | Figtree italic, weight 300 to 900                 | 21 KB  | OFL 1.1 |
 
 Latin subsets from fontsource 5.3.0 in `apps/web/public/fonts`, with the
 OFL text beside each family (`LICENSE-newsreader.txt`,
@@ -58,8 +57,25 @@ OFL text beside each family (`LICENSE-newsreader.txt`,
 Loaded in `apps/web/src/app/layout.tsx` through `next/font/local` with
 `display: swap` and fallback metrics adjusted to Times New Roman for the
 serif and Arial for the sans. The reasoning for the weight-only italic
-(64 KB against 147 KB for the optical-size italic, preloaded on every
-route) is in 13.5 and stands.
+(64 KB against 147 KB for the optical-size italic) is in 13.5 and stands.
+
+What ships and what is preloaded changed in task J2b
+(`docs/design/PERFORMANCE.md`, "J2b"):
+
+- The two roman files are the only preloads, 152 KB on every route.
+- The Newsreader italic is its own `next/font/local` call with
+  `preload: false` and the variable `--font-newsreader-italic`; the
+  `.estimate` class names it first. The browser fetches it when a page
+  sets the estimate sentence, so routes without one never download it.
+- The Figtree italic (21 KB) is removed. A search of `apps/web/src`
+  found one `font-style: italic`, the `.estimate` class in Newsreader; no
+  `<em>`, `<i>` with text, `<cite>`, `<dfn>`, `<var>` or `<address>`, and
+  no italic utility class. A Figtree italic added later without its face
+  would be synthesized by the browser, so add the file back with it.
+
+The J2b captures of `/`, `/today`, `/calendar`, `/family` and `/settings`
+at 1440 and 390 in both themes show the estimate sentence in the
+Newsreader italic as before.
 
 ## Legibility check
 

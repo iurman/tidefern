@@ -12,6 +12,16 @@ phone, network, cache state or person produced them.
 
 ## Summary
 
+Task J2b made the four proposed fixes and measured each; its numbers and
+what is still over budget are in [J2b: the fixes,
+measured](#j2b-the-fixes-measured) at the end. In short: first-route
+JavaScript is now met on `/today` and `/family` and missed by 7 to 20 KB on
+`/calendar`, `/sharing` and `/settings`; LCP is still missed on every route
+(closest: `/settings` at 2.71 s), and on `/today` for a person with a
+prediction it is 0.37 s slower than after fix 2, the cost of no longer
+preloading the italic. The rest of this summary
+and the sections up to "A performance gate" are J2's record, unchanged.
+
 Measured 2026-10-09 (UTC) on the build of `main` at `0b31e7d` plus this task's
 tooling (no application change).
 
@@ -278,3 +288,242 @@ metrics would not: on this shared machine TBT on one route ranged from
 133 to 2158 ms and the score from 50 to 80. LCP, TBT or the score could
 only be gated on a dedicated runner, with five or more runs per route and
 a threshold well above the median.
+
+## J2b: the fixes, measured
+
+Measured 2026-10-09 (UTC) by task J2b. The lead approved the four proposed
+fixes above; each landed as its own commit and each commit was built and
+measured in turn, so every row below is one build on the same machine,
+the same day, with the same method as J2 (Lighthouse 13.5.0, Chrome for
+Testing 153.0.8010.12 headless, mobile form factor, simulated throttling,
+`next start` on the seeded Turbopack production build with
+`TIDEFERN_FAKE_NOW=2026-10-05`, three runs per route, Lighthouse's
+`computeMedianRun`). Other builds shared the machine: the benchmark index
+ranged from 2405 to 4481 across the 180 runs. The base was rerun first so
+the comparison does not lean on another day's timings; its byte counts
+match J2's exactly and its timings fall inside J2's spread.
+
+These are still lab numbers from one machine against a local server. They
+prove nothing about field performance: no real phone, network, cache state
+or person produced them.
+
+### What changed
+
+| Step | Commit | Change |
+| ---- | ------ | ------ |
+| Base | `c1e8032` | `main` after J2 |
+| 1 | `8323e8d` | `"sideEffects": false` in `packages/core/package.json` |
+| 2 | `6a4ba09` | `@tidefern/schemas/constants`, the Zod-free entry; client imports moved to it; `import * as z from "zod"` in the schema modules; the client-graph guard test |
+| 3 | `de8c5be` | Only the roman faces preloaded; the Newsreader italic in its own `next/font/local` call with `preload: false`; the Figtree italic removed |
+| 4 | `92695d1` to `50ce08b` | The hero mark at high priority (three commits; see fix 4) |
+
+Fix 1: every module in `packages/core/src` was read for import side
+effects with a TypeScript AST pass over the top-level statements: constant
+declarations, one `new Set`, one `Object.keys`, one `.map` over the bundled
+milestone JSON and nothing that registers, mutates a global or polyfills.
+The flag goes on the package as a whole; no `sideEffects` array was needed.
+
+Fix 2: `@tidefern/schemas` itself is not marked side-effect free, and
+should not be: its schemas call `.meta({ id })`, which registers each one
+in Zod's global registry for the OpenAPI emitter, a side effect of
+importing the module. The constants entry holds no schema, imports only
+types, and is re-exported by the schema modules, so the root entry's
+public surface is unchanged (a schemas test checks every constant is the
+same binding from both entries) and `openapi/v1.json` did not change. The
+two client checks that used a Zod schema (`InvitationInput.inviteeEmail`
+and `InvitationAcceptInput.token`) now use plain functions with the same
+pattern and length, which the schemas then use too; a test compares each
+function with its schema over valid and invalid samples and pins the
+address pattern to the installed Zod's `z.regexes.email`.
+`apps/web/src/lib/client-bundle.test.ts` walks the module graph from every
+`"use client"` file through relative and `@/` imports and fails on any
+import of `zod` or of the `@tidefern/schemas` root entry that is not a
+declaration-level `import type` (an inline `import { type X }` can still
+compile to a bare import that evaluates the module). Run against the
+pre-J2b `flow-scale.tsx`, it fails and names the file.
+
+Fix 3: no style in `apps/web/src` sets Figtree in italic. The one
+`font-style: italic` is the `.estimate` class, in Newsreader; there is no
+`<em>`, `<cite>`, `<dfn>`, `<var>`, `<address>` or text-bearing `<i>`,
+and no italic utility class. The captures below show the estimate sentence
+in the Newsreader italic as before.
+
+Fix 4 took three commits, because the first did nothing measurable and
+the reports showed why. Step one gave the hero's two `<img>` elements
+(one per theme) `loading="lazy"` and `fetchpriority="high"`, the theme
+image pattern the installed Next docs give. The request still went out at
+Low: the header's 36 px mark uses the same file, comes first in the
+document, and React emits a low-priority `<link rel="preload" as="image">`
+for every eager image in the shell, so the hero shared that request. Step
+two added a React `preload()` per system theme with `fetchpriority` high,
+which React deduped against its own earlier preload. Step three makes
+every mark variant lazy: React emits no preload for a lazy image, a hidden
+lazy image is never fetched, and the hero's preload is then the request.
+After it, the mark loads at High from the head (Lighthouse's "fetchpriority
+should be applied" check passes) and every route downloads one mark file
+instead of two, 12 KB less. A viewer whose chosen theme differs from her
+system's fetches one 12 KB file the page does not show.
+
+The streamed signed-in routes: `/family`, `/journey`, `/activity` and the
+child page already render their heading (or, for the child page, the way
+back) in `loading.tsx` before the data, so nothing changes there. `/today`
+cannot: its heading is the date (`me.today`) and sits inside a different
+structure in each of its six hero variants (cycle, empty, quiet,
+pregnancy, shared, failed). Rendering it before the data would mean a
+Suspense boundary inside the page around everything but the heading and a
+skeleton per variant that holds the heading in the same place, or one
+layout for the heading shared by all six; neither is small, and the LCP
+element on `/today` is the fact line, not the heading, so it would not move
+LCP. `/calendar`, `/sharing` and `/settings` have no `loading.tsx` and are
+not streamed: their first HTML already carries the page.
+
+### Script transfer per step (compressed, first load)
+
+Byte counts were identical in every run of a route. "(over)" is over the
+200 KB budget.
+
+| Route | Persona | Base (J2) | 1 core | 2 Zod | 3 fonts | 4 hero (head) | Change |
+| ----- | ------- | --------- | ------ | ----- | ------- | ------------- | ------ |
+| / | signed out | 163.9 KB | 163.9 | 163.9 | 163.9 | 164.0 | 0 |
+| /privacy | signed out | 168.7 KB | 168.7 | 168.7 | 168.7 | 168.8 | 0 |
+| /sign-in | signed out | 191.7 KB | 191.7 | 191.7 | 191.7 | 191.8 | 0 |
+| /design | signed out | 168.7 KB | 168.7 | 168.7 | 168.7 | 168.8 | 0 |
+| /today | Noor | 339.1 KB (over) | 295.1 (over) | 196.4 | 196.4 | 196.7 | minus 142.4 KB, met |
+| /today | Mira | 339.1 KB (over) | 295.1 (over) | 196.4 | 196.4 | 196.7 | minus 142.4 KB, met |
+| /calendar | Noor | 361.9 KB (over) | 317.9 (over) | 219.2 (over) | 219.2 (over) | 219.5 (over) | minus 142.4 KB, missed by 19.5 KB |
+| /family | Pia | 333.7 KB (over) | 289.8 (over) | 191.2 | 191.2 | 191.5 | minus 142.2 KB, met |
+| /sharing | Noor | 352.2 KB (over) | 308.2 (over) | 209.6 (over) | 209.6 (over) | 209.8 (over) | minus 142.4 KB, missed by 9.8 KB |
+| /settings | Noor | 250.9 KB (over) | 206.9 (over) | 206.9 (over) | 206.9 (over) | 207.1 (over) | minus 43.8 KB, missed by 7.1 KB |
+
+Fix 1 took 44.0 KB off every signed-in route (the core chunk with the
+growth and milestone tables left), a little less than J2's estimate of 49
+to 52 KB for both flags together. Fix 2 took 98.7 KB off every route that
+imported a label (Zod and the schemas left); `/settings` imported none.
+The webpack analysis at head (`pnpm --filter web perf:analyze`) lists
+neither `zod` nor `@tidefern/core` in any key route's initial chunks;
+`@tidefern/schemas` appears at 12.4 KB of source, the constants entry's
+catalogs. The 0.1 to 0.3 KB growth at step 4 is the mark's priority and preload code.
+
+### Total transfer per step
+
+| Route | Persona | Base | 1 core | 2 Zod | 3 fonts | 4 hero (head) |
+| ----- | ------- | ---- | ------ | ----- | ------- | ------------- |
+| / | signed out | 524.0 KB | 524.1 | 524.1 | 439.1 | 427.7 |
+| /privacy | signed out | 534.5 KB | 534.5 | 534.5 | 449.7 | 437.9 |
+| /sign-in | signed out | 550.1 KB | 550.1 | 550.1 | 465.2 | 453.4 |
+| /design | signed out | 535.9 KB | 535.9 | 535.9 | 451.0 | 437.9 |
+| /today | Noor | 705.4 KB | 661.5 | 562.7 | 541.4 | 517.8 |
+| /today | Mira | 702.5 KB | 658.6 | 559.8 | 474.9 | 451.3 |
+| /calendar | Noor | 720.2 KB | 676.2 | 577.4 | 556.1 | 532.5 |
+| /family | Pia | 691.9 KB | 647.9 | 549.2 | 464.4 | 440.7 |
+| /sharing | Noor | 710.2 KB | 666.2 | 567.5 | 482.7 | 459.0 |
+| /settings | Noor | 613.2 KB | 569.2 | 569.2 | 484.3 | 460.7 |
+
+Fonts went from 234 KB on every route to 150 KB (the two roman files),
+plus the 64 KB italic only where a page sets the estimate sentence: on
+`/today` for Noor and on `/calendar`, not on `/today` for Mira (no
+prediction yet) or anywhere else measured. Step 4's 11 to 24 KB is the
+second mark file no longer fetched.
+
+### LCP per step
+
+Median run (Lighthouse's pick, closest to the median FCP and TTI, so not
+always the middle LCP), with the range of the three runs. Budget 2.5 s;
+every value below is over it.
+
+| Route | Persona | Base | 1 core | 2 Zod | 3 fonts | 4 hero (head) |
+| ----- | ------- | ---- | ------ | ----- | ------- | ------------- |
+| / | signed out | 3.85 s (3.54 to 3.85) | 3.55 | 3.85 | 3.39 | 3.31 s (3.01 to 3.31) |
+| /privacy | signed out | 3.54 s (3.54 to 3.92) | 3.47 | 3.54 | 2.93 | 2.93 s (2.93 to 2.94) |
+| /sign-in | signed out | 4.36 s (4.36 to 4.37) | 4.38 | 4.38 | 3.84 | 3.83 s (3.76 to 3.83) |
+| /design | signed out | 3.54 s (3.54 to 3.54) | 3.53 | 3.53 | 2.93 | 2.93 s (2.93 to 2.93) |
+| /today | Noor | 5.06 s (5.04 to 5.06) | 4.81 | 4.29 | 4.65 | 4.66 s (4.54 to 4.67) |
+| /today | Mira | 5.05 s (5.05 to 5.06) | 4.82 | 4.30 | 4.25 | 4.22 s (4.21 to 4.22) |
+| /calendar | Noor | 4.39 s (3.32 to 4.39) | 4.16 | 3.69 | 3.16 | 3.46 s (3.46 to 3.46) |
+| /family | Pia | 5.21 s (5.21 to 5.21) | 4.92 | 4.32 | 3.54 | 3.46 s (3.46 to 3.51) |
+| /sharing | Noor | 3.09 s (3.09 to 4.75) | 3.69 | 3.39 | 2.56 | 3.01 s (3.01 to 3.46) |
+| /settings | Noor | 2.57 s (2.57 to 3.39) | 3.77 | 3.76 | 2.64 | 2.71 s (2.71 to 2.71) |
+
+CLS did not change at any step (0 to 0.059, the same values as J2 per
+route; the `/today` and `/family` shift is still the footer line moving
+down when the streamed content arrives). TBT stayed under 135 ms on every
+median run at head.
+
+What each fix did to LCP, read with the run spread in mind (the same
+build moved by 0.4 to 1.7 s between runs on some routes):
+
+- Fixes 1 and 2 helped the streamed routes, whose LCP waits on the script
+  graph: `/today` 5.06 to 4.29 s, `/family` 5.21 to 4.32 s. Elsewhere the
+  changes sit inside the spread.
+- Fix 3 is the largest lever on the routes without the estimate sentence,
+  as J2 measured: minus 0.5 to 0.8 s on `/privacy`, `/design`, `/sign-in`
+  and `/family`; `/today` for Mira barely moved (4.30 to 4.25 s), her LCP
+  waiting on the streamed empty state rather than on fonts. On `/today` for Noor it costs 0.37 s
+  (4.29 to 4.66 s at head). Her page sets the estimate sentence, so the
+  italic is still downloaded, but now late: the browser discovers it when
+  the streamed hero arrives, about 540 ms into the observed load, where the
+  old preload started with the roman fonts at about 185 ms, and Lantern counts that late high-priority
+  request into the LCP estimate even though the LCP element (the fact
+  line) is roman. With `display: swap` a real browser paints the sentence
+  in the adjusted fallback first, so the lab cost probably overstates the
+  field one; that is a reading of the model, not a measurement. `/calendar`
+  sets the sentence too and moved the other way (3.69 to 3.16 s at step 3).
+  A per-route preload was tried and dropped: declaring the italic again in
+  a module that only `/today` imported made Next preload it on every
+  signed-in route (`/settings` included) under a second file name, so it
+  would have downloaded twice on the pages that set the sentence.
+- Fix 4: on `/` the LCP element is the hero mark. Its request is now High
+  and starts at 96 ms with the fonts; the LCP breakdown at head is 83 ms to
+  first byte, 13 ms load delay, 26 ms load and 39 ms render delay in the
+  observed load, so the simulated 3.0 to 3.3 s is the page's render-blocking
+  CSS and fonts under throttling, not the image. The step 3 and step 4 runs
+  of `/` (2.93 to 3.39 s both) do not separate.
+
+### Budgets at head
+
+| Budget | Signed-out routes | Signed-in routes | Remaining cause |
+| ------ | ----------------- | ---------------- | --------------- |
+| Initial transfer, 1.5 MB | Met (428 to 453 KB) | Met (441 to 533 KB) | None |
+| First-route JavaScript, 200 KB | Met (164 to 192 KB) | Met on `/today` (196.7 KB) and `/family` (191.5 KB); missed on `/calendar` (219.5 KB), `/sharing` (209.8 KB), `/settings` (207.1 KB) | `/calendar`: react-day-picker and date-fns (about 23.5 KB compressed, J2's measure). `/sharing` and `/settings`: the better-auth client and `@simplewebauthn/browser` (43.7 and 27.2 KB of source in the webpack analysis), loaded up front for the passkey and fresh sign-in controls |
+| LCP, 2.5 s | Missed (2.93 to 3.83 s) | Missed (2.71 to 4.66 s) | Render-blocking CSS and the two preloaded roman fonts (150 KB) on every route; on the streamed routes (`/today`, `/family`) the LCP text arrives with the streamed content, after the script graph |
+| CLS, 0.1 | Met (0 to 0.008) | Met (0 to 0.059) | None |
+
+Closing the JavaScript gap would mean loading the auth client and WebAuthn
+only when a passkey or fresh sign-in control is used (a dynamic import on
+`/settings` and `/sharing`) and the day picker's locale and formatting
+code more narrowly on `/calendar`; both are outside this task. LCP would
+need the CSS split per route group or inlined for the first paint, a
+smaller roman Newsreader (the 132 KB optical-size build is the largest
+request on every route), or both, and a decision on 13.5's optical-size
+choice; also outside this task.
+
+### Proposed byte-budget gate (not added)
+
+Byte counts were identical across every run of a route in both J2 and
+J2b, so a gate on them would not flap. The proposal: a check that reads
+the Lighthouse network records (or the build's route manifest) for the
+key routes and fails when a route's compressed script transfer exceeds its
+ceiling. Ceilings at head plus about 5 percent, rounded up, except where
+the architecture budget is lower:
+
+| Route | Persona | Script at head | Ceiling | Total at head | Ceiling |
+| ----- | ------- | -------------- | ------- | ------------- | ------- |
+| / | signed out | 164.0 KB | 173 KB | 427.7 KB | 450 KB |
+| /privacy | signed out | 168.8 KB | 178 KB | 437.9 KB | 460 KB |
+| /sign-in | signed out | 191.8 KB | 200 KB | 453.4 KB | 477 KB |
+| /design | signed out | 168.8 KB | 178 KB | 437.9 KB | 460 KB |
+| /today | Noor | 196.7 KB | 200 KB | 517.8 KB | 544 KB |
+| /today | Mira | 196.7 KB | 200 KB | 451.3 KB | 474 KB |
+| /calendar | Noor | 219.5 KB | 231 KB | 532.5 KB | 560 KB |
+| /family | Pia | 191.5 KB | 200 KB | 440.7 KB | 463 KB |
+| /sharing | Noor | 209.8 KB | 221 KB | 459.0 KB | 482 KB |
+| /settings | Noor | 207.1 KB | 218 KB | 460.7 KB | 484 KB |
+
+The three routes over the 200 KB budget get ratchet ceilings, not
+budget ceilings, so the gate stops growth without failing on day one; each
+ceiling drops to 200 KB when its route gets there. `/today`, `/family` and
+`/sign-in` sit within 9 KB of the budget, so the next client dependency on
+them would fail the gate, which is the point. Running it needs the seeded
+server, so it belongs in CI's `verify` job after the browser suite, not in
+`pnpm check`. Timing metrics stay out of any gate for the reasons in "A
+performance gate" above.

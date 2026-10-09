@@ -1209,12 +1209,17 @@ EB Garamond and Plus Jakarta Sans.
 Files: the roman Newsreader file is the optical-size build (both axes, 132
 KB) so browsers serve the sturdier cut at 16 px and the higher-contrast cut
 at display sizes with no CSS. The Newsreader italic is the weight-only
-build (64 KB; the optical-size italic is 147 KB) and it is kept knowingly:
-`next/font/local` preloads every file in a `src` array on every route,
-and the estimate sentence that uses it is a signature element on most
-authenticated screens. The roman file comes first in `src` so the Times
-New Roman fallback metrics are computed from it. Figtree ships roman and
-italic (21 KB). Two facts about the fontsource builds from verification:
+build (64 KB; the optical-size italic is 147 KB). `next/font/local`
+preloads every file in a call's `src` array on every route, so since task
+J2b the italic is its own call with `preload: false` (CSS variable
+`--font-newsreader-italic`, named first by the `.estimate` class): the
+browser fetches it when a page sets the estimate sentence, the only italic
+in the product, and the two roman files are the only preloads. Each call
+computes its Times New Roman fallback metrics from its own file. Figtree
+ships the roman file only: no style sets Figtree in italic, so J2b removed
+its italic (21 KB), and a stray italic would be synthesized. The measured
+effect is in `docs/design/PERFORMANCE.md`. Two facts about the fontsource
+builds from verification:
 their weight-only Newsreader file is a fixed opsz 16 instance, and they
 drop the `case`, `sups` and `ordn` features the upstream TTFs carry; the
 product needs none of them, and if a tracked uppercase label ever needs
