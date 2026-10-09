@@ -48,6 +48,13 @@ findings and the next concrete action. Resume from the last entry and
     `docs/design/CONTENT.md` ("Context ranges on /family", F6), and have
     the attorney answer the question at the end of `docs/CLAIMS.md`
     section 2 (quoting the AAP and AASM under their terms).
+12. Approve or reword the public header's phone "Menu" label and the
+    mark-only logo the header shows under 380 px (J3b).
+13. Decide how a fresh account on a Vercel preview verifies its email:
+    the console mailer now withholds every link (tokens are credentials
+    and preview logs keep them), and previews have no capture endpoint.
+    Options: a test inbox through the real mailer on previews only, or
+    seeded verified accounts on preview branches (J3c).
 
 ## 2026-10-04, session_019bNAugBr36XyCFxfiZJ2Xv (foundation)
 
@@ -1543,4 +1550,48 @@ route areas to get the database and keys, the turbo test inputs) and J3d
 (deletion proved to removal in the suite, the byte-budget gate in CI).
 Then the five review loops of BUILD_PROMPT.md section 10 over every
 route, logged in `docs/design/QA.md`.
+
+### J3, round one merged (2026-10-09, lead session dfc54107)
+
+The recorded findings were fixed before the fresh audit, three tasks in
+one build, review and fix workflow, then merged one at a time through the
+queue, each rebased onto the previous merge and regated (`pnpm check`,
+the seeded suite, the database-free smoke, CI verify, CodeQL, the preview
+smoke against the head deployment):
+
+- #100 (`430ceed`, the lead): the brand spec checks each image in the
+  theme that shows it. Since J2b the hidden theme variant of a mark is
+  never fetched, and the old check failed on timing (verify on #96).
+- J3d (#97, `7b0c038`, production smoke 37914272854): the seeded server
+  runs the job runner behind `E2E_JOBS_SCHEDULED_ONLY` (refused on any
+  Vercel deployment), so the deletion flow proves an account removed after
+  delete now; the byte-budget gate runs in `verify` against the ceilings in
+  `apps/web/scripts/perf/budgets.json`. CI verify now takes about 29
+  minutes.
+- J3c (#99, `02ce5c7`, production smoke 37920744297): a forged cursor on
+  the children lists answers a validation problem, not 500 (the cursor
+  bound is approved in `openapi/BREAKING.md`, checked with oasdiff 1.33.0);
+  `describeError()` keeps the SQLSTATE; the console mailer withholds every
+  link; the terms acceptance on the someone-else path (migration
+  `0014_profile_terms_acceptance`, additive, applied by the Vercel build);
+  one UUIDv7 minter in `packages/core`; every route area receives
+  `{ db, keys }` from `registerRoutes`; the turbo test task depends on a
+  transit task so a workspace change misses the cache.
+- J3b (#98, `ba3f0ba`): sign-in returns to the page asked for through a
+  validated `?next=`; continuing period pills fade inside the strip and
+  the month grid; the public header's Sign in with the phone disclosure
+  menu; one source for the social card alt text; `docs/design/QA.md`
+  started with its rows.
+
+Lead rulings: J3d's host switch and its edits outside the file list;
+J3c's lockfile change and the removal of the ignored sharing `db`; the
+cursor bound as an approved breaking change; the J3b captures reviewed in
+both themes. The lead's local `seeded.sh` serves with the job runner
+values, and the browser suite needs the CI test `CRON_SECRET`.
+
+### Next action
+
+Round two is running: J3e (copy and visual loops) and J3f (behavior,
+motion and sound, performance and privacy), each logging in
+`docs/design/QA.md`. Then J4 and J6.
 
