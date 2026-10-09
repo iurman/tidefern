@@ -4,6 +4,7 @@ import { addDays } from "@tidefern/core";
 import { formatChildAge } from "../../src/lib/child-age";
 import type { Theme } from "./axe";
 import { baseOrigin, freshAccount, onboard, signInAs, type FreshAccount } from "./session";
+import { signInRedirect } from "./sign-in-redirect";
 
 /**
  * The calendar and the day page against the production build (task H3):
@@ -1009,7 +1010,9 @@ test("a visitor without a session is sent to sign in from the calendar and the d
   for (const path of ["/calendar", "/calendar?month=2026-10&view=list", "/log/2026-10-05"]) {
     const response = await request.get(path, { maxRedirects: 0 });
     expect(response.status(), path).toBe(307);
-    expect(response.headers()["location"], path).toBe("/sign-in");
+    // Only the path travels to sign in as the way back, never the month or the view.
+    const asked = new URL(path, "http://tidefern.invalid").pathname;
+    expect(response.headers()["location"], path).toBe(signInRedirect(asked));
   }
 });
 
