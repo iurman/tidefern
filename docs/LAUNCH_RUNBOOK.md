@@ -26,7 +26,7 @@ requires. "Phase 2" is the public gate in architecture section 18.
 | Vercel plan | Stated as Pro by the owner, not verified | Plan row A2 |
 | Production database | Not confirmed. A Neon project exists with `production` as its default branch and 6 hours of history; no record says production holds `DATABASE_URL` as `tidefern_app` or that the build migrates | Plan rows A3 and A4; owner action 5 |
 | Production email | Not configured: the domain publishes no mail records | `dig` on 2026-10-09 (DNS section) |
-| CI on `main` | `verify` and `CodeQL` green | CI 37960238068 and CodeQL 37960238166 on `7bb35d8`; CodeQL 37967126938 on `742b53b` (its CI run was still in progress when this was written) |
+| CI on `main` | `verify` and `CodeQL` green | CI 37960238068 and CodeQL 37960238166 on `7bb35d8`; CI 37967126983 and CodeQL 37967126938 on `742b53b` |
 | Previews | Smoked by hand against each head commit's own deployment URL, because the Neon integration's branch limit stops previews being aliased | Owner action 9; `Verify deployment` workflow_dispatch runs such as 37963178128 |
 
 ## Owner actions to connect delivery (one time)
@@ -235,7 +235,7 @@ pnpm check                                # prose, generated files, format, lint
 Results: `pnpm install --frozen-lockfile` "Done in 2.5s using pnpm
 v10.34.6" with an engine warning, because this machine runs Node 26.7.0;
 the Playwright install exited 0 (it prints a fallback-build notice on this
-operating system); `pnpm check` exited 0 (J4 report). `nvm use` and the
+operating system); `pnpm check` exited 0 ("Tasks: 27 successful, 27 total", all from the turbo cache, since only this file changed). `nvm use` and the
 global pnpm install were not run: the machine already had pnpm 10.34.6,
 and nvm is not installed on it.
 
@@ -343,7 +343,12 @@ deletion flow runs the job runner, `apps/web/tests/e2e/jobs.ts`). It runs
 one worker, because Better Auth allows three sign-ins per ten seconds for
 the whole run. Reseed (remove the container and start again) before a
 rerun. `docker` takes the same `run` arguments as `podman`; J4 ran
-`podman` only. Results of J4's run are in the J4 report and pull request.
+`podman` only. J4's run of exactly these commands on 2026-10-09: migrate,
+grant-login and seed exited 0; the build exited 0; the full suite "378
+passed (19.6m)"; the byte budgets "Every route is within its ceilings (10
+routes)"; the smoke subset on the database-free server "6 passed (2.7s)".
+The two tests marked with a cross in the list are the smoke rule's own
+expected failures, which Playwright counts as passed.
 
 ## Environment variables
 
@@ -684,10 +689,10 @@ evidence; nothing is marked done on a statement alone.
 
 | Gate item | Status | Evidence or reason |
 | --- | --- | --- |
-| All of section 15 green | Not done | Green: CI `verify` 37960238068 on `7bb35d8` runs every layer below in one job, and CodeQL 37960238166 passed on the same head. Not built: the `packages/db` "integration job against `postgres:18` with `NODE_ENV=production` and two concurrent actors through a pooled connection" has no job; the seeded browser suite runs on `postgres:18.6` without a pooler, and the pooler half is B10, blocked on owner items 1 and 2. Not met: the Lighthouse budgets, where LCP misses on every key route (2.71 to 4.66 s) and first-route JavaScript misses by 7 to 20 KB on `/calendar`, `/sharing` and `/settings` (J2, `docs/design/PERFORMANCE.md`) |
+| All of section 15 green | Not done | Green: CI `verify` 37967126983 on `742b53b` runs every layer below in one job, and CodeQL 37967126938 passed on the same head. Not built: the `packages/db` "integration job against `postgres:18` with `NODE_ENV=production` and two concurrent actors through a pooled connection" has no job; the seeded browser suite runs on `postgres:18.6` without a pooler, and the pooler half is B10, blocked on owner items 1 and 2. Not met: the Lighthouse budgets, where LCP misses on every key route (2.71 to 4.66 s) and first-route JavaScript misses by 7 to 20 KB on `/calendar`, `/sharing` and `/settings` (J2, `docs/design/PERFORMANCE.md`) |
 | Section 15, `packages/core`, `packages/schemas`, `packages/crypto`, `packages/api` (Vitest) | Done | `pnpm check` exit 0 on this branch; CI 37960238068 |
 | Section 15, `packages/db` on PGlite | Done | `packages/db/src/rls.test.ts`, `actor.test.ts`; CI 37960238068 |
-| Section 15, `apps/web` Playwright and axe | Done | 354 browser tests at J1 (#94), the seeded suite in CI 37960238068; J4's local run in its report |
+| Section 15, `apps/web` Playwright and axe | Done | 354 browser tests at J1 (#94), the seeded suite in CI 37967126983; J4's local run, 378 passed |
 | Section 15, contract | Done | `pnpm openapi:check` in `pnpm check`; the oasdiff step in `ci.yml` |
 | Section 15, visual | Done | `apps/web/scripts/capture.mjs`; QA log captures |
 | Section 15, security, required | Done | `actor.test.ts` "creates tidefern_app without login, inheritance or RLS bypass"; `rls.test.ts` "refuses system context to tidefern_app, whatever it sets", "still refuses a foreign insert and a journal note from a grantee", "gets zero rows everywhere but her own profile", "reaches that child and never the other"; `privacy-rules.spec.ts` "the page policy: a nonce and strict-dynamic, never unsafe-inline or another origin"; `logger.test.ts` "logs the allowlisted fields and nothing from the path, the query, the headers or the body"; `idempotency.test.ts` "runs once, stores hashes and the resource id, never a body"; `jobs.test.ts` "answers the 404 problem wherever the secret is unset, bearer or not"; `closure.test.ts` "hands the co-guarded child to Ben, who keeps decrypting it with the child's own key" |
