@@ -229,6 +229,43 @@ function overflowOf(page: Page): Promise<number> {
   );
 }
 
+/**
+ * The header's visible focusable elements, in source order (Tab order, as
+ * none sets a positive tabindex), each paired with whether it paints after
+ * the one before it: further along the same row, or on a lower row.
+ */
+function headerFocusOrder(page: Page) {
+  return page.getByRole("banner").evaluate((banner) => {
+    const focusable = [...banner.querySelectorAll<HTMLElement>("a[href], button, [tabindex]")]
+      .filter((element) => element.tabIndex >= 0)
+      .filter((element) => element.getClientRects().length > 0);
+    return focusable.map((element, index) => {
+      const name = element.getAttribute("aria-label") ?? element.textContent?.trim() ?? "";
+      const tabindex = element.getAttribute("tabindex");
+      if (index === 0) return { name, follows: true, tabindex };
+      const before = focusable[index - 1]!.getBoundingClientRect();
+      const box = element.getBoundingClientRect();
+      const lowerRow = box.top >= before.bottom - 1;
+      const sameRowFurther = box.top < before.bottom && box.left >= before.right - 1;
+      return { name, follows: lowerRow || sameRowFurther, tabindex };
+    });
+  });
+}
+
+async function expectHeaderFocusFollowsLayout(page: Page, label: string) {
+  const order = await headerFocusOrder(page);
+  expect(order.length, `${label}: the header has focusable controls`).toBeGreaterThan(2);
+  for (const item of order) {
+    expect(item.tabindex === null || Number(item.tabindex) <= 0, `${label}: ${item.name}`).toBe(
+      true,
+    );
+    expect(
+      item.follows,
+      `${label}: ${item.name} paints after the control Tab visits before it`,
+    ).toBe(true);
+  }
+}
+
 test("the public header links Sign in on every public page, in the bar from desktop width", async ({
   page,
 }) => {
@@ -241,6 +278,7 @@ test("the public header links Sign in on every public page, in the bar from desk
     await expect(signIn, path).toHaveAttribute("href", "/sign-in");
     await expect(header.getByRole("button", { name: "Menu" }), path).toBeHidden();
   }
+  await expectHeaderFocusFollowsLayout(page, "1440");
   await page.goto("/");
   await page.getByRole("banner").getByRole("link", { name: "Sign in", exact: true }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
@@ -275,6 +313,8 @@ test("on a phone the header's links sit behind a disclosure button that Escape c
   await expect(header.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
   // The cue comes from the shared provider, which hears every button.
   await expect.poll(presses).toBeGreaterThan(0);
+  // The panel fades and slides in on the disclosure curve (DESIGN.md section 7); check it settled.
+  await expect.poll(() => menu.evaluate((element) => getComputedStyle(element).opacity)).toBe("1");
   for (const theme of ["light", "dark"] as const) {
     await page.evaluate((value) => {
       document.documentElement.dataset.theme = value;
@@ -312,6 +352,49 @@ test("on a phone the header's links sit behind a disclosure button that Escape c
       await expect(toggle).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
     }).toPass({ timeout: 15_000 });
     expect(await overflowOf(page), `the open menu at ${width}`).toBeLessThanOrEqual(0);
+    await toggle.click();
+    await expect(toggle).toHaveAttribute("aria-expanded", "false");
+    await expectHeaderFocusFollowsLayout(page, `the closed menu at ${width}`);
+  }
+});
+
+test("the open menu button looks different from the closed one in both themes", async ({
+  page,
+}) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/");
+  const button = page.getByRole("banner").getByRole("button", { name: "Menu" });
+  await expect(button).toBeVisible();
+  const bar = page.locator(".header-bar");
+  const look = () =>
+    button.evaluate((element) => {
+      const style = getComputedStyle(element);
+      return { background: style.backgroundColor, border: style.borderTopColor };
+    });
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    const barBackground = await bar.evaluate(
+      (element) => getComputedStyle(element).backgroundColor,
+    );
+    if ((await button.getAttribute("aria-expanded")) === "true") await button.click();
+    await page.mouse.move(0, 800);
+    const closed = await look();
+    await expect(async () => {
+      if ((await button.getAttribute("aria-expanded")) !== "true") await button.click();
+      await expect(button).toHaveAttribute("aria-expanded", "true", { timeout: 1_000 });
+    }).toPass({ timeout: 15_000 });
+    // Away from the pointer, so the hover fill plays no part.
+    await page.mouse.move(0, 800);
+    await expect.poll(look, `the open button in ${theme} changes its fill`).not.toEqual(closed);
+    const open = await look();
+    expect(open.background, `the open fill in ${theme} differs from the bar`).not.toBe(
+      barBackground,
+    );
+    expect(open.border, `the open border in ${theme} differs from the closed one`).not.toBe(
+      closed.border,
+    );
   }
 });
 
@@ -331,6 +414,7 @@ test("without JavaScript the phone header shows its links as a plain list", asyn
     await expect(header.getByRole("link", { name: "Sign in", exact: true })).toBeVisible();
     await expect(header.getByRole("link", { name: "Design system", exact: true })).toBeVisible();
     expect(await overflowOf(page)).toBeLessThanOrEqual(0);
+    await expectHeaderFocusFollowsLayout(page, "without JavaScript at 320");
   } finally {
     await context.close();
   }

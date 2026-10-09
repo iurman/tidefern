@@ -476,9 +476,10 @@ async function escapePath(page: Page, opener: Opener, label: string) {
 /**
  * The public header's menu on a phone (task J3b): the disclosure button
  * opens from the keyboard and says so with `aria-expanded`, Tab walks into
- * its two links with a visible ring, and Escape closes it with focus back
- * on the button. A page without the public header (the app shell) has no
- * such button and is skipped.
+ * its two links with a visible ring, Escape closes it with focus back on
+ * the button, and Tab from there moves on to the right along the bar. A
+ * page without the public header (the app shell) has no such button and is
+ * skipped.
  */
 async function headerMenuPath(page: Page, label: string) {
   const button = page.getByRole("banner").getByRole("button", { name: "Menu" });
@@ -514,6 +515,15 @@ async function headerMenuPath(page: Page, label: string) {
     .toHaveAttribute("aria-expanded", "false");
   await expect.soft(menu, `${label}: the closed menu hides its links`).toBeHidden();
   await expect.soft(button, `${label}: Escape returns focus to the menu button`).toBeFocused();
+  // Tab order follows the bar as it paints: the control after the button sits to its right.
+  const buttonRight = await button.evaluate((element) => element.getBoundingClientRect().right);
+  await page.keyboard.press("Tab");
+  const nextLeft = await page.evaluate(
+    () => document.activeElement?.getBoundingClientRect().left ?? Number.NaN,
+  );
+  expect
+    .soft(nextLeft, `${label}: Tab from the menu button moves right along the bar`)
+    .toBeGreaterThanOrEqual(buttonRight - 1);
 }
 
 /**
