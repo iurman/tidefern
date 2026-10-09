@@ -82,10 +82,10 @@ Gaps:
 
 - Overview (`/design`): the exports now list the JSON tokens, the CSS
   variables, the Markdown reference, the catalog and the OpenAPI contract.
-  The intro still says "the seven chapters below are the planned structure",
-  which is no longer true: all seven are published. The hub does not offer
-  the searchable pattern catalog that the site-build guidance suggests. The
-  catalog exists as JSON and Markdown but is not rendered on the hub.
+  The intro says the seven chapters render the real tokens and components
+  and the files are the live exports (J3e); all seven are published. The
+  hub does not offer the searchable pattern catalog that the site-build
+  guidance suggests. The catalog exists as JSON and Markdown but is not rendered on the hub.
 - Brand: complete for the shipped files; the mark itself is pending the
   owner's approval, as the chapter says.
 - Color: matches 13.8 (both themes, measured contrast, a sandboxed checker,

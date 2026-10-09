@@ -542,7 +542,8 @@ such membership, and the app never connects as a role that can bypass RLS:
   offline queue on mobile can sync later without a schema change.
 - Hard delete by default. The one grace period: closing an account locks it
   and revokes every session and grant at once, then waits seven days
-  during which signing in again cancels the closure; the DEK is destroyed
+  during which signing in shows the locked closing view, where the person can
+  undo the closure (signing in alone cancels nothing); the DEK is destroyed
   at the end of that window, or immediately when the person chooses
   "delete now". Nothing else is soft-deleted.
 - Encrypted columns are `bytea` holding `version || iv || tag ||
