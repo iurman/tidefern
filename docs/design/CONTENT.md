@@ -604,9 +604,10 @@ owner approves them there.
 - The destructive line above is corrected (task H7): the undo is an explicit
   action. Closing locks the account; until the window ends she signs in,
   lands on the locked view at `/closing` and chooses Undo there. Signing in
-  alone cancels nothing. The `/account/delete` paragraph, the
-  `/design/foundations` example and architecture 7.3 still say signing in
-  cancels, and are outside this route's files.
+  alone cancels nothing. The `/account/delete` paragraph and the
+  `/design/foundations` example now carry the corrected line (task J3e);
+  architecture 7.3 still says signing in cancels, and is outside the
+  routes' files.
 - `[OWNER]` the lock-screen preview wording for the gentle and detailed
   notification levels. Only the generic line exists ("You have a reminder in
   Tidefern.", the reminder email's own), so Settings shows the other two as
@@ -682,3 +683,61 @@ now. Reload the page to try again."
 - After sign-in a visitor returns to the page they asked for; the address
   carries only that page's path (`/sign-in?next=%2Fsettings`), never a
   query or anything they typed.
+
+### Copy review (J3e)
+
+Review loop 1 read every route in each seeded state; the findings and their
+evidence are rows under "Copy" in `QA.md`. The strings it changed, each in
+the code and here together:
+
+- `/account/delete` and the `/design/foundations` destructive example:
+  "Closing your account locks it now and deletes it in 7 days. Until then,
+  you can sign in and undo it." (the voice table's line; it replaces
+  "Signing in again before then cancels this.").
+- The home page's Childhood line: "Feeds, sleep, growth and firsts, seen by
+  every guardian and by no one else until you share them." (it replaces
+  "shared with every guardian and nobody else", which a child grant to
+  someone outside the guardians, the seed's Pia, makes untrue). The claims
+  register row in `docs/CLAIMS.md` section 3.1 changes with it.
+- `/accessibility`, Known gaps: the narrow header's missing menu is gone
+  (task J3b built it), and the manual passes line reads "Manual keyboard and
+  screen reader passes have not been recorded yet. The automated checks
+  catch many problems but not every one."
+- `/design`: "This reference is generated from the same source the product
+  uses. The seven chapters below render the real tokens and components, and
+  the files here are the live exports." (all seven chapters are published).
+- `/design/color`, theme behavior: "Choosing Follow system under Theme in
+  Settings, or clearing this site's data in the browser, removes the key and
+  returns to following the system".
+- `/reset`: "Enter your email and we will send you a link to choose a new
+  password."
+- `/settings/sound`, quiet hours: "Times follow this device's clock." (it
+  replaces "... until your profile carries a time zone", shown to people
+  whose profile already has one).
+
+Lines that need the owner, each shown as it is until then:
+
+- `[OWNER]` The pointing-to-care sentence under a child's growth chart is
+  architecture 13.10's "This is worth mentioning to your doctor or
+  midwife." word for word; for a child the clinician is a pediatrician, and
+  a different sentence needs a new 13.10 row.
+- `[OWNER]` The month calendar's empty state for the `none` stage (Theo):
+  "Nothing logged this month" / "Days you log show here with their flow and
+  symptoms." invites logging that stage cannot do; a line for someone who
+  only sees what others share, or no calendar for that stage, is the
+  owner's call.
+- `[OWNER]` The processor lines on the consent record come from the API's
+  `PROCESSORS` (`packages/api/src/routes/profile.ts`) and carry internal
+  words ("the allowlisted request logs", "CI logs", "in Phase 1"); they
+  belong with the attorney's review of the consent text.
+- `[OWNER]` The postpartum feeding line has two placeholders for one
+  sentence: Today's "the line about cycles while feeding" and the calendar's
+  "The line that cycles often return later while feeding."; one owner line
+  replaces both.
+- `/verify` is titled "Verify your email" while its heading says "Confirm
+  your email"; `auth.spec.ts` pins the title, so it stays until the owner
+  picks one word.
+- The 404 pages keep the home page's title and description: Next takes a
+  not-found page's metadata only from `global-not-found`, a structural
+  change left as a follow-up.
+
