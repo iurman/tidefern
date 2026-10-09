@@ -301,9 +301,20 @@ with test-only values, runs the full browser suite against `next start`
 with the job runner, checks the byte budgets, then runs the `@smoke`
 subset against a second server with no database. To reproduce it locally,
 in one shell from the repository root (none of these values is a secret;
-the database dies with the container):
+the database dies with the container).
+
+CI has no `apps/web/.env.local`, and Next.js fills any key the shell lacks
+from that file, in `next build` and `next start` alike. If you followed
+the local setup above, move the file aside first and stop its database,
+which holds the same port; otherwise the build gets your `SITE_URL` and
+`DATABASE_URL_UNPOOLED`, and the database-free server quietly reads your
+`DATABASE_URL` back, so the smoke subset proves nothing about running
+without a database.
 
 ```sh
+[ -f apps/web/.env.local ] && mv apps/web/.env.local apps/web/.env.local.off
+podman stop tidefern-pg 2> /dev/null || true
+
 export PGPORT=54451 WEBPORT=3281
 export OWNER_URL=postgresql://postgres:ci-only-postgres-password@127.0.0.1:$PGPORT/tidefern
 export DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$PGPORT/tidefern
@@ -331,11 +342,12 @@ PLAYWRIGHT_BASE_URL=http://127.0.0.1:$WEBPORT pnpm test:e2e
 pnpm --filter web perf:bytes http://127.0.0.1:$WEBPORT
 
 # the database-free server for the smoke subset; stop the seeded one first
-env -u DATABASE_URL pnpm --filter web start --port $WEBPORT --hostname 127.0.0.1
+env -u DATABASE_URL -u DATABASE_URL_UNPOOLED pnpm --filter web start --port $WEBPORT --hostname 127.0.0.1
 # in the second shell:
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:$WEBPORT pnpm test:e2e --grep @smoke
 
 podman rm -f tidefern-ci-pg
+[ -f apps/web/.env.local.off ] && mv apps/web/.env.local.off apps/web/.env.local
 ```
 
 The suite needs `CRON_SECRET` in Playwright's own environment too (the
@@ -343,12 +355,17 @@ deletion flow runs the job runner, `apps/web/tests/e2e/jobs.ts`). It runs
 one worker, because Better Auth allows three sign-ins per ten seconds for
 the whole run. Reseed (remove the container and start again) before a
 rerun. `docker` takes the same `run` arguments as `podman`; J4 ran
-`podman` only. J4's run of exactly these commands on 2026-10-09: migrate,
+`podman` only. J4's first run of these commands on 2026-10-09, before
+the `.env.local` lines and the second `-u` were added: migrate,
 grant-login and seed exited 0; the build exited 0; the full suite "378
 passed (19.6m)"; the byte budgets "Every route is within its ceilings (10
 routes)"; the smoke subset on the database-free server "6 passed (2.7s)".
 The two tests marked with a cross in the list are the smoke rule's own
-expected failures, which Playwright counts as passed.
+expected failures, which Playwright counts as passed. The added lines were
+run the same day with a decoy `apps/web/.env.local` holding both database
+URLs: the file moved aside and back, `podman stop` on a missing container
+exited quietly, and the database-free server started with no
+"Environments: .env.local" line and the smoke subset "6 passed (3.0s)".
 
 ## Environment variables
 
@@ -475,8 +492,10 @@ head of `main`, and that deployment passes the step. This is a recorded
 open item: until the health endpoint reports the commit it was built
 from, check a rollback by eye in the Vercel Deployments view, which marks
 the deployment the domains point to as Current. A manual run of the
-workflow with `-f ref=...` only compares the ref you pass with `main`; it
-says nothing about what the domains serve.
+workflow makes the comparison only with `-f production=true`, and then it
+compares the ref you pass with `main`; it says nothing about what the
+domains serve. Without that flag the step is skipped and the run treats
+the URL as a preview.
 
 A merge that lands while an earlier production deployment is still being
 verified fails that earlier run, because its commit is no longer the head
@@ -550,14 +569,21 @@ Playwright subset against the deployment URL. For a manual check:
 ```sh
 curl -sI https://<deployment>/ | grep -i -E "x-robots-tag|content-security-policy"
 curl -s https://<deployment>/api/v1/health
+# a preview:
 gh workflow run deploy-verify.yml --repo iurman/tidefern -f url=https://<deployment> -f ref=<sha>
+# the production domain (compares <sha> with main and expects what production sends):
+gh workflow run deploy-verify.yml --repo iurman/tidefern -f url=https://tidefern.app -f ref=<sha> -f production=true
 ```
 
 The two `curl` lines were verified against the local production build
 (J4 report); against a deployment they were not run. A protected preview
 needs `-H "x-vercel-protection-bypass: <secret>"`. The `gh workflow run`
-line is what the merge queue uses for previews (runs such as
-37963178128); not run by J4.
+line without `production` is what the merge queue uses for previews (runs
+such as 37963178128). The production line is needed whenever the URL is
+the production domain: without `-f production=true` the head-of-main step
+is skipped, and once `SITE_INDEXABLE=true` the smoke run fails, because
+`home.spec.ts` then expects the preview's noindex header. Neither `gh`
+line was run by J4 (each starts a workflow).
 
 ## Uptime (task J5)
 
@@ -624,7 +650,8 @@ code and by `BETTER_AUTH_TELEMETRY=0`.
 
 One list, reconciled on 2026-10-09 with the owner actions at the top of
 `docs/BUILD_PROGRESS.md` (items 1 to 13), the plan rows A2 to A5, B10, F5
-and J7, architecture 21, and the `[OWNER]` lines. "Blocks" says what
+and J7, architecture 21, the `[OWNER]` lines, and the rows of
+`docs/design/QA.md` left open for the owner. "Blocks" says what
 waits: the household launch, the Phase 1 gate (leaving Phase 1, after
 first use), Phase 2 (anyone outside the household), or nothing (hygiene).
 
@@ -656,31 +683,32 @@ first use), Phase 2 (anyone outside the household), or nothing (hygiene).
 | 12 | Incident facts: the attorney's name, phone and email and out-of-hours availability, the second person on call, the private store for incident files, each vendor's account support contact (the column above) | `docs/INCIDENT.md` Appendix B (8 items; 32 `[OWNER]` markers in the file) | The incident plan cannot be run without them | Item 8 |
 | 13 | Processor privacy contacts: replace each `contact` (today the vendor's DPA page) with its privacy contact address and confirm the list | `PROCESSORS` in `packages/api/src/routes/profile.ts` | Architecture 11 promises every processor with its contact address in the data summary | Item 8 |
 | 14 | Attorney review: both policies, the terms, the consent text, the guardian's consent on a child's behalf, the claims register, the incident plan and vendor terms; plus the open questions: in `docs/CLAIMS.md` (12 markers: the home page wording after the KMS move, the "used daily" status line, CMIA and `/health-privacy`, the AAP and AASM terms of use), in `docs/INCIDENT.md` (residency, email as the chosen channel, a Washington breach duty, notice register retention, the 318.6 element list, guardian and invitee notices, account data as health data, the vendor-notice start of the 60 days), architecture 21 (a child's records at majority, photo grants outside the household), and whether Phase 1 on Hobby counts as non-commercial (9.5) | The owner's attorney | A Phase 2 gate item | Item 11; architecture 21 |
-| 15 | Copy approvals: 80 lines in `docs/design/CONTENT.md` hold 85 `[OWNER]` markers: the 8 owner inputs above, the route tables (3), `/welcome` (6), `/today` (7), `/calendar` and `/log/[date]` (14), `/journey` (14, including the ending dialog's one resources link), `/family` (6) and its range lines and sources (5), `/sharing` (12), `/settings` (2: notification preview wording, pronouns and week start), `/activity` (1), the public header (1); the drafts sit in each route's `copy.ts` | `docs/design/CONTENT.md`; the `copy.ts` modules | The Phase 2 copy audit; the pages show drafts or marked placeholders until then | Items 8, 11, 12 |
+| 15 | Copy approvals: 80 lines in `docs/design/CONTENT.md` hold 85 `[OWNER]` markers, counted by marker per heading: the 8 owner inputs above, the inventory's opening line (1), the route tables (7, on 3 lines), `/welcome` (6), `/today` (7), `/calendar` and `/log/[date]` (14), `/journey` (14, including the ending dialog's one resources link), `/family` (6) and its context range lines and sources (6, on 5 lines), `/sharing` (12), `/settings` (2: notification preview wording, pronouns and week start), `/activity` (1), the public header (1); the drafts sit in each route's `copy.ts` | `docs/design/CONTENT.md`; the `copy.ts` modules | The Phase 2 copy audit; the pages show drafts or marked placeholders until then | Items 8, 11, 12 |
 | 16 | Decisions the pages wait on: passkeys before the domain is final and no later way to add one, the "add your baby later" line for a postpartum profile without a child, the onboarding consent categories per stage, the plausible-date windows, dating by "weeks and days as of a date" and transfer wording (with a clinician), the public header's "Menu" label and its mark-only logo under 380 px | `docs/design/CONTENT.md` (`/welcome`, Public header); architecture 21 | Each keeps a ruled interim behavior until decided | Item 12 |
 | 17 | The mark: approve the reconstructed mark and its dark-surface variant, or deliver original vectors | Brand chapter, `packages/design-tokens/brand/` | The home page and brand chapter present it | Architecture 21 |
 | 18 | Pro: confirm the plan on A2; if Hobby, upgrade before anyone outside the household signs up | Vercel billing | Commercial use, per-minute cron, firewall rules, log export for the incident plan, the DPA | Item 3; A2; section 18 |
 | 19 | KMS: choose the cloud KMS that will wrap the KEK | Owner with the lead; architecture 9.2 | A Phase 2 gate item; nothing in the code names a vendor yet | Section 18 |
-| 20 | Neon Scale: only if a 30-day restore window is wanted, and only after the closure promise is reworded (Neon step 2) | Neon; `/privacy` | The published promise depends on 7-day history | Section 18 |
+| 20 | API log lines: keep the route template (`/api/v1/pregnancies/:id`) beside the actor hash, or log a neutral route class instead. Under architecture 9.1 a template next to a stable actor hash can be derived health data under MHMDA | `docs/design/QA.md` (J3f privacy loop, "API log lines name the resource in the route template", open); the lead and the owner | Logs of anyone outside the household should not carry it undecided | J3f; architecture 9.1 |
+| 21 | Neon Scale: only if a 30-day restore window is wanted, and only after the closure promise is reworded (Neon step 2) | Neon; `/privacy` | The published promise depends on 7-day history | Section 18 |
 
 ### Blocks a later step only
 
 | # | What | Where | Why | Progress log, plan |
 | --- | --- | --- | --- | --- |
-| 21 | WHO permission for embedding the Child Growth Standards tables in a product with a paid tier | Architecture 21 | Blocks F5 (the daily tables under 56 days) and any paid tier | Item 6; F5 |
-| 22 | New York S9269/A10357: watch delivery to the governor through December 2026 | Architecture 21 | May change the public policy pages | Architecture 21 |
-| 23 | The `production-migrations` environment with its reviewer and `DATABASE_URL_UNPOOLED` secret | GitHub settings (GitHub step 5) | Blocks the first contract migration only | B12 |
+| 22 | WHO permission for embedding the Child Growth Standards tables in a product with a paid tier | Architecture 21 | Blocks F5 (the daily tables under 56 days) and any paid tier | Item 6; F5 |
+| 23 | New York S9269/A10357: watch delivery to the governor through December 2026 | Architecture 21 | May change the public policy pages | Architecture 21 |
+| 24 | The `production-migrations` environment with its reviewer and `DATABASE_URL_UNPOOLED` secret | GitHub settings (GitHub step 5) | Blocks the first contract migration only | B12 |
 
 ### Hygiene (blocks nothing, owner only)
 
 | # | What | Where | Progress log, plan |
 | --- | --- | --- | --- |
-| 24 | Rotate the protection bypass value and store it with `gh secret set` | Vercel; GitHub | Item 2 |
-| 25 | A Vercel usage alert and a Neon consumption notification | Vercel billing; Neon | Item 3; A3 |
-| 26 | Dependabot alerts on | GitHub settings | Item 4 |
-| 27 | The `main` ruleset and secret scanning with push protection, confirmed | GitHub settings | A5 |
-| 28 | `www`, CAA and DNSSEC | Cloudflare; Namecheap (DNS section) | Section 3.5 |
-| 29 | Re-authorize the Vercel connector at team scope (the lead uses the CLI meanwhile) | Claude connector settings | Item 1 |
+| 25 | Rotate the protection bypass value and store it with `gh secret set` | Vercel; GitHub | Item 2 |
+| 26 | A Vercel usage alert and a Neon consumption notification | Vercel billing; Neon | Item 3; A3 |
+| 27 | Dependabot alerts on | GitHub settings | Item 4 |
+| 28 | The `main` ruleset and secret scanning with push protection, confirmed | GitHub settings | A5 |
+| 29 | `www`, CAA and DNSSEC | Cloudflare; Namecheap (DNS section) | Section 3.5 |
+| 30 | Re-authorize the Vercel connector at team scope (the lead uses the CLI meanwhile) | Claude connector settings | Item 1 |
 
 ## Phase 1 gate
 
