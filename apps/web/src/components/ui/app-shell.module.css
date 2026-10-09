@@ -31,6 +31,35 @@
   padding: var(--space-6);
 }
 
+/*
+ * In the app (not a preview) the tab bar is fixed to the foot of the viewport rather than sticky:
+ * it looks the same, but a fixed bar is an overlay the page scrolls under, so a control passing
+ * beneath it is not counted as a cramped target (axe's target-size rule, 2.5.8, measures fixed
+ * layers apart). The frame keeps the bar's height free at its end, so the last line of the page
+ * rests above the bar. The bar is 57px (its 56px cells and 1px top border) plus the home
+ * indicator's inset.
+ */
+.shell:not(.content) .frame {
+  padding-bottom: calc(57px + env(safe-area-inset-bottom, 0px));
+}
+
+.shell:not(.content) .frame > nav:last-child {
+  position: fixed;
+  inset-inline: 0;
+  bottom: 0;
+}
+
+/*
+ * A control focused from the keyboard is scrolled clear of the fixed bar, never left beneath it
+ * (2.4.11). The document is the scroller, so the padding goes on the root, and only while the
+ * app shows the tab bar: below the rail's width (1024px, --breakpoint-rail).
+ */
+@media (max-width: 1023.98px) {
+  :global(html):has(.shell:not(.content)) {
+    scroll-padding-bottom: calc(57px + env(safe-area-inset-bottom, 0px) + var(--space-4));
+  }
+}
+
 /* 1024px mirrors --breakpoint-rail; a container query cannot read a custom property. */
 @container shell (min-width: 1024px) {
   .frame {
@@ -55,6 +84,10 @@
 
   .frame > nav:last-child {
     display: none;
+  }
+
+  .shell:not(.content) .frame {
+    padding-bottom: 0;
   }
 
   .page {

@@ -1,5 +1,6 @@
-import { expect, test, type BrowserContext, type Cookie, type Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { expectNoAxeViolations } from "./axe";
+import { expect, test } from "./fixtures";
 
 /**
  * Interface sound against the production build (architecture 14.2): no
@@ -205,40 +206,20 @@ test.describe("the sound chapter", () => {
   }
 });
 
-/** A seeded, verified persona (packages/db seed cast), as the settings security spec signs in. */
-const seededPersona = { email: "noor@example.test", password: "tidefern-seed-noor" };
-
-let seededCookies: Cookie[] | null | undefined;
-
-type CookiesToAdd = Parameters<BrowserContext["addCookies"]>[0];
-
-/**
- * The settings layout reads the session in process: against a seeded server
- * the suite signs in once and reuses the cookie; without a database the read
- * cannot answer and the layout renders for a canned cookie.
+/*
+ * The settings route reads the session in process, so these tests ask for
+ * Noor from the per-worker fixture (./fixtures.ts, task J1): against a
+ * seeded server that is the worker's one real session for her; without a
+ * database the read cannot answer and the layout renders for the canned
+ * cookie.
  */
-async function sessionCookies(page: Page, origin: string): Promise<CookiesToAdd> {
-  if (seededCookies === undefined) {
-    const response = await page.request.post("/api/auth/sign-in/email", { data: seededPersona });
-    seededCookies = response.ok() ? await page.context().cookies(origin) : null;
-  }
-  if (seededCookies !== null) return seededCookies;
-  return [{ name: "better-auth.session_token", value: "e2e-canned", url: origin }];
-}
-
-async function signedIn(page: Page) {
-  const base = test.info().project.use.baseURL ?? "http://127.0.0.1:3000";
-  await page.context().addCookies(await sessionCookies(page, new URL(base).origin));
-}
-
 test.describe("the sound settings", () => {
-  test.beforeEach(async ({ page }) => {
-    await installProbe(page);
-    await signedIn(page);
+  test.beforeEach(async ({ noor }) => {
+    await installProbe(noor);
   });
 
   test("stores the level and quiet hours on the device and silences the sample", async ({
-    page,
+    noor: page,
   }) => {
     await page.goto("/settings/sound");
     await expect(page.getByRole("heading", { level: 1, name: "Sound" })).toBeVisible();
@@ -299,7 +280,7 @@ test.describe("the sound settings", () => {
   });
 
   for (const theme of ["light", "dark"] as const) {
-    test(`has no axe violations in ${theme} mode`, async ({ page }) => {
+    test(`has no axe violations in ${theme} mode`, async ({ noor: page }) => {
       await expectNoAxeViolations(page, "/settings/sound", theme);
     });
   }

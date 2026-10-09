@@ -1,21 +1,15 @@
 import AxeBuilder from "@axe-core/playwright";
-import {
-  expect,
-  test,
-  type BrowserContext,
-  type Cookie,
-  type Page,
-  type Route,
-} from "@playwright/test";
+import type { Page, Route } from "@playwright/test";
 import { expectNoAxeViolations } from "./axe";
+import { expect, test } from "./fixtures";
 
 /**
  * The devices and two-step sign-in routes against the production build.
  * The settings layout reads the session through GET /api/v1/me in process,
- * so the cookie the browser carries depends on the server: against a
- * seeded server (CI, task B11) the suite signs in once as a seeded persona
- * and reuses that cookie; without a database the read cannot answer and the
- * layout renders for a canned cookie. Either way every call the pages make
+ * so the signed-in tests ask for Noor from the per-worker fixture
+ * (./fixtures.ts, task J1): against a seeded server (CI, task B11) that is
+ * the worker's one real session for her; without a database the read
+ * cannot answer and the layout renders for the canned cookie. Either way every call the pages make
  * to /api/auth is answered by page.route with a canned body, so the states
  * below never depend on real sessions. Nothing here is tagged @smoke.
  */
@@ -95,39 +89,13 @@ interface Canned {
   twoFactorEnabled?: boolean;
 }
 
-/** A seeded, verified persona without two-step sign-in (packages/db seed cast). */
-const seededPersona = { email: "noor@example.test", password: "tidefern-seed-noor" };
-
 /**
- * The cookies of one real sign-in against a seeded server, read once per
- * worker because Better Auth allows three sign-ins per ten seconds; null
- * when the server has no seeded users (no database), undefined until tried.
- */
-let seededCookies: Cookie[] | null | undefined;
-
-type CookiesToAdd = Parameters<BrowserContext["addCookies"]>[0];
-
-async function sessionCookies(page: Page, origin: string): Promise<CookiesToAdd> {
-  if (seededCookies === undefined) {
-    // page.request shares the context's cookie jar and is never answered by page.route.
-    const response = await page.request.post("/api/auth/sign-in/email", {
-      data: seededPersona,
-    });
-    seededCookies = response.ok() ? await page.context().cookies(origin) : null;
-  }
-  if (seededCookies !== null) return seededCookies;
-  return [{ name: "better-auth.session_token", value: "e2e-canned", url: origin }];
-}
-
-/**
- * A session cookie so the settings layout renders, then the two reads every
- * page starts with. Anything else under /api/auth answers 500 unless a test
- * routes it, so an unexpected call fails loudly instead of reaching a server.
+ * The two reads every page starts with, on a page the fixture signed in as
+ * Noor so the settings layout renders. Anything else under /api/auth
+ * answers 500 unless a test routes it, so an unexpected call fails loudly
+ * instead of reaching a server.
  */
 async function signedIn(page: Page, canned: Canned = {}) {
-  const base = test.info().project.use.baseURL ?? "http://127.0.0.1:3000";
-  const origin = new URL(base).origin;
-  await page.context().addCookies(await sessionCookies(page, origin));
   await page.route("**/api/auth/**", (route) =>
     refusal(route, 500, "UNEXPECTED", "This suite did not expect that call"),
   );
@@ -160,7 +128,9 @@ function deviceRow(page: Page, browser: string) {
 }
 
 for (const theme of ["light", "dark"] as const) {
-  test(`both security routes render with no axe violations in ${theme} mode`, async ({ page }) => {
+  test(`both security routes render with no axe violations in ${theme} mode`, async ({
+    noor: page,
+  }) => {
     await signedIn(page, { twoFactorEnabled: true });
     for (const route of routes) {
       await expectNoAxeViolations(page, route.path, theme);
@@ -171,7 +141,9 @@ for (const theme of ["light", "dark"] as const) {
   });
 }
 
-test("both routes carry their title, one H1, the settings shell and noindex", async ({ page }) => {
+test("both routes carry their title, one H1, the settings shell and noindex", async ({
+  noor: page,
+}) => {
   await signedIn(page);
   for (const route of routes) {
     await page.goto(route.path);
@@ -193,7 +165,7 @@ test("a visitor without a cookie is sent to sign in before anything renders", as
 });
 
 test("a cookie that names no session sends the person to sign in from the first read", async ({
-  page,
+  noor: page,
 }) => {
   await signedIn(page);
   await page.route("**/api/auth/list-sessions", (route) =>
@@ -207,7 +179,7 @@ test("a cookie that names no session sends the person to sign in from the first 
   await expect(page).toHaveURL(/\/sign-in$/);
 });
 
-test("a list that needs a fresh sign-in shows that step, not a reload", async ({ page }) => {
+test("a list that needs a fresh sign-in shows that step, not a reload", async ({ noor: page }) => {
   await signedIn(page);
   // Better Auth's own freshness rule on list-sessions (freshAge, one day by default).
   await page.route("**/api/auth/list-sessions", (route) =>
@@ -227,7 +199,7 @@ test("a list that needs a fresh sign-in shows that step, not a reload", async ({
 });
 
 test("a failed read of this browser's session is a failed load, not a list of strangers", async ({
-  page,
+  noor: page,
 }) => {
   await signedIn(page);
   await page.route("**/api/auth/get-session", (route) =>
@@ -240,7 +212,7 @@ test("a failed read of this browser's session is a failed load, not a list of st
   await expect(page.getByRole("button", { name: "Sign out this device" })).toHaveCount(0);
 });
 
-test("devices lists every session as a device row, this browser first", async ({ page }) => {
+test("devices lists every session as a device row, this browser first", async ({ noor: page }) => {
   await signedIn(page);
   await page.goto("/settings/devices");
   const names = page.locator("p", {
@@ -256,7 +228,7 @@ test("devices lists every session as a device row, this browser first", async ({
 });
 
 test("revoking a device asks first and shows the fresh sign-in step when the server refuses", async ({
-  page,
+  noor: page,
 }) => {
   const bodies: string[] = [];
   await signedIn(page);
@@ -292,7 +264,7 @@ test("revoking a device asks first and shows the fresh sign-in step when the ser
 });
 
 test("revoking a device shows its pending state and keeps the dialog open on a server failure", async ({
-  page,
+  noor: page,
 }) => {
   let release: (() => void) | undefined;
   const held = new Promise<void>((resolve) => {
@@ -317,7 +289,9 @@ test("revoking a device shows its pending state and keeps the dialog open on a s
   await expect(confirm).not.toHaveAttribute("aria-busy", "true");
 });
 
-test("signing out the other devices confirms, then shows only this device", async ({ page }) => {
+test("signing out the other devices confirms, then shows only this device", async ({
+  noor: page,
+}) => {
   let calls = 0;
   await signedIn(page);
   await page.route("**/api/auth/revoke-other-sessions", (route) => {
@@ -343,7 +317,7 @@ test("signing out the other devices confirms, then shows only this device", asyn
 });
 
 test("two-step sign-in moves from the password through the code to the backup codes shown once", async ({
-  page,
+  noor: page,
 }) => {
   const enableBodies: string[] = [];
   const verifyBodies: string[] = [];
@@ -428,7 +402,9 @@ test("two-step sign-in moves from the password through the code to the backup co
   expect(verifyCalls).toBe(2);
 });
 
-test("two-step sign-in turns off with the password and names a wrong one", async ({ page }) => {
+test("two-step sign-in turns off with the password and names a wrong one", async ({
+  noor: page,
+}) => {
   let calls = 0;
   await signedIn(page, { twoFactorEnabled: true });
   await page.route("**/api/auth/two-factor/disable", (route) => {
@@ -452,7 +428,7 @@ test("two-step sign-in turns off with the password and names a wrong one", async
   expect(calls).toBe(2);
 });
 
-test("new backup codes need the password and are shown once", async ({ page }) => {
+test("new backup codes need the password and are shown once", async ({ noor: page }) => {
   await signedIn(page, { twoFactorEnabled: true });
   await page.route("**/api/auth/two-factor/generate-backup-codes", (route) =>
     json(route, { status: true, backupCodes: ["ddddd-44444", "eeeee-55555"] }),
@@ -470,7 +446,7 @@ test("new backup codes need the password and are shown once", async ({ page }) =
   await expect(page.getByRole("status")).toContainText("Your new backup codes are in place.");
 });
 
-test("a stale sign-in on two-step sign-in points at signing in again", async ({ page }) => {
+test("a stale sign-in on two-step sign-in points at signing in again", async ({ noor: page }) => {
   await signedIn(page, { twoFactorEnabled: true });
   await page.route("**/api/auth/two-factor/disable", (route) =>
     refusal(route, 403, "SESSION_NOT_FRESH", "Session is not fresh"),
@@ -489,7 +465,7 @@ test("a stale sign-in on two-step sign-in points at signing in again", async ({ 
   await expect(page.getByText("Two-step sign-in is on.")).toBeVisible();
 });
 
-test("the security routes reflow at 320 px without a horizontal scroll", async ({ page }) => {
+test("the security routes reflow at 320 px without a horizontal scroll", async ({ noor: page }) => {
   await signedIn(page, { twoFactorEnabled: true });
   await page.setViewportSize({ width: 320, height: 700 });
   for (const route of routes) {
