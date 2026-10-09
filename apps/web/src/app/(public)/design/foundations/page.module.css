@@ -4,7 +4,8 @@
 
 .split {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  /* A column never asks for more than the screen has, so the grid fits 320px. */
+  grid-template-columns: repeat(auto-fit, minmax(min(300px, 100%), 1fr));
   gap: var(--space-8);
   margin-bottom: var(--space-6);
 }

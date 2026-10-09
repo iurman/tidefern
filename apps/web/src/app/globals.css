@@ -412,6 +412,8 @@ img {
   vertical-align: top;
   padding: 10px 12px 10px 0;
   border-bottom: 1px solid var(--soft-border);
+  /* A long token, value or file name breaks inside its cell, so the table fits a 320px screen. */
+  overflow-wrap: anywhere;
 }
 .token-table th[scope="row"] {
   font-weight: 500;
@@ -667,6 +669,7 @@ img {
     font-size: 2.75rem;
   }
   .lockup {
+    flex-wrap: wrap;
     padding: var(--space-6);
   }
 }
