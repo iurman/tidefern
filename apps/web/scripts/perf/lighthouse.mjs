@@ -8,8 +8,11 @@
 // simulated throttling, in Playwright's Chromium (PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH wins when
 // set). The median run, picked by Lighthouse's own computeMedianRun, goes in the table.
 // Signed-in routes sign in once per persona through the API and pass the session cookie with
-// --extra-headers; the cookie is never written to disk: Lighthouse's copy of the header is
-// redacted before a report is saved, and a report that still contains it is refused.
+// --extra-headers. Lighthouse saves its report with a copy of that header, including on a run
+// that ends in a runtime error and a nonzero exit, so every report it leaves is rewritten with
+// the header redacted as soon as Lighthouse exits, before the run counts as passed or failed; a
+// report that cannot be read or still contains a cookie value is deleted. Error text is scrubbed
+// of cookie values before it is printed or saved.
 // Reports land in apps/web/perf-reports/<timestamp>/ (gitignored) unless --out says otherwise.
 import { execFileSync, spawn } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
@@ -17,16 +20,16 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { computeMedianRun } from "lighthouse/core/lib/median-run.js";
+import { computeMedianRun, filterToValidRuns } from "lighthouse/core/lib/median-run.js";
 import {
   budgets,
-  containsSecret,
   finalPath,
   formatConditions,
   formatTable,
-  redact,
   runConditions,
   runMetrics,
+  sanitizeReport,
+  scrub,
   verdicts,
 } from "./summary.mjs";
 
@@ -109,7 +112,10 @@ async function signIn(name) {
   return cookies.join("; ");
 }
 
-/** Runs the Lighthouse CLI once and resolves with the parsed result. */
+/**
+ * Runs the Lighthouse CLI once and resolves with its exit code and error output, whatever the
+ * code, so the caller can redact a report Lighthouse saved before it exited nonzero.
+ */
 function lighthouse(url, file, cookie) {
   const flags = [
     lighthouseCli,
@@ -133,10 +139,7 @@ function lighthouse(url, file, cookie) {
     let stderr = "";
     child.stderr.on("data", (chunk) => (stderr += chunk));
     child.on("error", reject);
-    child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`lighthouse exited ${code} for ${url}: ${stderr.slice(-400)}`));
-    });
+    child.on("exit", (code, signal) => resolve({ code: code ?? signal, stderr }));
   });
 }
 
@@ -146,18 +149,28 @@ function spread(all) {
   return { score: range("score"), lcpMs: range("lcpMs"), tbtMs: range("tbtMs") };
 }
 
-/** Reads a raw report, redacts it, refuses it if a secret survived, and rewrites it. */
+/**
+ * Rewrites the report Lighthouse saved with the session header redacted and returns it, or
+ * returns null when Lighthouse saved none. A report that is not valid JSON or still contains a
+ * session value after redaction is deleted.
+ */
 async function sanitize(file, secrets) {
-  const lhr = redact(JSON.parse(await readFile(file, "utf8")));
-  const text = JSON.stringify(lhr, null, 2);
-  if (containsSecret(text, secrets)) {
+  let raw;
+  try {
+    raw = await readFile(file, "utf8");
+  } catch (error) {
+    if (error.code === "ENOENT") return null;
+    throw error;
+  }
+  const clean = sanitizeReport(raw, secrets);
+  if (!clean) {
     await rm(file, { force: true });
     throw new Error(
-      `a session value survived redaction in ${path.basename(file)}; the report was deleted`,
+      `${path.basename(file)} was unreadable or kept a session value after redaction; the report was deleted`,
     );
   }
-  await writeFile(file, text);
-  return lhr;
+  await writeFile(file, clean.text);
+  return clean.lhr;
 }
 
 await mkdir(out, { recursive: true });
@@ -187,29 +200,46 @@ for (const { route, persona } of selected) {
     const file = path.join(out, `${slug}-run${run}.json`);
     process.stdout.write(`${route}${persona ? ` as ${persona}` : ""}, run ${run} of ${runs} ... `);
     try {
-      await lighthouse(`${origin}${route}`, file, cookies.get(persona));
+      const { code, stderr } = await lighthouse(`${origin}${route}`, file, cookies.get(persona));
+      // Redact first: Lighthouse saves the report before it exits nonzero on a runtime error.
       const lhr = await sanitize(file, secrets);
+      if (lhr?.runtimeError) {
+        throw new Error(`runtime error ${lhr.runtimeError.code} (lighthouse exited ${code})`);
+      }
+      if (code !== 0) {
+        throw new Error(`lighthouse exited ${code}: ${scrub(stderr.slice(-400), secrets)}`);
+      }
+      if (!lhr) throw new Error("lighthouse exited 0 but saved no report");
       const landed = finalPath(lhr);
       if (landed !== route) throw new Error(`ended on ${landed}, not ${route}`);
-      if (lhr.runtimeError) throw new Error(`runtime error ${lhr.runtimeError.code}`);
       lhrs.push(lhr);
       const m = runMetrics(lhr);
       console.log(`score ${m.score}, LCP ${Math.round(m.lcpMs)} ms`);
     } catch (error) {
       console.log("failed");
-      failures.push(`${route}${persona ? ` (${persona})` : ""} run ${run}: ${error.message}`);
+      failures.push(
+        `${route}${persona ? ` (${persona})` : ""} run ${run}: ${scrub(error.message, secrets)}`,
+      );
     }
   }
-  if (!lhrs.length) continue;
-  const medianRun = computeMedianRun(lhrs);
+  // computeMedianRun throws when any run lacks an FCP or TTI value; drop those runs first so one
+  // bad run never costs the summary of every route.
+  const valid = filterToValidRuns(lhrs);
+  if (valid.length < lhrs.length) {
+    failures.push(
+      `${route}${persona ? ` (${persona})` : ""}: ${lhrs.length - valid.length} completed runs had no FCP or TTI value and were left out of the median`,
+    );
+  }
+  if (!valid.length) continue;
+  const medianRun = computeMedianRun(valid);
   results.push({
     route,
     persona: persona ?? null,
-    runs: lhrs.length,
-    medianRun: lhrs.indexOf(medianRun) + 1,
+    runs: valid.length,
+    medianRun: valid.indexOf(medianRun) + 1,
     metrics: runMetrics(medianRun),
-    spread: spread(lhrs.map(runMetrics)),
-    perRun: lhrs.map((lhr) => ({ metrics: runMetrics(lhr), conditions: runConditions(lhr) })),
+    spread: spread(valid.map(runMetrics)),
+    perRun: valid.map((lhr) => ({ metrics: runMetrics(lhr), conditions: runConditions(lhr) })),
   });
 }
 

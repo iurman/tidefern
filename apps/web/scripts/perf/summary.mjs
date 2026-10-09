@@ -84,6 +84,29 @@ export function containsSecret(text, secrets) {
   return secrets.some((secret) => secret.length >= 8 && text.includes(secret));
 }
 
+/**
+ * Turns the raw text of a report Lighthouse saved into its redacted form. Returns null when the
+ * text is not a report or a secret survived redaction; the caller then deletes the file.
+ */
+export function sanitizeReport(raw, secrets) {
+  let lhr;
+  try {
+    lhr = redact(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+  const text = JSON.stringify(lhr, null, 2);
+  if (containsSecret(text, secrets)) return null;
+  return { lhr, text };
+}
+
+/** Replaces every secret in free text (a CLI error message) before it is printed or saved. */
+export function scrub(text, secrets) {
+  return secrets
+    .filter((secret) => secret.length >= 8)
+    .reduce((clean, secret) => clean.replaceAll(secret, "[redacted]"), text);
+}
+
 /** Path the run ended on, so a signed-in route that bounced to /sign-in is caught. */
 export function finalPath(lhr) {
   const url = lhr.finalDisplayedUrl ?? lhr.finalUrl ?? lhr.mainDocumentUrl;

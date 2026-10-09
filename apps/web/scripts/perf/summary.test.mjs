@@ -8,7 +8,9 @@ import {
   formatTable,
   redact,
   runMetrics,
+  sanitizeReport,
   scriptTransfer,
+  scrub,
   verdicts,
 } from "./summary.mjs";
 
@@ -86,6 +88,28 @@ test("redact removes the session cookie Lighthouse copied into configSettings", 
   assert.equal(
     redact(lhr({ configSettings: { extraHeaders: null } })).configSettings.extraHeaders,
     null,
+  );
+});
+
+test("sanitizeReport redacts a saved report, including one that ended in a runtime error", () => {
+  const failed = lhr({ runtimeError: { code: "ERRORED_DOCUMENT_REQUEST", message: "500" } });
+  const result = sanitizeReport(JSON.stringify(failed), ["abc123secretvalue"]);
+  assert.ok(result);
+  assert.equal(result.lhr.configSettings.extraHeaders, "[redacted]");
+  assert.equal(result.lhr.runtimeError.code, "ERRORED_DOCUMENT_REQUEST");
+  assert.equal(containsSecret(result.text, ["abc123secretvalue"]), false);
+});
+
+test("sanitizeReport refuses text that is not a report or still holds a secret", () => {
+  assert.equal(sanitizeReport('{"configSettings": {"extraHeaders"', ["abc123secretvalue"]), null);
+  const leaky = lhr({ requestedUrl: "http://127.0.0.1:3252/today?abc123secretvalue" });
+  assert.equal(sanitizeReport(JSON.stringify(leaky), ["abc123secretvalue"]), null);
+});
+
+test("scrub removes secrets from an error message", () => {
+  assert.equal(
+    scrub("bad header Cookie: s=abc123secretvalue; x=1234567", ["abc123secretvalue", "1234567"]),
+    "bad header Cookie: s=[redacted]; x=1234567",
   );
 });
 
