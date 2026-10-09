@@ -204,6 +204,53 @@ test("/account/delete shows the signed-out action without a session", async ({ p
   );
 });
 
+test("the public pages say what is true today: the undo after sign-in, the phone menu, and who sees a child", async ({
+  page,
+}) => {
+  // Review loop 1 (task J3e). Closing is undone by a step on the locked view
+  // after signing in (H7), never by the sign-in alone.
+  for (const path of ["/account/delete", "/design/foundations"]) {
+    await page.goto(path);
+    await expect(page.getByText("Until then, you can sign in and undo it.").first()).toBeVisible();
+    await expect(page.getByText(/Signing in again before then cancels/)).toHaveCount(0);
+  }
+  // The header has had its phone menu since J3b, so it is no longer a known gap.
+  await page.goto("/accessibility");
+  await expect(page.getByRole("heading", { level: 2, name: "Known gaps" })).toBeVisible();
+  await expect(page.getByText(/offers no\s+replacement/)).toHaveCount(0);
+  // A child's record also reaches someone a guardian shares it with (the seed's Pia).
+  await page.goto("/");
+  await expect(
+    page.getByText(/every guardian and by no one else until you share them/),
+  ).toBeVisible();
+  await expect(page.getByText(/every guardian and nobody else/)).toHaveCount(0);
+  // The design hub's chapters are all published.
+  await page.goto("/design");
+  await expect(page.getByText(/planned structure/)).toHaveCount(0);
+});
+
+// Review loop 2 (task J3e): Tab scrolls a footer link only just into view,
+// so at the foot of the page its ring (2px at 4px) lost its bottom edge to the
+// screen. The root's scroll padding keeps room for the whole ring.
+test("tabbing down to the footer shows the focused link's whole ring", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/account/delete");
+  const footer = page.getByRole("contentinfo");
+  const target = footer.getByRole("link", { name: "Privacy", exact: true });
+  let reached = false;
+  for (let step = 0; step < 60 && !reached; step++) {
+    await page.keyboard.press("Tab");
+    reached = await target.evaluate((link) => link === document.activeElement);
+  }
+  expect(reached, "Tab reaches the footer's Privacy link").toBe(true);
+  const ring = await target.evaluate((link) => {
+    const style = getComputedStyle(link);
+    const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    return { bottom: link.getBoundingClientRect().bottom + reach, height: window.innerHeight };
+  });
+  expect(ring.bottom, "the ring's bottom edge is on the screen").toBeLessThanOrEqual(ring.height);
+});
+
 /* ------------------------------------------------------------------------ */
 /* The public header's Sign in and its phone menu (task J3b)                 */
 /* ------------------------------------------------------------------------ */

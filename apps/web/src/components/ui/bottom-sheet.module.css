@@ -155,6 +155,8 @@
   padding: var(--space-4) var(--space-6) 0;
   overflow-y: auto;
   overscroll-behavior: contain;
+  /* Tab scrolls a control far enough inside the body to show its whole ring (2px at 4px), not only its box. */
+  scroll-padding-block: var(--space-4);
 }
 
 .body > :last-child {

@@ -72,7 +72,7 @@ export const authCopy = {
     title: "Reset your password",
     description: "Request a link to choose a new password.",
     heading: "Reset your password",
-    lede: "Enter your email and we send a link to choose a new password.",
+    lede: "Enter your email and we will send you a link to choose a new password.",
     email: { label: "Email" },
     submit: "Send the link",
     pending: "Sending the link",

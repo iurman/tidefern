@@ -19,6 +19,8 @@
   margin: auto;
   overflow: auto;
   overscroll-behavior: contain;
+  /* Tab scrolls a control far enough inside the dialog to show its whole ring (2px at 4px). */
+  scroll-padding-block: var(--space-4);
   animation: enter var(--duration-disclosure) var(--ease-disclosure);
 }
 

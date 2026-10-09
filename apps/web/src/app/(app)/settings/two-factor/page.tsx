@@ -1,3 +1,5 @@
+import { settingsCopy, settingsPaths } from "@/components/pages/settings/copy";
+import { BackLink } from "@/components/ui/back-link";
 import { TextLink } from "@/components/ui/text-link";
 import { pageMetadata } from "@/lib/site";
 import { twoFactorCopy as copy } from "./copy";
@@ -16,6 +18,7 @@ export const metadata = pageMetadata("/settings/two-factor", copy.title, copy.de
 export default function TwoFactorPage() {
   return (
     <section className={styles.page} aria-labelledby="two-factor-title">
+      <BackLink href={settingsPaths.index}>{settingsCopy.back}</BackLink>
       <h1 id="two-factor-title" className={styles.heading}>
         {copy.heading}
       </h1>

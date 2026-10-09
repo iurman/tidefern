@@ -234,3 +234,10 @@
     transition-duration: 0ms;
   }
 }
+
+/* Three options (the child page's Timeline, Growth and Milestones) fit on one row at 320 px. */
+@media (max-width: 380px) {
+  .text {
+    padding-inline: var(--space-2);
+  }
+}

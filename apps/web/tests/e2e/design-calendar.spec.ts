@@ -56,3 +56,19 @@ test("the day list opens each day from a link and names today", async ({ page })
   await expect(rows.first()).toContainText("Today");
   await expect(rows.first()).toHaveAttribute("href", "/log/2026-10-05");
 });
+
+test("every estimated fertile day in the chapter carries the contraception line in its name", async ({
+  page,
+}) => {
+  // Review loop 1 (task J3e): the specimens named a fertile day "fertile window
+  // estimated" alone, where the product's calendar adds architecture 13.10's line.
+  await page.goto(route);
+  const line =
+    "fertile window estimated. An estimate from your logged dates. Not a form of contraception.";
+  expect(await page.getByRole("button", { name: line }).count()).toBeGreaterThan(0);
+  await expect(
+    page.getByRole("button", {
+      name: /fertile window estimated(?!\. An estimate from your logged dates\. Not a form of contraception\.)/,
+    }),
+  ).toHaveCount(0);
+});

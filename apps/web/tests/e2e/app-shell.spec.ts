@@ -100,6 +100,43 @@ test("the quick-log action shows on Today and nowhere else", async ({ noor: page
   await expect(page.getByRole("button", { name: "Log today" })).toHaveCount(0);
 });
 
+/** How far a focused element's outline reaches past the viewport on each side (zero or less is inside). */
+function ringPastViewport(page: Page) {
+  return page.evaluate(() => {
+    const element = document.activeElement as HTMLElement;
+    const style = getComputedStyle(element);
+    const reach = parseFloat(style.outlineOffset) + parseFloat(style.outlineWidth);
+    const box = element.getBoundingClientRect();
+    return {
+      drawn: style.outlineStyle !== "none" && parseFloat(style.outlineWidth) > 0,
+      past: Math.max(
+        -(box.left - reach),
+        -(box.top - reach),
+        box.right + reach - document.documentElement.clientWidth,
+        box.bottom + reach - window.innerHeight,
+      ),
+    };
+  });
+}
+
+// Review loop 2 (task J3e): the tab bar's cells meet the screen's sides and
+// foot, so the global ring (2px at 4px) lost its bottom edge and the first
+// cell's left edge to the screen. The ring is drawn inside the cell.
+test("a focused tab bar cell draws its whole ring inside the screen at 320 px", async ({
+  noor: page,
+}) => {
+  await page.setViewportSize({ width: 320, height: 640 });
+  await page.goto("/settings/sound");
+  const bar = shellNavigation(page).bar;
+  await page.keyboard.press("Tab");
+  for (const name of ["Today", "Settings"]) {
+    await bar.getByRole("link", { name, exact: true }).focus();
+    const ring = await ringPastViewport(page);
+    expect(ring.drawn, `${name} draws a ring`).toBe(true);
+    expect(ring.past, `${name}'s ring stays on the screen`).toBeLessThanOrEqual(0);
+  }
+});
+
 test("a visitor without a session is sent to sign in before anything renders", async ({
   page,
   request,

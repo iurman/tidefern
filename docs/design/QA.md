@@ -25,6 +25,95 @@ named run in CI.
 | Public header Menu button, open (`apps/web/src/app/globals.css`) | low | Review of J3b: the only open cue was the `--panel` fill, about 1.1:1 on the dark bar, and phones hide the icon swap, so in dark the open button looked closed | The open button takes the pressed chip's action fill, text and border, which hold in both themes | `public.spec.ts` (the open button's fill and border differ from the closed one and from the bar in both themes); `J3b-evidence/J3b-header-open-*` |
 | Public header phone panel (`apps/web/src/app/globals.css`) | low | Review of J3b: the panel snapped between `display: none` and `flex`, against DESIGN.md section 7's disclosure motion | The panel fades and lifts 6 px over `--duration-disclosure` on `--ease-disclosure` (`@starting-style` and a discrete `display` transition), and lands at once under reduced motion | `public.spec.ts` waits for the open panel to settle at full opacity before axe |
 
+## Copy
+
+Review loop 1 (task J3e, 2026-10-09). Every public route, every `/design`
+chapter and every signed-in route in the states the seed shows (Noor's
+cycle, Mira's postpartum with Ilo and Sol and her ended pregnancy, Lena's
+pregnancy, Theo and Pia sharing, fresh accounts in each stage before their
+first log, `/welcome`, `/closing`) were read in context with every
+disclosure, sheet and dialog open, plus titles, descriptions and labels,
+against a production build on the seeded database at
+`TIDEFERN_FAKE_NOW=2026-10-05`. The humanize-writing scan found no banned
+vocabulary, no em dash and no sycophantic or chatbot phrasing on any page;
+the 13.10 templates read word for word on Today, Calendar and the day
+sheet, the contraception line sits on every fertile-window element of the
+product, and no partner's view carries the pointing-to-care sentence.
+Captures cited below are in `docs/design/qa/` (before and after pairs are
+named `before-*` and `after-*`). The folder holds those, one desktop and
+one phone capture of every route and state in each theme from the final
+build, and the dialogs, footers and focus captures named under "Visual":
+420 JPEGs at quality 55, 9.7 MB on disk.
+
+| location | severity | evidence | correction | verification |
+| --- | --- | --- | --- | --- |
+| `/account/delete` paragraph and the `/design/foundations` destructive example | high | `qa/before-account-delete-390-light.jpg`: "Signing in again before then cancels this." Since H7, signing in alone cancels nothing; the undo is a step on `/closing` | Both carry the voice table's line, "Until then, you can sign in and undo it." (CONTENT.md, "Copy review (J3e)") | `public.spec.ts` "the public pages say what is true today"; `qa/after-account-delete-390-light.jpg` |
+| Home page, Childhood (`components/public/home-copy.ts`) | high | `qa/before-home-footer-1440-light.jpg`: "shared with every guardian and nobody else", while a guardian can grant a child to someone else (the seed's Pia reads Sol); a privacy claim that does not trace is removed (CLAIMS.md section 4) | "seen by every guardian and by no one else until you share them" | `public.spec.ts` (same test); `qa/after-home-footer-1440-light.jpg`. The register row in `docs/CLAIMS.md` 3.1 now carries the same claim, backed by the 8.2 `child` category (approved by the lead in this pull request) |
+| `/design/components/calendar` specimens (`components/ui/specimens/calendar.tsx`) | high | The pass 1 label dump: each fertile day named "fertile window estimated" alone, where 13.10 puts "An estimate from your logged dates. Not a form of contraception." on every fertile-window element and the product's calendar does | The specimen windows use the product's words with `CONTRACEPTION_LINE` | `design-calendar.spec.ts` "every estimated fertile day in the chapter carries the contraception line in its name" |
+| `/accessibility`, Known gaps | medium | `qa/before-accessibility-gaps-390-dark.jpg` (the section from the build before this pass): "the header hides its navigation links and offers no replacement yet", untrue since J3b's phone menu; "the record that will hold the manual results does not exist yet", while this file exists | The header gap is removed; the manual passes line keeps only what is still true | `public.spec.ts` (same test); `qa/after-accessibility-gaps-390-dark.jpg`, the same section from the final build |
+| `/design` intro | medium | `qa/before-design-hub-390-light.jpg`: "The seven chapters below are the planned structure; this page already exposes..." is build narration and no longer true (COVERAGE.md says so too) | "The seven chapters below render the real tokens and components, and the files here are the live exports." | `public.spec.ts` (same test); `qa/after-design-hub-390-light.jpg` |
+| `/settings/sound`, quiet hours | medium | `qa/before-settings-sound-390-light.jpg`: "Times follow this device's clock until your profile carries a time zone." shown to Noor, whose profile has one | "Times follow this device's clock." | `settings.spec.ts` "sound, devices and two-step sign-in each open with the way back to Settings"; `qa/after-settings-sound-390-light.jpg` |
+| Consent record, "Processed by" (`/settings`, `/settings/consent`) | medium | `qa/noor-settings-consent-1440-light.jpg`: "holds the allowlisted request logs and the secrets", "Source code and CI logs", "no personal data in Phase 1" are internal words on a customer page | None here: the lines are the API's `PROCESSORS` (`packages/api/src/routes/profile.ts`) and part of the consent disclosure; `[OWNER]` with the attorney's review of the consent text (CONTENT.md) | Owner input |
+| Sol's growth chart, the care sentence | medium | `qa/mira-sol-growth-390-light.jpg`: "This is worth mentioning to your doctor or midwife." under a 30-month-old's chart, word for word from 13.10 | None: a pediatrician wording needs a new 13.10 row; `[OWNER]` in CONTENT.md | Owner input |
+| Theo's `/calendar` (the `none` stage) | medium | `qa/theo-calendar-390-light.jpg`: "Nothing logged this month. Days you log show here with their flow and symptoms." for a stage that cannot log | None: `[OWNER]` in CONTENT.md (a line for that stage, or no calendar) | Owner input |
+| `/design` hub token table and `/design/color`, `data-fertile` | medium | `qa/design-hub-1440-light.jpg`: "predicted windows are dashed", where DESIGN.md 6 draws estimated windows dotted | The `use` field in `packages/design-tokens/tokens.json` now says "estimated windows are dotted" (approved by the lead in this pull request) | `pnpm tokens:check` in `pnpm check` |
+| `/design/color`, theme behavior | low | `qa/design-color-390-light.jpg`: only clearing site data was named as the way back to following the system, while Settings now has Follow system | Names Follow system in Settings first | Pass 2 text dump of `/design/color` |
+| `/reset` lede | low | `qa/before-reset-390-light.jpg`: "Enter your email and we send a link..." | "Enter your email and we will send you a link to choose a new password." | `qa/after-reset-390-light.jpg` |
+| Postpartum feeding line | low | `qa/mira-today-390-light.jpg` and `qa/mira-calendar-390-light.jpg`: two different placeholders for one owner sentence | None: one `[OWNER]` line replaces both (CONTENT.md) | Owner input |
+| `/verify` title | low | `qa/pub-verify-1440-light.jpg`: title "Verify your email", heading "Confirm your email" | None: `auth.spec.ts` pins the title; `[OWNER]` picks one word | Owner input |
+| Both 404 pages | low | `qa/pub-404-1440-light.jpg`, `qa/noor-404-app-390-light.jpg`: the public 404 keeps the home title and description, the in-shell one the route's | None: Next reads a not-found page's metadata only from `global-not-found`, a structural change | Follow-up for the lead |
+
+## Visual
+
+Review loop 2 (task J3e, 2026-10-09). Every route and state above in both
+themes at 1440, 1024, 390 and 320 px and at 200 percent zoom, emulated as
+a browser zoom (a 640 CSS px viewport at device scale 2, which is what 200
+percent zoom lays out on a 1280 px window), from a local extension of the
+lead's capture tool: about 1,300 captures over two passes, each checked
+for sideways overflow and elements past the viewport (none at any width),
+and reviewed as contact sheets of the first screen of every view, with the
+full page opened where a sheet showed something. A sample of the 1024 px and
+200 percent zoom views is kept in the folder, one per route family in light
+(`qa/pub-home-`, `qa/noor-today-`, `qa/noor-calendar-`, `qa/mira-family-` and
+`qa/lena-journey-` `1024-light.jpg` and `zoom200-light.jpg`); nothing at
+either size needed a fix. The footer clears the
+fixed tab bar on every app route (`qa/*-foot-*.jpg`); dialogs and sheets
+sit on the page scrim in both themes and scroll inside themselves at 320 px
+(`qa/lena-ending-dialog-390-light.jpg`, `qa/noor-day-dialog-1440-dark.jpg`);
+each screen keeps one warmth surface; no image is inverted in dark. The
+pages taller than a JPEG allows (the structure chapter at phone width and
+zoom) were captured as their first screen, and the sweep's overflow and
+viewport checks still ran over their full length.
+
+Focus geometry was added after review (pass 3). A keyboard sweep pressed
+Tab through every public route, every `/design` chapter and every seeded
+persona's routes at 1440 and 320 px in both themes: 5,394 focused elements,
+each checked for a drawn ring, the ring's reach past the viewport, an
+ancestor whose overflow cuts it, and the fixed tab bar covering it. The
+segmented control, the day cells, the `BackLink`, the tab bar and the phone
+header's Menu were also captured focused in both themes
+(`qa/focus-targets-320.jpg`, `qa/focus-targets-1440.jpg`). The three
+findings are the first three rows below. After the fixes the only flags
+left are textareas taller than the space left in the viewport, where the
+browser scrolls to the caret rather than the whole box, as it should, and
+two "Previous day" flags in the patterns chapter that did not reproduce
+when measured by hand (the ring sits 6 px clear of the sheet body). The
+fresh accounts' empty states were not swept; they use the same components.
+
+| location | severity | evidence | correction | verification |
+| --- | --- | --- | --- | --- |
+| Tab bar cells on phones (`tab-bar.module.css`) | medium | `qa/before-focus-tab-bar-320-light.jpg`: the global ring (2px at 4px) around a focused cell ran past the screen's foot, and past its left side on the first cell, so its bottom edge was never drawn | The ring is drawn just inside the cell (`outline-offset: -2px`), and the chapter's twin shows the same | `app-shell.spec.ts` "a focused tab bar cell draws its whole ring inside the screen at 320 px"; `qa/after-focus-tab-bar-320-light.jpg`, `qa/after-focus-tab-bar-320-dark.jpg` |
+| Any control Tab reaches at the foot of the viewport (`globals.css`) | low | `qa/before-focus-footer-1440-light.jpg`: Tab scrolled the footer's Privacy link only just into view on `/account/delete`, so its ring lost its bottom edge to the screen | The root keeps 16 px of scroll padding at the bottom (the app shell's larger padding for the tab bar still wins below 1024 px) | `public.spec.ts` "tabbing down to the footer shows the focused link's whole ring"; `qa/after-focus-footer-1440-light.jpg` |
+| Controls inside a sheet or dialog that scrolls (`bottom-sheet.module.css`, `dialog.module.css`) | low | `qa/before-focus-sheet-320-light.jpg`: in Noor's Oct 4 sheet at 320 px, Tab left "Share this note with..." at the body's lower edge with its ring cut | Both scrollers keep 16 px of scroll padding top and bottom | `calendar.spec.ts` "a day's sheet over the calendar" (now Tabs to Share at 320 px); `qa/after-focus-sheet-320-light.jpg`, `qa/after-focus-sheet-320-dark.jpg` |
+| Button labels never wrap (`button.module.css`) | low | The focus sweep at 320 px: in the patterns chapter's sheet specimen, which is 188 px wide inside its frame, "Share this note with..." is 219 px and runs 31 px past the body's content, so the body scrolls sideways and the ring's right edge is cut. The product's sheet at 320 px has room (272 px) | None yet: letting a button's label wrap changes the component's pending rule (the label keeps its width), which needs a design decision | Follow-up for the lead |
+| Week strip of `/calendar` list view at 320 px (`day-cell.module.css`) | medium | `qa/before-calendar-list-strip-320-light.jpg`: today's period end, rounded with an unbounded radius on the taller strip item, swept its arc through "Mo" | The window's end radius is half a month row (18 px) everywhere, so the month is unchanged and the strip keeps the same corner | `calendar-edges.spec.ts` "the week strip rounds a window's end like the month grid"; `qa/after-calendar-list-strip-320-light.jpg` |
+| Child page view switch at 320 px (`segmented-control.module.css`) | medium | `qa/before-child-view-switch-320-light.jpg`: "Milestones" wrapped to a second row inside the pill | Segments take 8 px side padding below 381 px, which fits the three on one row at 320 px; the round pill and the scales' own column layout are unchanged | `family.spec.ts` "the child page's Timeline, Growth and Milestones switch stays on one row down to 320 pixels"; `qa/after-child-view-switch-320-light.jpg` |
+| `/settings/sound`, `/settings/devices`, `/settings/two-factor` on phones | medium | `qa/before-settings-sound-390-light.jpg`, `qa/before-settings-devices-390-dark.jpg`, `qa/before-settings-two-factor-390-light.jpg`: no way back to Settings where the rail is absent, unlike every other group (DESIGN.md 3.8) | Each opens with the shared `BackLink` to Settings | `settings.spec.ts` "sound, devices and two-step sign-in each open with the way back to Settings"; the three `qa/after-settings-*` captures |
+| Public footer rule at 1440 px (`globals.css`) | low | `qa/before-home-footer-1440-light.jpg`: the rule ran 64 px past the content on both sides, matching neither the content nor the page edge | The rule sits on the footer grid, so it starts and ends with the content at every width | `qa/after-home-footer-1440-light.jpg` |
+| `/calendar` list view month links at 320 px | low | `qa/after-calendar-list-strip-320-light.jpg`: "Previous month" and "Next month" stack on two 44 px rows | None yet | Follow-up |
+| `/journey` postpartum heading | low | `qa/mira-journey-390-light.jpg`: "Ilo 6 weeks" sets the age in the sans at heading size, where Today pairs the numeral with a serif label | None yet | Follow-up |
+| `/design` chapter heads | low | `qa/design-components-structure-1440-light.jpg`: the breadcrumb ends in "Components" and the eyebrow repeats it | None yet | Follow-up |
+
 ## Behavior and accessibility
 
 Task J3f, loop 3. Already automated before this loop, and run again here
