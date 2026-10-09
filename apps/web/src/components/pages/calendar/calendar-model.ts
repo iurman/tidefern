@@ -23,7 +23,7 @@ import {
 } from "@/components/ui/calendar-dates";
 import type { DayListItem } from "@/components/ui/day-list";
 import { formatChildAge } from "@/lib/child-age";
-import { CONTRACEPTION_LINE } from "@/lib/prediction-copy";
+import { FERTILE_WORDS, OVULATION_WORDS } from "@/lib/prediction-copy";
 
 /**
  * What the calendar draws, from the API's answers (DESIGN.md 3.4, 6.2 and
@@ -275,9 +275,8 @@ export function daySummary(day: CalendarDay): string {
 export const LOGGED_PERIOD_WORDS = "period logged";
 /** The words each day of the predicted period band adds. */
 export const EXPECTED_PERIOD_WORDS = "period expected";
-/** Every fertile-window day carries the contraception line in its own name. */
-export const FERTILE_WORDS = `fertile window estimated. ${CONTRACEPTION_LINE}`;
-export const OVULATION_WORDS = "ovulation estimated";
+/** The fertile and ovulation words live with the prediction copy, so the design specimen says the same. */
+export { FERTILE_WORDS, OVULATION_WORDS };
 
 /**
  * The logged period as solid pills: each run of consecutive days whose flow

@@ -17,6 +17,11 @@ import { formatDay, formatDaySpan, pluralDays } from "@/components/ui/marks-form
 export const CONTRACEPTION_LINE =
   "An estimate from your logged dates. Not a form of contraception.";
 
+/** Every fertile-window day carries the contraception line in its own name (the calendar and its design specimen). */
+export const FERTILE_WORDS = `fertile window estimated. ${CONTRACEPTION_LINE}`;
+/** The words the estimated ovulation day adds to its name. */
+export const OVULATION_WORDS = "ovulation estimated";
+
 /** The footer on every prediction surface. */
 export const PREDICTION_FOOTER =
   "Tidefern gives estimates from what you log. It does not provide medical advice, diagnosis or treatment, and is not a form of birth control. Talk with your doctor or midwife before making health decisions.";
