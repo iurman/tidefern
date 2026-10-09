@@ -10,8 +10,9 @@ Severity: critical blocks a flow or exposes data; high breaks a stated
 rule or an essential path; medium is visible and wrong but has a way
 around; low is polish.
 
-Captures named below live with the wave's evidence (`J1-evidence/`,
-`J3b-evidence/` beside the reports), not in the repository; the specs
+Captures named `qa/...` are in `docs/design/qa/`. The first rows (J3b)
+name captures that stayed with the wave's evidence (`J1-evidence/`,
+`J3b-evidence/` beside the reports), not in the repository. The specs
 named run in CI.
 
 | location | severity | evidence | correction | verification |
