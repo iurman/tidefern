@@ -296,7 +296,8 @@ same value. `pnpm db:grant-login` refuses to run when `VERCEL_ENV` is
 
 ### The seeded topology CI uses
 
-`ci.yml` job `verify` migrates and seeds a `postgres:18.6` service, builds
+`ci.yml` job `verify` migrates a `postgres:18.6` service, runs the pooled
+database check through a PgBouncer service in transaction mode, seeds, builds
 with test-only values, runs the full browser suite against `next start`
 with the job runner, checks the byte budgets, then runs the `@smoke`
 subset against a second server with no database. To reproduce it locally,
@@ -315,7 +316,7 @@ without a database.
 [ -f apps/web/.env.local ] && mv apps/web/.env.local apps/web/.env.local.off
 podman stop tidefern-pg 2> /dev/null || true
 
-export PGPORT=54451 WEBPORT=3281
+export PGPORT=54451 POOLPORT=64451 WEBPORT=3281
 export OWNER_URL=postgresql://postgres:ci-only-postgres-password@127.0.0.1:$PGPORT/tidefern
 export DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$PGPORT/tidefern
 export BETTER_AUTH_SECRET=ci-only-better-auth-secret-0123456789abcdef-not-real
@@ -331,6 +332,34 @@ podman run -d --name tidefern-ci-pg -e POSTGRES_PASSWORD=ci-only-postgres-passwo
 until psql "$OWNER_URL" -tAc 'select 1' > /dev/null 2>&1; do sleep 1; done
 DATABASE_URL_UNPOOLED=$OWNER_URL pnpm db:migrate
 DATABASE_URL_UNPOOLED=$OWNER_URL pnpm db:grant-login
+
+# the pooled check (task J9): PgBouncer in transaction mode in front of the same database,
+# the image and configuration CI's pooled step uses, with the local ports
+mkdir -p /tmp/tidefern-ci-pool
+cat > /tmp/tidefern-ci-pool/pgbouncer.ini <<INI
+[databases]
+tidefern = host=127.0.0.1 port=$PGPORT dbname=tidefern
+
+[pgbouncer]
+listen_addr = 127.0.0.1
+listen_port = $POOLPORT
+unix_socket_dir =
+auth_type = scram-sha-256
+auth_file = /etc/pgbouncer-ci/userlist.txt
+pool_mode = transaction
+default_pool_size = 2
+INI
+echo '"tidefern_app" "ci-only-app-password"' > /tmp/tidefern-ci-pool/userlist.txt
+chmod 755 /tmp/tidefern-ci-pool
+chmod 644 /tmp/tidefern-ci-pool/pgbouncer.ini /tmp/tidefern-ci-pool/userlist.txt
+podman run -d --name tidefern-ci-pool --network host \
+  -v /tmp/tidefern-ci-pool:/etc/pgbouncer-ci:ro,Z \
+  ghcr.io/cloudnative-pg/pgbouncer:1.26.0@sha256:ce54f1133c509f1db8a8092c3f1c761d8c9292065ed6b6698786bb966da4dab9 \
+  /etc/pgbouncer-ci/pgbouncer.ini
+until pg_isready -h 127.0.0.1 -p $POOLPORT > /dev/null 2>&1; do sleep 1; done
+DATABASE_URL=postgresql://tidefern_app:ci-only-app-password@127.0.0.1:$POOLPORT/tidefern \
+  DATABASE_URL_UNPOOLED=$OWNER_URL pnpm --filter @tidefern/db test:integration
+
 DATABASE_URL=$OWNER_URL pnpm db:seed
 pnpm build
 
@@ -346,7 +375,8 @@ env -u DATABASE_URL -u DATABASE_URL_UNPOOLED pnpm --filter web start --port $WEB
 # in the second shell:
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:$WEBPORT pnpm test:e2e --grep @smoke
 
-podman rm -f tidefern-ci-pg
+podman rm -f tidefern-ci-pool tidefern-ci-pg
+rm -rf /tmp/tidefern-ci-pool
 [ -f apps/web/.env.local.off ] && mv apps/web/.env.local.off apps/web/.env.local
 ```
 
@@ -366,6 +396,26 @@ run the same day with a decoy `apps/web/.env.local` holding both database
 URLs: the file moved aside and back, `podman stop` on a missing container
 exited quietly, and the database-free server started with no
 "Environments: .env.local" line and the smoke subset "6 passed (3.0s)".
+
+The pooler runs on the host network and reaches the database on
+`127.0.0.1:$PGPORT`, as CI's does on the runner. It is CloudNativePG's
+PgBouncer 1.26.0 image from GitHub's registry
+(`ghcr.io/cloudnative-pg/pgbouncer`), pinned to the digest of its
+multi-architecture index as `skopeo inspect --raw` gave it on 2026-10-09,
+so neither CI nor this reproduction pulls it from Docker Hub. The image
+takes no environment configuration: its entrypoint is `pgbouncer` and its
+argument the configuration file, so the lines above write
+`pgbouncer.ini` and the user list and mount them (`Z` relabels the folder
+for SELinux; drop it under `docker` without SELinux). With `docker` on a
+machine without host networking, put both containers on one network and
+use the database container's name as the host. The suite
+(`packages/db/src/pooled.integration.test.ts`) connects as
+`tidefern_app` through the pooler with the production client, creates
+and removes its own synthetic rows through the owner URL, and fails
+rather than skips when either URL is missing; it is not part of
+`pnpm test`. J9 ran these lines on 2026-10-09 with `PGPORT=54461` and
+`POOLPORT=64461`: "7 passed", with "backends: 2, backends shared by
+both actors: 2".
 
 ## Environment variables
 
@@ -717,7 +767,7 @@ evidence; nothing is marked done on a statement alone.
 
 | Gate item | Status | Evidence or reason |
 | --- | --- | --- |
-| All of section 15 green | Not done | Green: CI `verify` 37967126983 on `742b53b` runs every layer below in one job, and CodeQL 37967126938 passed on the same head. Not built: the `packages/db` "integration job against `postgres:18` with `NODE_ENV=production` and two concurrent actors through a pooled connection" has no job yet (task J9 adds it to `verify` with a local PgBouncer in transaction mode); the seeded browser suite runs on `postgres:18.6` without a pooler, and the Neon pooler half is B10, blocked on owner items 1 and 2. Not met: the Lighthouse budgets, where LCP misses on every key route (2.71 to 4.66 s) and first-route JavaScript misses by 7 to 20 KB on `/calendar`, `/sharing` and `/settings` (J2, `docs/design/PERFORMANCE.md`) |
+| All of section 15 green | Not done | Green: CI `verify` 37967126983 on `742b53b` runs every layer below in one job, and CodeQL 37967126938 passed on the same head. The `packages/db` integration job against `postgres:18` with `NODE_ENV=production` and two concurrent actors through a pooled connection now runs in `verify` behind PgBouncer 1.26.0 in transaction mode (J9, `pooled.integration.test.ts`; CI 37983313768 and 37987491181); the Neon pooler half is B10, blocked on owner items 1 and 2. Not met: the Lighthouse budgets, where LCP misses on every key route (2.71 to 4.66 s) and first-route JavaScript misses by 7 to 20 KB on `/calendar`, `/sharing` and `/settings` (J2, `docs/design/PERFORMANCE.md`) |
 | Section 15, `packages/core`, `packages/schemas`, `packages/crypto`, `packages/api` (Vitest) | Done | `pnpm check` exit 0 on this branch; CI 37960238068 |
 | Section 15, `packages/db` on PGlite | Done | `packages/db/src/rls.test.ts`, `actor.test.ts`; CI 37960238068 |
 | Section 15, `apps/web` Playwright and axe | Done | 354 browser tests at J1 (#94), the seeded suite in CI 37967126983; J4's local run, 378 passed |

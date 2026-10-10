@@ -1797,7 +1797,7 @@ has a case.
 
 | Question                                                                                                                     | Owner                 | When                                   |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------- |
-| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected (verified on PGlite only)? | build agent | first Neon branch in Phase 1 |
+| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected? Answered for PgBouncer 1.26.0 in transaction mode in front of `postgres:18.6` (task J9, every CI `verify` run): two actors at once on two shared server connections each see only their own rows, and after every transaction, a failed one included, the reused connection shows `role` `none` and an empty `app.actor_id`. Neon's own pooler is still open | build agent | task B10, first Neon branch |
 | Does a SQL-created `LOGIN` role (`tidefern_app`) authenticate through Neon's proxy with a password, so the app never connects as a `BYPASSRLS` role? Fallback in section 7.2 | build agent | task B10 |
 | Does the first Vercel build succeed with pnpm 10 from `packageManager` and the monorepo root install?                        | owner and build agent | first preview                          |
 | Exact `deployment.environment` strings Vercel sends (`Preview`, `Production`) for the smoke workflow filter                  | build agent           | first pull request; log the event once |
