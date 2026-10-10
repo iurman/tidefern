@@ -1648,3 +1648,47 @@ J4 (the launch runbook) is building; it was launched before this claim
 landed, which the plan's rule puts first, and the claim is recorded here.
 Then J6, the final handoff.
 
+### J4 and J9 merged, CI off Docker Hub, session close (2026-10-10, lead session dfc54107)
+
+- J4 (#105, `106071d`, production smoke 37982341676): the launch runbook
+  completed, with one owner list of 30 items grouped by what each blocks
+  (the household launch waits on items 1 to 5) and the Phase 1 gate item
+  by item. The lead refreshed the two gate rows that predated J3's close
+  and added J9 to the plan, claimed, in the same pull request.
+- #108 (`094863a`, production smoke 37995131224): anonymous Docker Hub
+  pulls from shared runners met the unauthenticated rate limit
+  (`toomanyrequests`; three attempts of run 37990905516 on #107, and the
+  Postgres service on run 37991468945). The contract check now runs the
+  oasdiff 1.33.0 release binary checked against a pinned SHA-256 (checked
+  locally: unchanged passes, J3c's approved bounds pass, the same bounds
+  without their approval lines fail), and the Postgres service pulls the
+  same digest from the ECR Public official-image mirror. CI pulls nothing
+  anonymously from Docker Hub any more.
+- J9 (#107, `9880ef7`): the pooled database check of architecture 15 in
+  `verify` (CI 37997226185: PgBouncer 1.26.0, 7 tests, 100 actor
+  transactions over 25 rounds, both actors served by the same 2 server
+  connections; preview smoke 38077604483). Its PgBouncer moved off Docker
+  Hub to CloudNativePG's image on GitHub's registry, run as a step with a
+  generated config. Production smoke for `9880ef7`: not yet read when this
+  entry was written.
+
+Session state: no pull request is open. Every worktree was checked:
+nothing uncommitted or unpushed holds work that is not on `main` (stale
+local branches of merged pull requests remain; `.claude/worktrees/g4-brand`
+holds an index left from an interrupted rebase that only reverts G4's own
+merged work). The lead tools, briefs and reports are backed up outside the
+repository in `~/.cache/tidefern-wave10/` (start with `HANDOFF.md`); their
+scripts carry this session's scratchpad paths.
+
+### Next action
+
+1. Confirm the production smoke for `9880ef7` (the `deployment_status` run
+   of "Verify deployment").
+2. J6: write the final handoff as far as it goes (the preview link of the
+   current head, the QA captures, the verified results above, the open
+   items: the runbook's owner list, the QA rows left open, the Lighthouse
+   LCP misses, Instant Rollback detection), then mark J6 `blocked` on J7,
+   the owner's restore rehearsal.
+3. Every other open task is blocked on the owner (A2 to A4, B10, F5, J7 and
+   the runbook's owner list). Stop there.
+
