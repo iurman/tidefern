@@ -1692,3 +1692,275 @@ scripts carry this session's scratchpad paths.
 3. Every other open task is blocked on the owner (A2 to A4, B10, F5, J7 and
    the runbook's owner list). Stop there.
 
+## 2026-10-11, lead session e0792f90 (the final handoff, task J6)
+
+The owner asked for J6 to be written as far as it can go and then marked
+blocked on J7: "write J6, the final handoff, as far as it can go: the
+head's preview link, the QA captures, the verified results, and the open
+items from docs/LAUNCH_RUNBOOK.md and docs/design/QA.md. Then mark J6
+blocked on J7". J6 needs J7, the restore rehearsal, which waits on owner
+item 1, so protocol rule 3 would not let J6 be claimed; it was claimed on
+that instruction. This entry is the handoff. Nothing in the product
+changed for it.
+
+Owner item numbers here are those of the runbook's one list ("Owner inputs
+still missing" in `docs/LAUNCH_RUNBOOK.md`); the shorter list at the top of
+this log numbers its items differently and is named where it is meant.
+
+The lead tools and briefs the last entry left in `~/.cache/tidefern-wave10/`
+were not in this session's container, which was a fresh one; this session
+worked from this log alone.
+
+### Where it runs
+
+- Production: `https://tidefern.app`, serving the head of `main`. For
+  `be33e96` (#109) the production smoke 38080016302 passed; the smoke for
+  `9880ef7` that the last entry left unread, 38077729972, passed too. Read
+  by hand on 2026-10-11: `/api/v1/health` answered `"status":"ok"`; the
+  home page sent HSTS for two years, `DENY`,
+  `strict-origin-when-cross-origin`, a nonce policy with `strict-dynamic`,
+  `private, no-cache, no-store` and `X-Robots-Tag: noindex, nofollow`; the
+  API sent the same HSTS, frame and referrer values with `private,
+  no-store`; `robots.txt` answered `Disallow: /`.
+- The preview:
+  `https://tidefern-git-claude-j6-final-handoff-iurmans-projects.vercel.app`,
+  this pull request's branch preview, serving the deployment of
+  `b8c6cd4`, the claim commit, which is `be33e96` plus the J6 claim line,
+  so the same app as production. It can only be that deployment: the
+  branch had one push when it was smoked, and owner item 9 (the Neon
+  branch limit) keeps any later push on a branch from being aliased. Its
+  smoke 38108262637 passed (`deploy-verify.yml` by hand with the bypass,
+  as the merge queue does: the page, the health answer, the cross-site
+  refusal and the browser smoke). The URL sits behind Vercel
+  Authentication: open it signed in to the Vercel team, or with the
+  bypass header. It came from the Vercel bot's comment on the pull
+  request, because the Vercel connector still answers 403 for the team
+  (owner item 30) and the commit's Vercel status stays "Vercel is
+  deploying your app", as it did on #109. Later commits on this branch
+  change only this log and the plan; their own deployments are not
+  aliased and their URLs cannot be read here.
+
+### Screenshots
+
+The J3e captures in `docs/design/qa/` are the handoff's screenshots: one
+per route and state at 1440 and 390 px in each theme, beside before and
+after pairs, focus captures and samples at 1024 px and 200 percent zoom,
+420 JPEGs in all. They show the product as it is: since J3e merged
+(`27c8c3b`), nothing under `apps/` changed, and under `packages/` only
+J9's integration suite and its test configuration in `packages/db`
+(`git diff --stat 27c8c3b..be33e96 -- apps packages`). Each name below
+takes `-1440-light.jpg`, `-1440-dark.jpg`, `-390-light.jpg` and
+`-390-dark.jpg`; all four exist for each. The lead opened
+`noor-today-390-dark` and `pub-home-1440-light` again in this session.
+
+| Route | Who | Captures in `docs/design/qa/` |
+| --- | --- | --- |
+| `/` | signed out | `pub-home` |
+| `/sign-in`, `/sign-up` | signed out | `pub-sign-in`, `pub-sign-up` |
+| `/privacy`, `/health-privacy` | signed out | `pub-privacy`, `pub-health-privacy` |
+| `/welcome` | a new account | `welcome-1`, `welcome-2` |
+| `/today` | Noor (cycle), Lena (pregnancy), Mira (postpartum), Theo (no stage) | `noor-today`, `lena-today`, `mira-today`, `theo-today` |
+| `/calendar` | Noor, month and list | `noor-calendar`, `noor-calendar-list` |
+| `/log/[date]` | Noor | `noor-log` |
+| `/journey` | Lena | `lena-journey` |
+| `/family` and a child's page | Mira, with Sol's growth and Ilo's timeline | `mira-family`, `mira-sol-growth`, `mira-ilo-timeline` |
+| `/sharing` | Noor, and Pia, who reads Sol | `noor-sharing`, `pia-sharing` |
+| `/settings` | Noor | `noor-settings` |
+| `/design` | signed out | `design-hub` |
+
+### Verified results
+
+Run in this session on a 4-CPU container with Node 24.21.0 (the
+nodejs.org build, checked against its `SHASUMS256.txt`) and pnpm 10.34.6.
+The application code is `be33e96`'s throughout; this branch changes only
+`docs/`.
+
+- `pnpm check` on `b8c6cd4`: exit 0, 27 of 27 tasks, 15 of them replayed
+  from turbo's cache of two earlier runs on the same inputs; unit tests
+  core 118, schemas 90, api-client 18, crypto 37, db 298, auth 90, api
+  436, web 1,246, plus the web package's 18 `node --test` checks. It ran
+  with `TURBO_CONCURRENCY=2`. The two earlier runs, at turbo's default of
+  10 tasks at once, failed in `packages/crypto` alone:
+  `provisioning.test.ts` and `request-keys.test.ts` timed out in
+  `beforeAll` (30 s) while booting PGlite beside the build, lint and the
+  other suites. Alone the package passes (37 of 37, in 6.4 s and again in
+  7.9 s), and CI runs lint, types, tests and the build as separate steps.
+  An environment failure, not a defect; a follow-up below.
+- The seeded topology of CI's `verify` job, rebuilt here: a fresh local
+  PostgreSQL 18.6 (the PGDG package for Ubuntu 24.04, because the pinned
+  image could not be pulled: ECR Public answered "Data limit exceeded" and
+  Docker Hub 429), migrated, `tidefern_app` given login, seeded at
+  `TIDEFERN_FAKE_NOW=2026-10-05` with CI's test-only values; the
+  production build; `next start` on `127.0.0.1:3281` with the job runner.
+  On it:
+  - the browser suite, in Chrome Headless Shell revision 1194, the
+    container's own (Playwright 1.63 pins 1243, which CI installs and this
+    container may not download): 385 passed (36.1m); the two crosses in
+    its list are the smoke rule's own expected failures, which Playwright
+    counts as passed;
+  - the byte budgets, in the full browser as `docs/design/PERFORMANCE.md`
+    says: "Every route is within its ceilings (10 routes)", first-route
+    script from 165.2 KB on `/` to 220.6 KB on `/calendar`, the same
+    script bytes as CI's and totals within 3 KB of them (`/settings`
+    427.6 KB in both);
+  - the `@smoke` subset on a second server started with no
+    `DATABASE_URL` variable at all: 6 passed (6.2s).
+- How the run above was reached. A first full run, in the container's
+  full Chrome build, gave 378 passed and 7 failed, all in
+  `privacy.spec.ts`'s signed-in walks and all on one request: full Chrome
+  fetches the favicon, which Next.js addresses as
+  `/icon.svg?icon.1xyvdlpyclsr6.svg`, a query key outside the walk's
+  neutral set. The headless shell never requests it, nor does CI's. A
+  second run in the headless shell gave 385 passed (36.7m), but a fault
+  in the lead's script had left the first run's server running, so that
+  run used the old server against a freshly seeded database, and its
+  "database-free" smoke never left the seeded server. The fresh-context
+  review found it; the run above was made with the script fixed (each
+  server's process group stopped and the port seen free before the next
+  starts).
+- CI on `b8c6cd4`, this pull request's claim commit: verify 38107937814
+  and CodeQL passed.
+- CI on `be33e96`: verify 38079968100 passed every step that runs on a
+  push, the pooled check through PgBouncer included, then the browser
+  suite ("385 passed (19.1m)"), the byte budgets ("Every route is within
+  its ceilings (10 routes)") and the smoke subset on a server with no
+  database ("6 passed (2.9s)"); CodeQL 38079968094 passed.
+- Uptime: 22 runs, all passed (20 scheduled, one by hand, one on the push
+  that added the workflow); the newest, 38104244681, at
+  2026-10-11T02:09Z.
+- Not run in this session: the pooled check (CI's `verify` runs it on
+  every push); Lighthouse, last run by J2b on 2026-10-09, before J3
+  changed the pages, so its LCP numbers predate J3's fixes (lab numbers
+  from another machine would not compare, and the gate item below stays
+  not done either way); and anything against Vercel, Neon or GitHub
+  settings.
+
+### The Phase 1 gate (architecture 18)
+
+As the runbook records it, with this session's evidence:
+
+| Gate item | Status |
+| --- | --- |
+| All of section 15 green | Not done. Every layer is green in CI (above), the pooled database check included (J9); the Neon pooler half is B10, blocked. The performance budgets are not met: LCP missed on every key route when J2b last measured it (2.71 to 4.66 s, lab, `docs/design/PERFORMANCE.md`), and the byte step at head still puts first-route script over 200 KB on `/calendar` (220.6 KB), `/sharing` (211.0 KB) and `/settings` (208.3 KB), each inside the ceiling CI holds it to |
+| Unit, PGlite, Playwright and axe, contract, visual, security | Done (the runbook's rows; this session's runs above) |
+| Both themes reviewed on desktop and phone | Done (J3e, the captures above) |
+| QA log closed | Not done: no critical or high row is open; the open rows are listed below, each with an owner |
+| A restore from a Neon branch rehearsed | Blocked on the owner (J7, after owner item 1) |
+| The owner and partner using it daily | Blocked on the owner (items 1 to 5) |
+
+### Open build-plan tasks
+
+| Id | Status | Why, and the owner items that unblock it |
+| --- | --- | --- |
+| A2 | blocked | The bypass value rotated and stored again (stored since 2026-10-04), the plan recorded (stated as Pro), a usage alert (items 25, 18, 26) |
+| A3 | blocked | `staging` and `dev` branches, 7-day retention on production, a consumption notification, `DATABASE_URL` as `tidefern_app` (items 1, 26) |
+| A4 | todo, needs A3 | The Neon integration forking previews from `staging`, the migrating build command, the staging KEK (items 1, 2) |
+| A5 | todo, needs A2 | The required checks and secret scanning with push protection confirmed (item 28) |
+| B10 | todo, needs A3 and A4 | The role and RLS checks on a real Neon branch through its pooler (item 8) |
+| F5 | todo, needs the owner | The WHO permission question (item 22) |
+| J6 | blocked on J7 | This entry; it closes when J7's times are recorded and the gate rows refreshed |
+| J7 | todo, needs A3 | The restore rehearsal with the lead (item 6) |
+
+### Open items
+
+The owner's list is the runbook's "Owner inputs still missing", 30 items
+grouped by what each blocks: the household launch waits on items 1 to 5
+(the production database with its branches, retention and app role; the
+migrating build command and the staging KEK; the production secrets;
+Resend with its domain records, key and sender; `CRON_SECRET` and
+`OWNER_EMAIL`), the Phase 1 gate on 6 to 10, Phase 2 on 11 to 21, later
+steps on 22 to 24, and 25 to 30 are hygiene. One count there is stale:
+item 15 counts 85 `[OWNER]` markers on 80 lines of
+`docs/design/CONTENT.md`, as the file stood at `742b53b` where J4 counted;
+J3e merged after that and added four lines under "Copy review (J3e)", so
+the file now holds 89 on 84.
+
+Engineering items the runbook records:
+
+- An Instant Rollback is not detected: `/api/v1/health` does not report
+  the commit it was built from (still true on 2026-10-11), so
+  `deploy-verify` cannot tell which deployment the domains serve
+  (Rollback).
+- The owner operations panel and its content-free counters
+  (`product_events`) are not built, while the dead-queue email tells the
+  owner to open the panel (Alerts).
+- The `keys.rewrap` job has no handler, so the KEK cannot rotate yet
+  (Secret rotation).
+- GitHub starts the uptime schedule a few times a day, not every 30
+  minutes; a tighter cadence needs an external monitor, which is the
+  owner's choice (Uptime).
+- The performance budgets missed above. `docs/design/PERFORMANCE.md`
+  names the levers: the CSS split per route group or inlined for the
+  first paint, a smaller roman Newsreader (a decision on architecture
+  13.5), the auth client and WebAuthn loaded only when a passkey or fresh
+  sign-in control is used, and the day picker's locale and formatting
+  code loaded more narrowly on `/calendar`.
+
+Rows of `docs/design/QA.md` still open, none critical or high:
+
+- Waiting on an owner input: the consent record's "Processed by" lines
+  (medium; with the attorney's review of the consent text, item 14);
+  under "Copy review (J3e)" in CONTENT.md, the care sentence under a
+  30-month-old's growth chart (medium), Theo's `/calendar` line for a
+  stage that cannot log (medium), the postpartum feeding line (low) and
+  the `/verify` title's one word (low); the sentence the sign-in, sign-up
+  and reset forms show without JavaScript (medium; no CONTENT.md line
+  yet, item 15 of the list at the top of this log); and whether API log
+  lines keep the route template (low, the lead and the owner; item 20).
+- Follow-ups for the lead: the page entrance cascade DESIGN.md 7
+  describes is not built (medium); the 404 pages keep another page's
+  metadata until `global-not-found` (low); button labels never wrap
+  (low); the list view's month links stack at 320 px (low); the
+  postpartum heading on `/journey` sets the age in the sans (low); the
+  `/design` chapter heads repeat the breadcrumb (low); standalone text
+  links under 44 px at 390 (low, a styling call).
+- Two rows read as open but need nothing for their stated purpose. The
+  "Preview deployments" row's correction is "None needed for indexing";
+  J3's close still listed the app's own preview headers, which sit behind
+  Vercel Authentication and were read only as its 302, and the deploy
+  smoke checks the noindex with the bypass on every preview. The "API
+  security headers on Vercel" row still ends "Production re-read after
+  merge: pending"; J3's close recorded that re-read and this entry's
+  production read above repeats it. This pull request leaves QA.md as it
+  is.
+
+New from this session, two follow-ups for the lead, neither a product
+defect:
+
+- On a 4-CPU machine `pnpm check` at turbo's default concurrency can time
+  out the `packages/crypto` PGlite suites (above): a longer hook timeout
+  in that package, or a concurrency limit in the `check` script.
+- `privacy.spec.ts` fails in any browser that fetches favicons, because
+  Next.js puts the media file name in the query of its icon links
+  (`/icon.svg`, `/favicon.ico`, above). The query holds no health fact,
+  so the rule should allow it on those routes, or the suite should say it
+  needs the headless shell.
+
+### The owner's next actions
+
+1. Items 1 to 5, which block the household launch, as the runbook's
+   delivery sections lay them out (Vercel, then Neon, then Resend).
+   Item 1's last step, login for `tidefern_app` on production, follows
+   the first production migration that item 2's build command runs.
+2. The settings that unblock the remaining A tasks: item 26 (A3 needs the
+   consumption notification, and J7 needs A3), items 18 and 25 (A2) and
+   item 28 (A5).
+3. Item 9 (the Neon branch limit), so previews are aliased again, and
+   item 30 (the Vercel connector at team scope), so the lead can read
+   deployments.
+4. Item 10: how a fresh account on a preview verifies its email.
+5. With the lead: J7, the restore rehearsal (item 6), and B10 (item 8).
+6. Then daily use (item 7), and the QA and CONTENT.md owner inputs above
+   when convenient. Items 11 to 21 come before anyone outside the
+   household signs up.
+
+### Next action
+
+Stop, as the owner asked. Every open plan task waits on the owner: A2 and
+A3, and through them A4, A5, B10 and J7; F5 on the WHO permission; J6 on
+J7. The lead follow-ups above (the performance levers, the QA
+follow-ups, Instant Rollback detection, the operations panel, the re-wrap
+job and this session's two) have no plan task and do not wait on the
+owner; this session leaves them for a later one. Resume when the owner
+reports items 1 to 5 and 26 done: then B10 and J7 with the owner, then
+close J6.
