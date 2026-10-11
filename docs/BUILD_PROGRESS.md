@@ -1815,6 +1815,8 @@ The application code is `be33e96`'s throughout; this branch changes only
   review found it; the run above was made with the script fixed (each
   server's process group stopped and the port seen free before the next
   starts).
+- CI on `b8c6cd4`, this pull request's claim commit: verify 38107937814
+  and CodeQL passed.
 - CI on `be33e96`: verify 38079968100 passed every step that runs on a
   push, the pooled check through PgBouncer included, then the browser
   suite ("385 passed (19.1m)"), the byte budgets ("Every route is within
