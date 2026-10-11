@@ -1793,15 +1793,18 @@ The application code is `be33e96`'s throughout; this branch changes only
   `TIDEFERN_FAKE_NOW=2026-10-05` with CI's test-only values; the
   production build; `next start` on `127.0.0.1:3281` with the job runner.
   On it:
-  - the browser suite: {{CLEAN_SUITE}}, in Chrome Headless Shell
-    revision 1194, the container's own (Playwright 1.63 pins 1243, which
-    CI installs and this container may not download);
+  - the browser suite, in Chrome Headless Shell revision 1194, the
+    container's own (Playwright 1.63 pins 1243, which CI installs and this
+    container may not download): 385 passed (36.1m); the two crosses in
+    its list are the smoke rule's own expected failures, which Playwright
+    counts as passed;
   - the byte budgets, in the full browser as `docs/design/PERFORMANCE.md`
     says: "Every route is within its ceilings (10 routes)", first-route
     script from 165.2 KB on `/` to 220.6 KB on `/calendar`, the same
-    totals as CI's (`/settings` 427.6 KB);
+    script bytes as CI's and totals within 3 KB of them (`/settings`
+    427.6 KB in both);
   - the `@smoke` subset on a second server started with no
-    `DATABASE_URL` variable at all: {{CLEAN_SMOKE}}.
+    `DATABASE_URL` variable at all: 6 passed (6.2s).
 - How the run above was reached. A first full run, in the container's
   full Chrome build, gave 378 passed and 7 failed, all in
   `privacy.spec.ts`'s signed-in walks and all on one request: full Chrome
