@@ -1701,6 +1701,10 @@ items from docs/LAUNCH_RUNBOOK.md and docs/design/QA.md. Then mark J6
 blocked on J7". J6 needs J7, the restore rehearsal, which waits on owner
 item 1. This entry is that handoff. Nothing in the product changed for it.
 
+Owner item numbers here are those of the runbook's one list ("Owner inputs
+still missing" in `docs/LAUNCH_RUNBOOK.md`); the shorter list at the top of
+this log numbers its items differently and is named where it is meant.
+
 The lead tools and briefs the last entry left in `~/.cache/tidefern-wave10/`
 were not in this session's container, which was a fresh one; this session
 worked from this log alone.
@@ -1714,18 +1718,24 @@ worked from this log alone.
   home page sent HSTS for two years, `DENY`,
   `strict-origin-when-cross-origin`, a nonce policy with `strict-dynamic`,
   `private, no-cache, no-store` and `X-Robots-Tag: noindex, nofollow`; the
-  API sent
-  the same HSTS, frame and referrer values with `private, no-store` (the
-  production re-read the J3f row on API headers asked for); `robots.txt`
-  answered `Disallow: /`.
-- The head's preview: `{{PREVIEW_URL}}`, the deployment of `b8c6cd4`,
-  this pull request's claim commit, which is `be33e96` plus the J6 claim
-  line, so the same app as production. Its smoke {{PREVIEW_SMOKE}} passed
-  (`deploy-verify.yml` by hand with the bypass, as the merge queue does).
-  The URL sits behind Vercel Authentication: open it signed in to the
-  Vercel team, or with the bypass header. The URL came from that commit's
-  Vercel status, because the Vercel connector still answers 403 for the
-  team (owner item 30).
+  API sent the same HSTS, frame and referrer values with `private,
+  no-store` (the production re-read the J3f row on API headers asked for);
+  `robots.txt` answered `Disallow: /`.
+- The head's preview:
+  `https://tidefern-git-claude-j6-final-handoff-iurmans-projects.vercel.app`,
+  the branch preview of this pull request, serving the deployment of
+  `b8c6cd4`, its claim commit, which is `be33e96` plus the J6 claim line,
+  so the same app as production. It can only be that deployment: the
+  branch had one push when it was smoked, and owner item 9 (the Neon
+  branch limit) keeps any later push on a branch from being aliased. Its
+  smoke 38108262637 passed (`deploy-verify.yml` by hand with the bypass,
+  as the merge queue does: the page, the health answer, the cross-site
+  refusal and the browser smoke). The URL sits behind Vercel
+  Authentication: open it signed in to the Vercel team, or with the
+  bypass header. It came from the Vercel bot's comment on the pull
+  request, because the Vercel connector still answers 403 for the team
+  (owner item 30) and the commit's Vercel status stays "Vercel is
+  deploying your app", as it did on #109.
 
 ### Screenshots
 
@@ -1759,14 +1769,15 @@ Run in this session against `b8c6cd4` (main's code), on a 4-CPU
 container with Node 24.21.0 (the nodejs.org build, checked against its
 `SHASUMS256.txt`) and pnpm 10.34.6:
 
-- `pnpm check`: exit 0 (27 of 27 tasks; unit tests: core 118, schemas 90, api-client 18, crypto 37, db 298, auth 90, api 436, web 1,246). It ran with `TURBO_CONCURRENCY=2`.
-  At turbo's default of 10 tasks at once it failed twice on this
-  container, both times in `packages/crypto` alone: `provisioning.test.ts`
-  and `request-keys.test.ts` timed out in `beforeAll` (30 s) while
-  booting PGlite beside the build, lint and the other suites. Alone the
-  package passes (37 tests in 6.4 s), and CI runs lint, types, tests and
-  the build as separate steps. An environment failure, not a defect;
-  recorded as a follow-up below.
+- `pnpm check`: exit 0 (27 of 27 tasks; unit tests: core 118, schemas
+  90, api-client 18, crypto 37, db 298, auth 90, api 436, web 1,246). It
+  ran with `TURBO_CONCURRENCY=2`. At turbo's default of 10 tasks at once
+  it failed twice on this container, both times in `packages/crypto`
+  alone: `provisioning.test.ts` and `request-keys.test.ts` timed out in
+  `beforeAll` (30 s) while booting PGlite beside the build, lint and the
+  other suites. Alone the package passes (37 tests in 6.4 s), and CI runs
+  lint, types, tests and the build as separate steps. An environment
+  failure, not a defect; recorded as a follow-up below.
 - The seeded browser suite: 385 passed (36.7m), against `next start` on
   `127.0.0.1:3281` with the job runner, on a local PostgreSQL 18.6 (the
   PGDG package for Ubuntu 24.04) migrated, opened to `tidefern_app` and
@@ -1783,7 +1794,9 @@ container with Node 24.21.0 (the nodejs.org build, checked against its
   neutral set. The headless shell never requests it (CI's does not
   either); with it the privacy suite passed 9 of 9 on a fresh seed, then
   the full run above.
-- The byte budgets: "Every route is within its ceilings (10 routes)", with first-route script from 165.2 KB on `/` to 220.6 KB on `/calendar`.
+- The byte budgets: "Every route is within its ceilings (10 routes)",
+  with first-route script from 165.2 KB on `/` to 220.6 KB on
+  `/calendar`.
 - The smoke subset on a server with no database: 6 passed (5.8s).
 - CI on `be33e96`: verify 38079968100 passed every step that runs on a
   push, the pooled check through PgBouncer included, then the browser
@@ -1855,7 +1868,8 @@ Engineering items the runbook records, none of them an owner input:
 Rows of `docs/design/QA.md` still open, none critical or high:
 
 - Waiting on an owner input: the consent record's "Processed by" lines
-  (medium, item 14 of the list at the top of this log); the care sentence
+  (medium, item 14 of the list at the top of this log, inside the
+  runbook's item 14); the care sentence
   under a 30-month-old's growth chart (medium); Theo's `/calendar` line
   for a stage that cannot log (medium); the sentence the sign-in, sign-up
   and reset forms show without JavaScript (medium); the postpartum
