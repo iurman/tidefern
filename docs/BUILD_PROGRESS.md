@@ -1964,3 +1964,7 @@ job and this session's two) have no plan task and do not wait on the
 owner; this session leaves them for a later one. Resume when the owner
 reports items 1 to 5 and 26 done: then B10 and J7 with the owner, then
 close J6.
+
+## 2026-10-22, security dependency upgrade
+
+Updated Next.js to 16.4.2 and React to 19.3.1. Patched compatible dependencies and constrained the optional Vite peer to 8.3.5. `pnpm check` passed all 27 tasks, including unit tests and production build. The production audit has zero high or critical findings and one moderate finding. GitHub checks and production deployment verification remain next. Server maintenance is held by the owner.
