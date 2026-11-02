@@ -99,11 +99,11 @@ try {
     "--security-opt",
     `seccomp=${join(directory, "seccomp_profile.json")}`,
     "--pids-limit=512",
-    "--memory=2g",
+    "--memory=5g",
     "--cpus=2",
     "--shm-size=512m",
     "--tmpfs",
-    "/tmp:rw,nosuid,nodev,size=512m,mode=1777",
+    "/tmp:rw,nosuid,nodev,size=3g,mode=1777",
     "--publish",
     "127.0.0.1::3333",
     "--env",
@@ -157,6 +157,8 @@ try {
     child.once("exit", (code) => accept(code ?? 1));
   });
   if (exitCode !== 0) {
+    const scratch = run(["exec", name, "df", "-k", "/tmp", "/dev/shm"]);
+    console.error(`Browser scratch usage: ${scratch.stdout || scratch.stderr || "unavailable"}`);
     const diagnostics = run(["logs", "--tail", "30", name]);
     console.error(`${diagnostics.stdout || ""}${diagnostics.stderr || ""}`);
   }

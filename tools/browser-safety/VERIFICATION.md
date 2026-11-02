@@ -22,3 +22,5 @@ The root package entrypoint and database-free port 3001 are included. The exact 
 Draft review: https://github.com/iurman/tidefern/pull/113
 
 Latest main was integrated before handoff, preserving upstream application changes. The new byte-budget browser also uses the isolated helper; Lighthouse rejects a local Chromium below the security floor.
+
+The full 385-case CI run exposed trace scratch exhaustion, remote-download path assumptions, retained sequential keyboard focus between route walks and Next's empty icon fingerprint keys. QA now reads the export stream directly, resets the keyboard starting point before preserving every Tab/skip-link assertion and accepts only empty fingerprint keys on the three static icon routes; health and arbitrary query data remain rejected. A real isolated probe resets focus and retains/deletes 768 MiB of synthetic downloads without host mounts, exceeding the former scratch limit. The suite has a 3 GiB tmpfs inside a 5 GiB memory limit and reports scratch usage on failure. Privacy regression, type and scoped lint checks pass before the full CI rerun.
