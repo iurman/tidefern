@@ -1,7 +1,5 @@
 {
   "packageDirectory": "apps/web",
   "playwrightPackage": "@playwright/test",
-  "allowedPorts": [
-    3000
-  ]
+  "allowedPorts": [3000, 3001]
 }

@@ -11,9 +11,7 @@ import { setTimeout as delay } from "node:timers/promises";
 import { assertChromiumVersion, browserNetwork } from "./browser-safety.cjs";
 
 const directory = dirname(fileURLToPath(import.meta.url));
-const settings = JSON.parse(
-  readFileSync(join(directory, "project.json"), "utf8"),
-);
+const settings = JSON.parse(readFileSync(join(directory, "project.json"), "utf8"));
 const packageRoot = resolve(directory, "../..", settings.packageDirectory);
 const require = createRequire(join(packageRoot, "package.json"));
 const packageName = settings.playwrightPackage;
@@ -22,9 +20,7 @@ const chromium = require(packageName).chromium;
 const separator = process.argv.indexOf("--");
 const command = separator === -1 ? [] : process.argv.slice(separator + 1);
 if (!command.length)
-  throw new Error(
-    "Usage: node tools/browser-safety/run.mjs -- <command> [arguments]",
-  );
+  throw new Error("Usage: node tools/browser-safety/run.mjs -- <command> [arguments]");
 if (process.env.PW_TEST_CONNECT_WS_ENDPOINT)
   throw new Error(
     "Unset PW_TEST_CONNECT_WS_ENDPOINT; the isolated runner owns the browser connection.",
@@ -38,8 +34,7 @@ const candidates = [
 ];
 const runtime = candidates.find(
   ([bin, ...prefix]) =>
-    spawnSync(bin, [...prefix, "info"], { stdio: "ignore", timeout: 15_000 })
-      .status === 0,
+    spawnSync(bin, [...prefix, "info"], { stdio: "ignore", timeout: 15_000 }).status === 0,
 );
 if (!runtime)
   throw new Error(
@@ -89,8 +84,7 @@ try {
     ],
     { stdio: "inherit", timeout: 15 * 60_000 },
   );
-  if (interrupted)
-    throw new Error("Browser command interrupted before startup.");
+  if (interrupted) throw new Error("Browser command interrupted before startup.");
   checked([
     "run",
     "--detach",
@@ -117,19 +111,15 @@ try {
     image,
   ]);
   started = true;
-  const mounts = JSON.parse(
-    checked(["inspect", name, "--format", "{{json .Mounts}}"]),
-  );
-  if (mounts.length)
-    throw new Error("Browser container unexpectedly has filesystem mounts.");
+  const mounts = JSON.parse(checked(["inspect", name, "--format", "{{json .Mounts}}"]));
+  if (mounts.length) throw new Error("Browser container unexpectedly has filesystem mounts.");
   const address = checked(["port", name, "3333/tcp"]);
   const port = address.match(/127\.0\.0\.1:(\d+)/)?.[1];
   if (!port) throw new Error(`Unexpected browser port mapping: ${address}`);
   const endpoint = `ws://127.0.0.1:${port}/${token}`;
   let ready = false;
   for (let attempt = 0; attempt < 60; attempt++) {
-    if (interrupted)
-      throw new Error("Browser command interrupted during readiness.");
+    if (interrupted) throw new Error("Browser command interrupted during readiness.");
     const logResult = run(["logs", name]);
     const logs = `${logResult.stdout || ""}${logResult.stderr || ""}`;
     if (logs.includes("Browser sandbox verified; ready.")) {
@@ -141,29 +131,22 @@ try {
     await delay(500);
   }
   if (!ready)
-    throw new Error(
-      "Browser did not pass its sandbox readiness check within 30 seconds.",
-    );
+    throw new Error("Browser did not pass its sandbox readiness check within 30 seconds.");
   const browser = await chromium.connect(endpoint, {
+    timeout: 30_000,
     exposeNetwork: browserNetwork(),
   });
   try {
     assertChromiumVersion(browser.version());
     const page = await browser.newPage();
-    await page.setContent(
-      "<!doctype html><title>isolated browser smoke</title><p>ready</p>",
-    );
-    if ((await page.title()) !== "isolated browser smoke")
-      throw new Error("Browser smoke failed.");
+    await page.setContent("<!doctype html><title>isolated browser smoke</title><p>ready</p>");
+    if ((await page.title()) !== "isolated browser smoke") throw new Error("Browser smoke failed.");
     await page.close();
   } finally {
     await browser.close();
   }
-  if (interrupted)
-    throw new Error("Browser command interrupted before execution.");
-  console.log(
-    `Isolated Chromium passed version, sandbox and page checks (Playwright ${version}).`,
-  );
+  if (interrupted) throw new Error("Browser command interrupted before execution.");
+  console.log(`Isolated Chromium passed version, sandbox and page checks (Playwright ${version}).`);
   child = spawn(command[0], command.slice(1), {
     cwd: process.cwd(),
     stdio: "inherit",

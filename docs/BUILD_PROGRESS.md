@@ -1210,3 +1210,14 @@ merges.
 
 Merge the route-group restructure, then launch H1 to H8 as one wave, then
 J1 to J4 and the owner tasks.
+
+
+## Local browser safety, November 2, 2026
+
+Added a guarded Chromium launch path and a temporary browser container without
+repository, home, credential, profile or container-socket mounts. The real local
+smoke passed with Chromium 156.0.8078.73 and active namespace and Seccomp-BPF
+sandboxes, local HTTP, interaction, screenshots, port restrictions and locked
+launch options. Seven guard checks passed. The source-linked runbook and final
+evidence are in `tools/browser-safety/`. Application deployment is outside this
+change. Full application QA is separate from these tooling checks.

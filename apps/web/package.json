@@ -4,7 +4,7 @@
   "private": true,
   "scripts": {
     "browser:isolated": "node ./../../tools/browser-safety/run.mjs --",
-    "browser:check": "node --test ./../../tools/browser-safety/browser-safety.test.mjs",
+    "browser:check": "node --test ./../../tools/browser-safety/browser-safety.checks.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

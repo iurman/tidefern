@@ -25,17 +25,9 @@ test("rejects all observed old browsers and the vulnerable 1.64.1 bundle", () =>
     "156.0.8078.4",
     "156.0.8078.72",
   ]) {
-    assert.throws(
-      () => assertChromiumVersion(`Chromium ${version}`),
-      /below the security floor/,
-    );
+    assert.throws(() => assertChromiumVersion(`Chromium ${version}`), /below the security floor/);
   }
-  for (const version of [
-    "156.0.8078.73",
-    "156.0.8078.74",
-    "156.0.8079.1",
-    "157.0.0.0",
-  ])
+  for (const version of ["156.0.8078.73", "156.0.8078.74", "156.0.8079.1", "157.0.0.0"])
     assert.equal(assertChromiumVersion(version), version);
   assert.throws(() => assertChromiumVersion("unverified"), /Cannot verify/);
 });
@@ -68,11 +60,9 @@ test("a patched executable preserves requested settings and requires sandboxing"
   const original = process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
   try {
-    writeFileSync(
-      executablePath,
-      "#!/bin/sh\nprintf '%s\\n' 'Chromium 156.0.8078.73'\n",
-      { mode: 0o700 },
-    );
+    writeFileSync(executablePath, "#!/bin/sh\nprintf '%s\\n' 'Chromium 156.0.8078.73'\n", {
+      mode: 0o700,
+    });
     const result = chromiumLaunchOptions(
       { executablePath: () => executablePath },
       { headless: false, args: ["--font-render-hinting=none"] },
@@ -85,22 +75,18 @@ test("a patched executable preserves requested settings and requires sandboxing"
     });
     process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = executablePath;
     assert.equal(
-      chromiumLaunchOptions({ executablePath: () => "not-installed" })
-        .executablePath,
+      chromiumLaunchOptions({ executablePath: () => "not-installed" }).executablePath,
       executablePath,
     );
-    writeFileSync(
-      executablePath,
-      "#!/bin/sh\nprintf '%s\\n' 'Chromium 156.0.8078.4'\n",
-      { mode: 0o700 },
-    );
+    writeFileSync(executablePath, "#!/bin/sh\nprintf '%s\\n' 'Chromium 156.0.8078.4'\n", {
+      mode: 0o700,
+    });
     assert.throws(
       () => chromiumLaunchOptions({ executablePath: () => executablePath }),
       /below the security floor/,
     );
   } finally {
-    if (original === undefined)
-      delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
+    if (original === undefined) delete process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH;
     else process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH = original;
     rmSync(dir, { recursive: true, force: true });
   }
@@ -137,6 +123,7 @@ test("remote endpoints are restricted to loopback and old remote browsers discon
       {
         connectOptions: {
           wsEndpoint: process.env.SAFE_BROWSER_WS_ENDPOINT,
+          timeout: 30_000,
           exposeNetwork: browserNetwork(),
         },
       },
@@ -164,18 +151,12 @@ test("host forwarding requires explicit local application ports", () => {
   const original = process.env.SAFE_BROWSER_ALLOWED_PORTS;
   try {
     process.env.SAFE_BROWSER_ALLOWED_PORTS = "3000,3141";
+    assert.equal(browserNetwork([41234]), "localhost:41234,127.0.0.1:41234,[::1]:41234");
     assert.equal(
       browserNetwork(),
       "localhost:3000,127.0.0.1:3000,[::1]:3000,localhost:3141,127.0.0.1:3141,[::1]:3141",
     );
-    for (const value of [
-      "*",
-      "<loopback>",
-      "0",
-      "65536",
-      "3000,",
-      "example.com:3000",
-    ]) {
+    for (const value of ["*", "<loopback>", "0", "65536", "3000,", "example.com:3000"]) {
       process.env.SAFE_BROWSER_ALLOWED_PORTS = value;
       assert.throws(browserNetwork, /local application ports/);
     }
@@ -202,11 +183,7 @@ test("tracked browser entrypoints cannot bypass the shared launch guard", () => 
     )
       continue;
     const text = readFileSync(join(root, file), "utf8");
-    if (
-      /\bchromium\s*\.\s*(launch|launchPersistentContext|launchServer)\s*\(/.test(
-        text,
-      )
-    )
+    if (/\bchromium\s*\.\s*(launch|launchPersistentContext|launchServer)\s*\(/.test(text))
       failures.push(`${file}: unguarded Chromium launch`);
     if (/--no-sandbox\b/.test(text)) failures.push(`${file}: sandbox disabled`);
   }
