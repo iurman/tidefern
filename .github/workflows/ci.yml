@@ -224,7 +224,7 @@ jobs:
       - name: Browser tests against the seeded production server
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
-        run: pnpm test:e2e
+        run: pnpm browser:isolated pnpm test:e2e
 
       # The smoke subset also runs against production deployments, which have no seeded users and
       # no test database, so it must pass against a server that has no database at all. This second
@@ -268,7 +268,7 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3001
           PLAYWRIGHT_HTML_OUTPUT_DIR: playwright-report/smoke
-        run: pnpm test:e2e --grep "@smoke"
+        run: pnpm browser:isolated pnpm test:e2e --grep "@smoke"
 
       # Each saved pid is the leader of the session setsid opened for it, so its negative names the
       # whole process group: the next CLI and the next-server child it spawned.

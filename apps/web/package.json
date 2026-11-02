@@ -3,6 +3,8 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
+    "browser:isolated": "node ./../../tools/browser-safety/run.mjs --",
+    "browser:check": "node --test ./../../tools/browser-safety/browser-safety.test.mjs",
     "dev": "next dev",
     "build": "next build",
     "start": "next start",

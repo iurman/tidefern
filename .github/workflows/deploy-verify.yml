@@ -124,7 +124,7 @@ jobs:
         env:
           PLAYWRIGHT_BASE_URL: ${{ env.DEPLOY_URL }}
           EXPECT_INDEXABLE: ${{ env.IS_PRODUCTION == 'true' && 'true' || 'false' }}
-        run: pnpm test:e2e --grep "@smoke"
+        run: pnpm browser:isolated pnpm test:e2e --grep "@smoke"
 
       - name: Keep the Playwright report when something fails
         if: failure()
