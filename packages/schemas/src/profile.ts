@@ -1,4 +1,5 @@
-import { z } from "zod";
+import * as z from "zod";
+import { childConsentTextVersions, consentTextVersions, isSupportedTimeZone } from "./constants";
 
 /**
  * The profile, consent and data summary shapes of task E2 (architecture
@@ -9,7 +10,26 @@ import { z } from "zod";
  * declared here as local constants and pinned to their twins by
  * profile.test.ts, so a value added to one list fails a test until it is
  * added to the other.
+ *
+ * The time zone check and the consent catalogs live in the Zod-free
+ * ./constants (task J2b) so client components can read them without Zod;
+ * they are re-exported here, so the root entry keeps them.
  */
+export {
+  CHILD_CONSENT_DISCLOSURES,
+  CONSENT_DISCLOSURES,
+  TERMS_VERSION,
+  childConsentTextVersions,
+  consentTextVersions,
+  isSupportedTimeZone,
+} from "./constants";
+export type {
+  ChildConsentDisclosure,
+  ChildConsentTextVersion,
+  ConsentDisclosure,
+  ConsentDisclosureItem,
+  ConsentTextVersion,
+} from "./constants";
 
 const id = z.uuid().describe("Opaque resource identifier");
 const instant = z.iso.datetime().describe("RFC 3339 instant in UTC");
@@ -27,39 +47,6 @@ const dataCategoryValues = [
   "pregnancy.photos",
   "child",
 ] as const;
-
-let supportedTimeZones: ReadonlySet<string> | null = null;
-
-function supported(): ReadonlySet<string> {
-  if (supportedTimeZones === null) {
-    supportedTimeZones = new Set(Intl.supportedValuesOf("timeZone"));
-  }
-  return supportedTimeZones;
-}
-
-/**
- * Whether the name is an IANA time zone this runtime knows. The first test
- * is `Intl.supportedValuesOf("timeZone")`. That list holds one spelling per
- * zone and the spelling follows the runtime's ICU data, not current IANA:
- * Node 26 lists `Asia/Calcutta` and `Europe/Kiev` but not `Asia/Kolkata`,
- * `Europe/Kyiv` or `UTC`, while a browser may report either spelling. So a
- * name missing from the list is still accepted when `Intl.DateTimeFormat`
- * resolves it to a listed zone or to `UTC`, which admits current names and
- * IANA links and still refuses an unknown name or a bare UTC offset (an
- * offset resolves to itself). The name is stored as sent.
- */
-export function isSupportedTimeZone(value: string): boolean {
-  const zones = supported();
-  if (zones.has(value)) return true;
-  if (!/^[A-Za-z]/.test(value)) return false;
-  let resolved: string;
-  try {
-    resolved = new Intl.DateTimeFormat("en-US", { timeZone: value }).resolvedOptions().timeZone;
-  } catch {
-    return false;
-  }
-  return resolved === "UTC" || zones.has(resolved);
-}
 
 /** An IANA time zone the runtime supports; every calendar fact is read in it. */
 export const TimeZone = z
@@ -87,6 +74,11 @@ export type NotificationDetail = z.infer<typeof NotificationDetail>;
 /** First day of the week, Intl convention: 1 is Monday, 7 is Sunday. */
 export const WeekStart = z.int().min(1).max(7).describe("1 is Monday, 7 is Sunday");
 
+/** A version label such as `2026-10`: letters, digits, dots and hyphens only, never prose. */
+const versionLabel = z
+  .string()
+  .regex(/^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$/, "Expected a version label such as 2026-10");
+
 /**
  * The profile as its owner writes it with `PUT /v1/me/profile`, the whole
  * record each time. `ageAttested` is the sign-up attestation of being 18 or
@@ -94,6 +86,12 @@ export const WeekStart = z.int().min(1).max(7).describe("1 is Monday, 7 is Sunda
  * recorded once as `ageAttestedAt`, and ignored afterwards. The display
  * name is the one plaintext text column a person writes; it is an identity
  * fact a related person may see, never a health fact, and it is capped.
+ * `termsVersion` is the version of the terms the person accepted, sent by
+ * onboarding on every path, the here-for-someone-else one included, where
+ * no consent is asked: accepting the terms is never consent (architecture
+ * record 7.4), so it lives on the profile and not in a consent row. A new
+ * version records a new acceptance instant; the same one, or none, keeps
+ * the last.
  */
 export const ProfileInput = z
   .object({
@@ -107,6 +105,9 @@ export const ProfileInput = z
       .literal(true)
       .optional()
       .describe("The attestation of being 18 or older; required when the profile is created"),
+    termsVersion: versionLabel
+      .optional()
+      .describe("The version of the terms accepted; a new version records a new acceptance"),
   })
   .meta({ id: "ProfileInput" });
 export type ProfileInput = z.infer<typeof ProfileInput>;
@@ -121,6 +122,13 @@ export const Profile = z
     units: Units,
     notificationDetail: NotificationDetail,
     ageAttestedAt: instant.describe("When the person attested to being 18 or older"),
+    termsVersion: z
+      .string()
+      .nullable()
+      .describe("The version of the terms last accepted; null when none was recorded"),
+    termsAcceptedAt: instant
+      .nullable()
+      .describe("When that version was accepted; null when none was recorded"),
     version: z.int().min(1).describe("The value `If-Match` carries on the next update"),
     createdAt: instant,
     updatedAt: instant,
@@ -143,73 +151,28 @@ export type DataCategory = z.infer<typeof DataCategory>;
 export const ConsentBasis = z.enum(["necessary", "consent"]).meta({ id: "ConsentBasis" });
 export type ConsentBasis = z.infer<typeof ConsentBasis>;
 
-/** What a disclosure says about one category: its basis and its purpose sentence. */
-export interface ConsentDisclosureItem {
-  basis: ConsentBasis;
-  purpose: string;
-}
-
-/** One version of the collection consent text as the onboarding page shows it. */
-export interface ConsentDisclosure {
-  /** Every category, so any subset a person is asked about has its sentence. */
-  categories: Readonly<Record<DataCategory, ConsentDisclosureItem>>;
-  /** The processors the page names, as architecture record 9.5 lists them. */
-  processors: readonly string[];
-}
-
-/** The versions of the consent text, oldest first; the last is what the page shows now. */
-export const consentTextVersions = ["2026-10"] as const;
-export type ConsentTextVersion = (typeof consentTextVersions)[number];
+/* The consent catalogs and their version lines live in the Zod-free ./constants (task J2b); see the re-export at the top. */
 
 /**
- * The catalog of consent text, keyed by version. The page renders these
- * sentences and the server writes them into the consent rows, so the
- * plaintext `purpose` column only ever holds the product's own words and
- * never anything a client typed (AGENTS.md: free text only in encrypted
- * fields). A changed sentence is a new version; a version, once shipped, is
- * never edited. The 2026-10 wording is the seed's (packages/db seed); the
- * owner confirms it with the attorney before launch [OWNER].
+ * The guardian's consent as the add-a-child form collected it: the box the
+ * guardian checked (never pre-checked) and the version of the text the form
+ * showed. As with the collection consent, the client sends no sentence.
  */
-export const CONSENT_DISCLOSURES: Readonly<Record<ConsentTextVersion, ConsentDisclosure>> = {
-  "2026-10": {
-    categories: {
-      "cycle.status": {
-        basis: "consent",
-        purpose: "Show a status card to the people you choose.",
-      },
-      "cycle.history": {
-        basis: "necessary",
-        purpose: "Keep the dates you log so the calendar and the estimates work.",
-      },
-      "cycle.symptoms": {
-        basis: "necessary",
-        purpose: "Keep what you log on a day so you can look back at it.",
-      },
-      "journal.private": {
-        basis: "necessary",
-        purpose: "Keep your private notes, readable by you alone.",
-      },
-      "pregnancy.overview": {
-        basis: "necessary",
-        purpose: "Keep your due date, appointments and milestones.",
-      },
-      "pregnancy.photos": {
-        basis: "consent",
-        purpose: "Keep the photos you add to your journey.",
-      },
-      child: {
-        basis: "necessary",
-        purpose: "Keep this child's feeds, sleep, growth and milestones.",
-      },
-    },
-    processors: ["Vercel", "Neon (Databricks, Inc.)", "GitHub", "Resend", "Cloudflare"],
-  },
-};
-
-/** A version label such as `2026-10`: letters, digits, dots and hyphens only, never prose. */
-const versionLabel = z
-  .string()
-  .regex(/^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$/, "Expected a version label such as 2026-10");
+export const GuardianConsentInput = z
+  .object({
+    given: z
+      .literal(true)
+      .describe("Set only by the guardian's own check of the box; the form never pre-checks it"),
+    textVersion: z
+      .enum(childConsentTextVersions)
+      .describe("The version of the guardian's consent text the form showed"),
+  })
+  .meta({
+    id: "GuardianConsentInput",
+    description:
+      "The guardian's consent on the child's behalf; a child is never created without it",
+  });
+export type GuardianConsentInput = z.infer<typeof GuardianConsentInput>;
 
 /**
  * The collection consent as the onboarding page collected it (architecture

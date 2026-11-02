@@ -2,12 +2,13 @@ import { createHash } from "node:crypto";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
-import { and, asc, count, eq, gt, inArray, isNull, ne, or, sql } from "drizzle-orm";
+import { and, asc, count, eq, gt, inArray, isNull, sql } from "drizzle-orm";
 import { can, listScope, stageAfter } from "@tidefern/core";
 import type { Category, Pregnancy, Stage } from "@tidefern/core";
-import { isActorId, schema, withActor, withSystem } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { enqueue, jobId as uuidv7 } from "@tidefern/db/jobs";
+import { isActorId, schema, withActor } from "@tidefern/db";
+import type { Transaction } from "@tidefern/db";
+import { enqueue } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 import {
   CONSENT_DISCLOSURES,
   ConsentInput,
@@ -25,8 +26,9 @@ import type { Consent, ConsentBasis, DataCategory, Processor } from "@tidefern/s
 
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/audit";
+import type { AreaOptions } from "./index";
 import { problem } from "../problem";
+import { lockClosure, revokeAtClosure } from "./account";
 
 /**
  * Task E2: the profile, the collection consent and the data summary
@@ -287,17 +289,6 @@ function actorOf(c: Context<ApiEnv>) {
   return actor;
 }
 
-/**
- * The database the routes open the actor's transaction on: the one the
- * host or a test bound as `db` on the Hono environment, or the db package's
- * production client when nothing is bound, which is the handle the Next.js
- * host passes to `createApp` as well.
- */
-export function databaseFor(c: Context<ApiEnv>): ActorDatabase | undefined {
-  const bindings = c.env as unknown as { db?: ActorDatabase } | undefined;
-  return bindings?.db;
-}
-
 function profileBody(row: ProfileRow): Profile {
   return {
     displayName: row.displayName,
@@ -307,6 +298,8 @@ function profileBody(row: ProfileRow): Profile {
     units: row.units,
     notificationDetail: row.notificationDetail,
     ageAttestedAt: row.ageAttestedAt.toISOString(),
+    termsVersion: row.termsVersion,
+    termsAcceptedAt: row.termsAcceptedAt === null ? null : row.termsAcceptedAt.toISOString(),
     version: row.version,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
@@ -518,6 +511,9 @@ async function putProfile(
         userId: actorId,
         ...fields,
         ageAttestedAt: now,
+        ...(input.termsVersion === undefined
+          ? {}
+          : { termsVersion: input.termsVersion, termsAcceptedAt: now }),
         createdAt: now,
         updatedAt: now,
         version: 1,
@@ -548,9 +544,14 @@ async function putProfile(
   if (refusal !== null) {
     return { kind: "refused", detail: refusal.detail, path: "stage", message: refusal.message };
   }
+  // A new terms version is a new acceptance; the same one, or none, keeps the last.
+  const terms =
+    input.termsVersion === undefined || input.termsVersion === existing.termsVersion
+      ? {}
+      : { termsVersion: input.termsVersion, termsAcceptedAt: now };
   const [row] = await tx
     .update(schema.profiles)
-    .set({ ...fields, updatedAt: now, version: existing.version + 1 })
+    .set({ ...fields, ...terms, updatedAt: now, version: existing.version + 1 })
     .where(and(eq(schema.profiles.userId, actorId), eq(schema.profiles.version, existing.version)))
     .returning();
   // The version guard in the WHERE lost a race with another writer.
@@ -660,15 +661,19 @@ async function decideWithdrawal(
 /**
  * Withdrawing the collection consent starts account closure (architecture
  * record 11), and closure revokes every session and grant at once (7.3 and
- * 11): in one transaction every active consent of hers is withdrawn, every
- * grant she gave or holds is audited and revoked, every session but the
- * one making this request is ended, and the closure request and its job
- * are written. It runs as system for the reasons E8's close gives: a
- * grantee may not update the grants she holds (`grants_update` is the
- * owner's or a guardian's), and Better Auth's `session` table sits outside
- * row level security. The access decision was already made by `can()` in
- * `decideWithdrawal`; every row here is keyed to the signed-in person, and
- * nothing from the request names whose account this is.
+ * 11): in one transaction every active consent of hers is withdrawn, the
+ * closure request and its job are written (or the open closure reused),
+ * every grant she gave or holds is audited and revoked, and every session
+ * but the one making this request is ended, so she can still cancel the
+ * closure from here inside the undo window. It runs in her own
+ * `withActor()` transaction, the one `decideWithdrawal` read in, so it
+ * works on the app role (7.2); `revokeAtClosure` in the account area says
+ * which step her policies refuse and the definer function that takes it.
+ * The closure lock is the close route's, so a close and a withdrawal at
+ * once file one closure between them. The access decision was already made
+ * by `can()` in `decideWithdrawal`; every row here is keyed to the
+ * signed-in person, and nothing from the request names whose account this
+ * is.
  */
 async function withdrawAndClose(
   tx: Transaction,
@@ -677,6 +682,7 @@ async function withdrawAndClose(
   consentId: string,
   now: Date,
 ): Promise<WithdrawOutcome> {
+  await lockClosure(tx, actorId);
   const withdrawn = await tx
     .update(schema.consents)
     .set({ withdrawnAt: now, updatedAt: now, version: sql`${schema.consents.version} + 1` })
@@ -691,53 +697,9 @@ async function withdrawAndClose(
   // A concurrent withdrawal won between the decision and this update.
   if (withdrawn.length === 0) return { kind: "already" };
 
-  // Every grant in either direction, audited before the revoke (the audit
-  // helper's rule), then revoked in one statement.
-  const active = await tx
-    .select({
-      id: schema.grants.id,
-      ownerId: schema.grants.ownerId,
-      category: schema.grants.category,
-      childId: schema.grants.childId,
-    })
-    .from(schema.grants)
-    .where(
-      and(
-        or(eq(schema.grants.ownerId, actorId), eq(schema.grants.granteeId, actorId)),
-        isNull(schema.grants.revokedAt),
-        isNull(schema.grants.deletedAt),
-      ),
-    )
-    .orderBy(asc(schema.grants.createdAt), asc(schema.grants.id));
-  for (const grant of active) {
-    await audit(tx, {
-      actorId,
-      action: auditActions.grantRevoke,
-      subjectId: grant.childId ?? grant.ownerId,
-      category: grant.category,
-      childId: grant.childId ?? undefined,
-      occurredAt: now,
-    });
-  }
-  if (active.length > 0) {
-    await tx
-      .update(schema.grants)
-      .set({ revokedAt: now, updatedAt: now, version: sql`${schema.grants.version} + 1` })
-      .where(
-        inArray(
-          schema.grants.id,
-          active.map((grant) => grant.id),
-        ),
-      );
-  }
-
-  // Every other session; the one making this request stays, so she can
-  // still cancel the closure from here inside the undo window.
-  await tx
-    .delete(schema.session)
-    .where(and(eq(schema.session.userId, actorId), ne(schema.session.id, sessionId)));
-
+  // The request first: the revoke acts only while her closure is open.
   const closure = await startClosure(tx, actorId, now);
+  await revokeAtClosure(tx, actorId, sessionId, now);
   return {
     kind: "withdrawn",
     jobId: closure.jobId,
@@ -998,7 +960,8 @@ async function dataSummary(
 }
 
 /** Adds the profile, consent and data summary routes; called once from the registry. */
-export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
+export function registerProfile(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(getProfileRoute, async (c) => {
     const actor = actorOf(c);
     const [row] = await withActor(
@@ -1009,7 +972,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           .from(schema.profiles)
           .where(and(eq(schema.profiles.userId, actor.id), isNull(schema.profiles.deletedAt)))
           .limit(1),
-      databaseFor(c),
+      db,
     );
     if (row === undefined) return problem(c, 404, "not_found");
     c.header("ETag", `"${row.version}"`);
@@ -1025,7 +988,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const outcome = await withActor(
       actor.id,
       (tx) => putProfile(tx, actor.id, input, ifMatch, now),
-      databaseFor(c),
+      db,
     );
     switch (outcome.kind) {
       case "created":
@@ -1073,7 +1036,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
             })),
           )
           .returning(),
-      databaseFor(c),
+      db,
     );
     rows.sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
     const first = rows[0];
@@ -1119,7 +1082,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
           )
           .orderBy(asc(schema.consents.id))
           .limit(limit + 1),
-      databaseFor(c),
+      db,
     );
     const page = rows.slice(0, limit);
     const last = page[page.length - 1];
@@ -1136,18 +1099,15 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
     const now = new Date();
     const session = c.var.session;
     if (session === null) throw new Error("requireActor must run before the profile handlers");
-    const decision = await withActor(
+    const outcome = await withActor(
       actor.id,
-      (tx) => decideWithdrawal(tx, actor, id),
-      databaseFor(c),
+      async (tx): Promise<WithdrawOutcome> => {
+        const decision = await decideWithdrawal(tx, actor, id);
+        if (decision !== "proceed") return { kind: decision };
+        return withdrawAndClose(tx, actor.id, session.id, id, now);
+      },
+      db,
     );
-    const outcome: WithdrawOutcome =
-      decision === "proceed"
-        ? await withSystem(
-            (tx) => withdrawAndClose(tx, actor.id, session.id, id, now),
-            databaseFor(c),
-          )
-        : { kind: decision };
     switch (outcome.kind) {
       case "missing":
         return problem(c, 404, "not_found");
@@ -1173,7 +1133,7 @@ export function registerProfile(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(dataSummaryRoute, async (c) => {
     const actor = actorOf(c);
-    const body = await withActor(actor.id, (tx) => dataSummary(tx, actor), databaseFor(c));
+    const body = await withActor(actor.id, (tx) => dataSummary(tx, actor), db);
     return c.json(body, 200);
   });
 }

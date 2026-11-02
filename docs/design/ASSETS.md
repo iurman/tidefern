@@ -10,13 +10,17 @@ asset changes; G4 adds the generated raster set.
 | File | Family and axes | Source | Licence | Size | Status |
 | --- | --- | --- | --- | --- | --- |
 | `apps/web/public/fonts/newsreader-latin-opsz-normal.woff2` | Newsreader, opsz 6 to 72, wght 200 to 800 | `@fontsource-variable/newsreader` 5.3.0, Latin subset | SIL OFL 1.1, no Reserved Font Name; `LICENSE-newsreader.txt` beside it | 132 KB | Final (architecture 13.5) |
-| `apps/web/public/fonts/newsreader-latin-wght-italic.woff2` | Newsreader italic, wght 200 to 800 (fixed opsz 16 instance) | same | same | 64 KB | Final; kept knowingly for the estimate sentence |
+| `apps/web/public/fonts/newsreader-latin-wght-italic.woff2` | Newsreader italic, wght 200 to 800 (fixed opsz 16 instance) | same | same | 64 KB | Final; kept for the estimate sentence, not preloaded since J2b |
 | `apps/web/public/fonts/figtree-latin-wght-normal.woff2` | Figtree, wght 300 to 900 | `@fontsource-variable/figtree` 5.3.0, Latin subset | SIL OFL 1.1, no Reserved Font Name; `LICENSE-figtree.txt` | 20 KB | Final |
-| `apps/web/public/fonts/figtree-latin-wght-italic.woff2` | Figtree italic | same | same | 21 KB | Final |
 
 The fontsource builds drop `case`, `sups` and `ordn`; nothing in Phase 1
 needs them (13.5). Loaded with `next/font/local`, `display: swap`, fallback
-metrics from Times New Roman and Arial.
+metrics from Times New Roman and Arial. The two roman files are preloaded
+on every route; the Newsreader italic is a separate call with
+`preload: false`, fetched only where the estimate sentence is set. The
+Figtree italic (`figtree-latin-wght-italic.woff2`, 21 KB) was removed in
+task J2b because no style uses it (the search and the measured effect are
+in `TYPOGRAPHY.md` and `PERFORMANCE.md`).
 
 ## Brand vectors
 

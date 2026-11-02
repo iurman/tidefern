@@ -3,6 +3,8 @@
 export { withActor, withSystem, isActorId } from "./actor";
 export type { ActorDatabase, Transaction } from "./actor";
 export { applyMigrations, migrationConfig } from "./migrate";
+export { auditActions, isAuditAction } from "./audit";
+export type { AuditAction } from "./audit";
 export {
   CLOSURE_TOMBSTONE_MS,
   OPEN_CLOSURE_STATES,

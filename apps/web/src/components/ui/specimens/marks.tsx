@@ -1,3 +1,4 @@
+import type { CyclePrediction } from "@tidefern/schemas";
 import { CycleRing } from "../cycle-ring";
 import { MeasurementChart } from "../measurement-chart";
 import type { ComponentState, SpecimenGroup } from "../specimen";
@@ -20,14 +21,45 @@ const today = "2026-10-05";
 
 const ringError = "We could not load your cycle. Try again.";
 
-/** Four completed cycles of 28 days, the latest start on Sep 24, so today is day 12. */
-const regularStarts = [
-  { date: "2026-06-04" },
-  { date: "2026-07-02" },
-  { date: "2026-07-30" },
-  { date: "2026-08-27" },
-  { date: "2026-09-24" },
-];
+/**
+ * The ring draws the API's answers, so these are GET /v1/cycle/predictions
+ * bodies: four completed cycles of 28 days with the latest start on Sep 24
+ * (GET /v1/cycle/status would say cycle day 12 today), the same day with
+ * one logged period, and two periods too far apart to estimate from.
+ */
+const latestStart = "2026-09-24";
+
+const regular: CyclePrediction = {
+  subjectId: "018f5e7a-5eed-7000-8000-000000000001",
+  computedAt: "2026-10-05T08:00:00.000Z",
+  basis: "estimate",
+  cycleLength: 28,
+  sampleSize: 4,
+  nextPeriod: { expected: "2026-10-22", start: "2026-10-20", end: "2026-10-24" },
+  ovulation: { expected: "2026-10-08", start: "2026-10-06", end: "2026-10-10" },
+  fertileWindow: { start: "2026-10-03", end: "2026-10-08" },
+  uncertaintyDays: 2,
+  ovulationBandDays: 2,
+};
+
+const firstGuess: CyclePrediction = {
+  ...regular,
+  basis: "first_guess",
+  sampleSize: 0,
+  nextPeriod: { expected: "2026-10-22", start: "2026-10-18", end: "2026-10-26" },
+  uncertaintyDays: 4,
+};
+
+const farApart: CyclePrediction = {
+  ...regular,
+  basis: "not_enough_regular_cycles",
+  cycleLength: null,
+  sampleSize: 0,
+  nextPeriod: null,
+  ovulation: null,
+  fertileWindow: null,
+  uncertaintyDays: 4,
+};
 
 const loggedDays = ["2026-09-24", "2026-09-25", "2026-09-26", "2026-09-27", "2026-09-28"];
 
@@ -58,9 +90,9 @@ const childItems: TimelineItem[] = [
     date: "2026-10-02",
     title: "Rolled over",
     detail: "Back to front, on the rug",
-    href: "/family/child/milestones",
+    href: "/family",
   },
-  { key: "smile", date: "2026-05-14", title: "First smile", href: "/family/child/milestones" },
+  { key: "smile", date: "2026-05-14", title: "First smile", href: "/family" },
   { key: "home", date: "2026-02-12", title: "Came home" },
 ];
 
@@ -87,6 +119,17 @@ const lowWeights = [
   { date: "2026-09-29", value: 5400 },
 ];
 
+/**
+ * The same readings as a guardian's API answer carries them: each with its
+ * id and the guardian-only `pointToCare` flag, set on the one reading beyond
+ * 2 SD. The chart follows the flag and computes nothing.
+ */
+const flaggedWeights = lowWeights.map((weight, index) => ({
+  ...weight,
+  id: `measurement-${index + 1}`,
+  pointToCare: index === lowWeights.length - 1,
+}));
+
 export const specimens: SpecimenGroup = {
   slug: "marks",
   title: "Marks and charts",
@@ -96,10 +139,10 @@ export const specimens: SpecimenGroup = {
       name: "Cycle ring",
       source: "apps/web/src/components/ui/cycle-ring.tsx",
       usage: `<CycleRing
-  today="2026-10-05"
-  periodStarts={starts}
+  today={status.date}
+  prediction={prediction}
+  latestStart={latestStartFrom(status)}
   loggedDays={loggedDays}
-  logHref="/log"
 />`,
       keyboard:
         "Not interactive. The ring is an image named by its cycle day; the sentences beside it carry the estimate, the fertile days and the disclaimer. The empty state's action is a link.",
@@ -107,7 +150,8 @@ export const specimens: SpecimenGroup = {
       render: (state) => (
         <CycleRing
           today={today}
-          periodStarts={state === "empty" ? [] : regularStarts}
+          prediction={state === "empty" ? null : regular}
+          latestStart={state === "empty" ? null : latestStart}
           loggedDays={loggedDays}
           loading={state === "loading"}
           error={state === "error" ? ringError : undefined}
@@ -118,20 +162,22 @@ export const specimens: SpecimenGroup = {
       name: "Cycle ring, first guess",
       source: "apps/web/src/components/ui/cycle-ring.tsx",
       usage: `<CycleRing
-  today="2026-10-05"
-  periodStarts={[oneStart]}
+  today={status.date}
+  prediction={firstGuess}
+  latestStart={latestStartFrom(status)}
 />`,
       keyboard:
         "Not interactive. One logged period: the dashed and dotted arcs only, the 28 day default and the first-guess copy.",
       states: defaultOnly,
-      render: () => <CycleRing today={today} periodStarts={[{ date: "2026-09-24" }]} />,
+      render: () => <CycleRing today={today} prediction={firstGuess} latestStart={latestStart} />,
     },
     {
       name: "Cycle ring, not enough regular cycles",
       source: "apps/web/src/components/ui/cycle-ring.tsx",
       usage: `<CycleRing
-  today="2026-10-05"
-  periodStarts={farApart}
+  today={status.date}
+  prediction={farApart}
+  latestStart={latestStartFrom(status)}
   loggedDays={loggedDays}
 />`,
       keyboard:
@@ -140,7 +186,8 @@ export const specimens: SpecimenGroup = {
       render: () => (
         <CycleRing
           today={today}
-          periodStarts={[{ date: "2026-06-04" }, { date: "2026-09-24" }]}
+          prediction={farApart}
+          latestStart={latestStart}
           loggedDays={loggedDays}
         />
       ),
@@ -152,7 +199,7 @@ export const specimens: SpecimenGroup = {
   today="2026-10-05"
   dueDate="2027-01-23"
   method="ultrasound"
-  historyHref="/journey/dating"
+  historyHref="/journey"
 />`,
       keyboard:
         "Tab reaches the History link; Enter follows it. The card itself is not a control. The empty state's action is a link.",
@@ -166,6 +213,19 @@ export const specimens: SpecimenGroup = {
           error={state === "error" ? "We could not load this week. Try again." : undefined}
         />
       ),
+    },
+    {
+      name: "Pregnancy week card, shared",
+      source: "apps/web/src/components/ui/week-card.tsx",
+      usage: `<WeekCard
+  today="2026-10-05"
+  dueDate="2027-01-23"
+  historyHref={null}
+/>`,
+      keyboard:
+        "Not interactive. A grantee's card while the pregnancy continues: no Dating row and no History link, because the API never sends a grantee the dating method and the history is hers alone.",
+      states: defaultOnly,
+      render: () => <WeekCard today={today} dueDate="2027-01-23" historyHref={null} />,
     },
     {
       name: "Pregnancy week card, paused",
@@ -197,7 +257,7 @@ export const specimens: SpecimenGroup = {
           empty={{
             heading: "Nothing marked yet",
             why: "Most children do these by the ages shown. This is not a screening tool; your pediatrician is.",
-            action: { label: "Mark a milestone", href: "/family/child/milestones" },
+            action: { label: "Mark a milestone", href: "/family" },
           }}
         />
       ),
@@ -250,10 +310,15 @@ export const specimens: SpecimenGroup = {
   birthDate="2026-02-10"
   today="2026-10-05"
   viewer="owner"
-  measurements={lowWeights}
+  measurements={answer.items.map((item) => ({
+    id: item.id,
+    date: item.date,
+    value: item.weightGrams,
+    pointToCare: item.pointToCare,
+  }))}
 />`,
       keyboard:
-        "As the measurement chart. A reading beyond plus or minus 2 SD adds the pointing-to-care sentence beneath the chart on the owner's view and never on a partner's.",
+        "As the measurement chart. A reading beyond plus or minus 2 SD adds the pointing-to-care sentence beneath the chart on the owner's view and never on a partner's. On /family/[childId] the sentence follows the API's guardian-only pointToCare flag on each reading, keyed by its id.",
       states: defaultOnly,
       render: () => (
         <MeasurementChart
@@ -261,7 +326,7 @@ export const specimens: SpecimenGroup = {
           indicator="weightForAge"
           birthDate="2026-02-10"
           today={today}
-          measurements={lowWeights}
+          measurements={flaggedWeights}
         />
       ),
     },
@@ -273,12 +338,13 @@ export const specimens: SpecimenGroup = {
   indicator="weightForAge"
   birthDate="2026-02-10"
   today="2026-10-05"
-  units="us"
+  units="imperial"
   viewer="partner"
   measurements={lowWeights}
+  addHref={null}
 />`,
       keyboard:
-        "As the measurement chart. The same low readings in pounds, without the pointing-to-care sentence because a partner is viewing.",
+        "As the measurement chart. The same low readings in pounds (the profile's imperial units), without the pointing-to-care sentence because a partner is viewing; with no readings, a read-only viewer's empty state has no action.",
       states: defaultOnly,
       render: () => (
         <MeasurementChart
@@ -286,9 +352,10 @@ export const specimens: SpecimenGroup = {
           indicator="weightForAge"
           birthDate="2026-02-10"
           today={today}
-          units="us"
+          units="imperial"
           viewer="partner"
           measurements={lowWeights}
+          addHref={null}
         />
       ),
     },

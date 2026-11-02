@@ -43,7 +43,7 @@ export default function DesignHome() {
         <h1>Tokens first, then everything else.</h1>
         <p className="intro">
           This reference is generated from the same source the product uses. The seven chapters
-          below are the planned structure; this page already exposes the live tokens and exports.
+          below render the real tokens and components, and the files here are the live exports.
         </p>
         <p className="design-exports" id="exports">
           {designExports.map((entry) => (

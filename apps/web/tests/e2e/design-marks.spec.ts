@@ -7,7 +7,50 @@ for (const theme of ["light", "dark"] as const) {
   test(`the marks chapter has no axe violations in ${theme} mode`, async ({ page }) => {
     await expectNoAxeViolations(page, route, theme);
   });
+
+  test(`the marks chapter has no axe violations in ${theme} mode at phone width`, async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expectNoAxeViolations(page, route, theme);
+  });
 }
+
+for (const width of [390, 320]) {
+  test(`the marks chapter does not widen the page at ${width} px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 844 });
+    await page.goto(route);
+    const overflow = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(overflow).toBe(0);
+  });
+}
+
+test("the ring draws the API's answer: dashed and dotted arcs for a first guess, none when cycles differ", async ({
+  page,
+}) => {
+  await page.goto(route);
+  const firstGuess = page
+    .getByRole("region", { name: "Cycle ring, first guess", exact: true })
+    .locator('[data-theme="light"] figure')
+    .first();
+  await expect(firstGuess.getByRole("img", { name: "Cycle day 12 of about 28" })).toBeVisible();
+  await expect(firstGuess.locator("path[class*='predicted']")).toHaveCount(1);
+  await expect(firstGuess.locator("path[class*='fertile']")).toHaveCount(1);
+  await expect(firstGuess.locator("path[class*='logged']")).toHaveCount(0);
+  await expect(
+    firstGuess.getByText("around Oct 22, give or take 4 days.", { exact: false }),
+  ).toBeVisible();
+  const differ = page
+    .getByRole("region", { name: "Cycle ring, not enough regular cycles", exact: true })
+    .locator('[data-theme="light"] figure')
+    .first();
+  await expect(differ.getByRole("img", { name: "Cycle day 12" })).toBeVisible();
+  await expect(differ.locator("path[class*='predicted']")).toHaveCount(0);
+  await expect(differ.locator("path[class*='fertile']")).toHaveCount(0);
+  await expect(differ.locator("path[class*='logged']")).toHaveCount(1);
+});
 
 test("the ring and the card are images named by their facts", async ({ page }) => {
   await page.goto(route);

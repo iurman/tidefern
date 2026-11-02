@@ -1,4 +1,5 @@
 import type { RequestActor } from "./actor";
+import type { CalendarClock } from "./clock";
 
 export type Defer = (task: () => Promise<void>) => void;
 
@@ -27,6 +28,11 @@ export interface SessionFacts {
 export interface ApiVariables {
   defer: Defer;
   drainJobs: DrainJobs;
+  /**
+   * The calendar clock (clock.ts) every decision about which calendar day it
+   * is reads; never an instant that is stored or compared with a stored time.
+   */
+  clock: CalendarClock;
   /** Null for an anonymous request. */
   session: SessionFacts | null;
   /** Null for an anonymous request; what `can()` consumes otherwise. */

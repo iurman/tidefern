@@ -127,8 +127,10 @@ export const photoVariants = pgTable(
 /**
  * The append-only audit log (architecture record 7.4 and 11): who did what
  * to whose records, in which category, when, and nothing of the content.
- * `action` is a neutral dotted name owned by the API (`grant.create`,
- * `session.sign_in`), not a vocabulary a person picks from, so it is text.
+ * `action` is a neutral dotted name from `auditActions` in ../audit.ts
+ * (`grant.create`, `session.sign_in`), which the API and the session hooks
+ * in packages/auth both write from; it is not a vocabulary a person picks
+ * from, so it is text.
  * `dedupe_key` is what the writer sets for a partner read, one per actor,
  * subject, category and day, so repeated reads collapse to one row; the
  * partial unique index makes the second insert a no-op. Rows are kept one

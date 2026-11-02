@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { brand } from "@tidefern/design-tokens";
+import { HERO_MARK_PATH, MARK_DARK, MARK_LIGHT } from "./brand-mark";
 
 function resolveSiteUrl(): string {
   if (process.env.SITE_URL) return process.env.SITE_URL;
@@ -22,6 +23,14 @@ export function indexingAllowed(): boolean {
 }
 
 /**
+ * The social card's alt text. Next's file convention reads the root card's
+ * alt from `src/app/opengraph-image.alt.txt` and cannot import it, so that
+ * file holds the same words and a unit test (site.test.ts) pins the two
+ * equal: change one, and the test names the other.
+ */
+export const SOCIAL_CARD_ALT = `${site.name}. ${site.tagline}.`;
+
+/**
  * The social card at the app root (`src/app/opengraph-image.png`). Next
  * applies a file-based card only to pages in its own segment, and the home
  * page sits in the (public) route group, whose own openGraph would hide it,
@@ -33,7 +42,7 @@ const socialCard = {
   width: 1200,
   height: 630,
   type: "image/png",
-  alt: `${site.name}. ${site.tagline}.`,
+  alt: SOCIAL_CARD_ALT,
 };
 
 export function pageMetadata(
@@ -72,5 +81,9 @@ export const SOUND_KEY = "tidefern-sound-v1";
  * choice (light or dark; absent means follow the system) and the sound level
  * (all, actions or off; absent means all). Without JavaScript the stylesheet's
  * prefers-color-scheme block already renders the system theme.
+ *
+ * On the hero page, a stored theme that differs from the system theme also gets
+ * a high-priority preload for the mark it shows: the hero's own preloads follow
+ * prefers-color-scheme, which cannot see the stored choice (task J2b).
  */
-export const preferenceScript = `(function(){var r=document.documentElement;r.dataset.js="true";var t=null;try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.themeSource="system"}else{r.dataset.themeSource="user"}r.dataset.theme=t;var s="all";try{var v=localStorage.getItem("${SOUND_KEY}");if(v==="off"||v==="actions"){s=v}}catch(e){}r.dataset.sound=s;})();`;
+export const preferenceScript = `(function(){var r=document.documentElement;r.dataset.js="true";var t=null;try{t=localStorage.getItem("${THEME_KEY}")}catch(e){}if(t!=="light"&&t!=="dark"){t=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";r.dataset.themeSource="system"}else{r.dataset.themeSource="user"}r.dataset.theme=t;if(r.dataset.themeSource==="user"&&location.pathname==="${HERO_MARK_PATH}"){var d=window.matchMedia&&window.matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";if(d!==t){var l=document.createElement("link");l.setAttribute("rel","preload");l.setAttribute("as","image");l.setAttribute("href",t==="dark"?"${MARK_DARK}":"${MARK_LIGHT}");l.setAttribute("fetchpriority","high");document.head.appendChild(l)}}var s="all";try{var v=localStorage.getItem("${SOUND_KEY}");if(v==="off"||v==="actions"){s=v}}catch(e){}r.dataset.sound=s;})();`;

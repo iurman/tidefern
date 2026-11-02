@@ -1,3 +1,5 @@
+import { settingsCopy, settingsPaths } from "@/components/pages/settings/copy";
+import { BackLink } from "@/components/ui/back-link";
 import { TextLink } from "@/components/ui/text-link";
 import { pageMetadata } from "@/lib/site";
 import { soundCopy as copy } from "./copy";
@@ -18,6 +20,7 @@ export const metadata = pageMetadata("/settings/sound", copy.title, copy.descrip
 export default function SoundSettingsPage() {
   return (
     <section className={styles.page} aria-labelledby="sound-title">
+      <BackLink href={settingsPaths.index}>{settingsCopy.back}</BackLink>
       <h1 id="sound-title" className={styles.heading}>
         {copy.heading}
       </h1>

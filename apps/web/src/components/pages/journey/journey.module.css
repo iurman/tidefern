@@ -1,0 +1,251 @@
+/* /journey (DESIGN.md 3.5): one reading column, the week card first, plain rows after it. Tokens only. */
+
+.page {
+  display: grid;
+  gap: var(--space-8);
+  max-width: var(--size-reading);
+  min-width: 0;
+}
+
+.heading {
+  margin: 0;
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  text-wrap: balance;
+}
+
+.section {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* A pregnancy someone shares: the owner's name over her card. */
+.sectionHeading {
+  margin: 0;
+  font-size: var(--type-subheading);
+  line-height: var(--leading-heading);
+  text-wrap: balance;
+}
+
+.block {
+  display: grid;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.subheading {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+  text-wrap: balance;
+}
+
+.help,
+.quiet {
+  margin: 0;
+  font-size: var(--type-small);
+  color: var(--muted);
+}
+
+.quiet {
+  font-size: var(--type-body);
+}
+
+/* A part of the page that could not be read: one quiet sentence, server rendered, never a live region. */
+.notice {
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  font-size: var(--type-small);
+}
+
+/* The week list: plain rows divided by the soft border; the warmth stays on the card above. */
+.weeks {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.week {
+  display: grid;
+  gap: var(--space-2);
+  padding: var(--space-3) 0;
+  border-top: 1px solid var(--soft-border);
+  min-width: 0;
+}
+
+.weeks > .week:first-child {
+  border-top-color: transparent;
+}
+
+.weekHead {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+}
+
+.weekTitle {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: var(--type-body);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.weekRange {
+  font-size: var(--type-small);
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* A week with nothing in it reads as a calendar line, quieter than one that holds something. */
+.quietWeek .weekTitle {
+  font-weight: var(--weight-sans);
+  color: var(--muted);
+}
+
+/* The week marker: the tide line, labelled in words because the line itself is hidden from assistive technology. */
+.marker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.markerLabel {
+  flex: none;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  letter-spacing: var(--tracking-eyebrow);
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.markerTide {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.events {
+  margin-left: calc(-1 * var(--space-3));
+}
+
+/* A detail she typed can hold a long unbroken word, such as an address; it wraps instead of widening the row. */
+.events p {
+  overflow-wrap: anywhere;
+}
+
+.edit {
+  margin-top: var(--space-1);
+  margin-left: calc(-1 * var(--space-4));
+}
+
+.earlier {
+  margin-bottom: var(--space-2);
+}
+
+.count {
+  font-weight: var(--weight-sans);
+  color: var(--muted);
+}
+
+.addArea {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.addButtons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+}
+
+/* "Something changed? My pregnancy ended": last, quiet, never on warmth. */
+.end {
+  display: grid;
+  gap: var(--space-3);
+  padding-top: var(--space-6);
+  border-top: 1px solid var(--soft-border);
+}
+
+.endPrompt {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 var(--space-2);
+  margin: 0;
+  color: var(--muted);
+}
+
+.endTrigger {
+  margin-left: calc(-1 * var(--space-2));
+}
+
+.feedback {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}
+
+/* The forms inside a dialog: one field anatomy after another. */
+.fields {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.reason {
+  display: grid;
+  gap: var(--space-2);
+}
+
+.support {
+  margin: 0;
+  font-size: var(--type-small);
+}
+
+.removeRow {
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--soft-border);
+}
+
+/* After a birth: the child's name beside the age, numerals in Figtree with tabular figures. */
+.child {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--space-3);
+  margin: 0;
+}
+
+.childName {
+  font-family: var(--font-serif);
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+}
+
+.childAge {
+  font-family: var(--font-sans);
+  font-size: 2rem;
+  font-weight: var(--weight-numeral);
+  font-variant-numeric: tabular-nums;
+  line-height: 1.1;
+}
+
+@media (forced-colors: active) {
+  .week {
+    border-top-color: CanvasText;
+  }
+  .weeks > .week:first-child {
+    border-top-color: transparent;
+  }
+}

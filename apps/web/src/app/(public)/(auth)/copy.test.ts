@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { authCopy, describeAuthFailure, normaliseCode } from "./copy";
+import { authCopy, describeAuthFailure, normalizeCode } from "./copy";
 
 const HEALTH_WORDS = [
   "period",
@@ -117,10 +117,10 @@ describe("describeAuthFailure", () => {
   });
 });
 
-describe("normaliseCode", () => {
+describe("normalizeCode", () => {
   it("drops the spaces an authenticator app or a saved list may carry", () => {
-    expect(normaliseCode(" 123 456 ")).toBe("123456");
-    expect(normaliseCode("ab12-cd34")).toBe("ab12-cd34");
+    expect(normalizeCode(" 123 456 ")).toBe("123456");
+    expect(normalizeCode("ab12-cd34")).toBe("ab12-cd34");
   });
 });
 

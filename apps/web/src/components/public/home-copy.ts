@@ -27,7 +27,7 @@ export const homeCopy = {
       },
       {
         name: "Childhood",
-        text: "Feeds, sleep, growth and firsts, shared with every guardian and nobody else.",
+        text: "Feeds, sleep, growth and firsts, seen by every guardian and by no one else until you share them.",
       },
     ],
   },
@@ -51,7 +51,5 @@ export const homeCopy = {
         text: "Closing your account deletes your data within 14 days, including from our database history. You can undo for 7 days.",
       },
     ],
-    designLead: "Curious how it is built?",
-    designLink: "Explore the design system",
   },
 } as const;

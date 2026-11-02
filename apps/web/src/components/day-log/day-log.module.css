@@ -1,0 +1,10 @@
+.status {
+  margin: 0;
+  color: var(--muted);
+}
+
+.failure {
+  display: grid;
+  gap: var(--space-3);
+  justify-items: start;
+}

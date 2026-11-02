@@ -1,0 +1,87 @@
+/* The locked view inside the flow frame (one column at every width): the state as a heading, the
+   days left as a numeral beside a serif label (signature move 4), the undo, the tide line, then the
+   export. No warmth surface: nothing here is a highlight. */
+
+.view {
+  display: grid;
+  justify-items: start;
+  min-width: 0;
+}
+
+.heading {
+  margin-bottom: var(--space-6);
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+  text-wrap: balance;
+}
+
+.count {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+}
+
+.number {
+  font-family: var(--font-figtree), Arial, sans-serif;
+  font-size: clamp(3rem, 8vw, 4rem);
+  font-weight: var(--weight-numeral);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+
+.label {
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.lastDay {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-newsreader), Georgia, serif;
+  font-size: var(--type-subheading);
+  font-weight: var(--weight-serif);
+  line-height: var(--leading-heading);
+}
+
+.lede {
+  max-width: 42ch;
+  margin-bottom: var(--space-6);
+  color: var(--muted);
+  font-size: var(--type-intro);
+  line-height: 1.5;
+}
+
+.undo {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+}
+
+.tide {
+  max-width: 160px;
+  margin-block: var(--space-12) var(--space-8);
+}
+
+.data {
+  display: grid;
+  justify-items: start;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.subheading {
+  margin: 0;
+  font-size: var(--type-subheading);
+  line-height: var(--leading-heading);
+}
+
+.help {
+  max-width: 52ch;
+  margin: 0 0 var(--space-2);
+  color: var(--muted);
+  font-size: var(--type-small);
+  line-height: 1.5;
+}

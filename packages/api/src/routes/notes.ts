@@ -2,19 +2,18 @@ import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context } from "hono";
 import { and, asc, eq, gt, gte, inArray, isNull, lte, or } from "drizzle-orm";
-import { can, categoriesFor, isKnownTimeZone, projectRow, todayIn } from "@tidefern/core";
+import { can, categoriesFor, isKnownTimeZone, projectRow } from "@tidefern/core";
 import type { Category, SubjectAccess } from "@tidefern/core";
 import {
-  EnvKeyProvider,
   createKeyCache,
   decryptFieldFor,
   encryptFieldFor,
   unwrapForSubject,
 } from "@tidefern/crypto";
-import type { KeyCache, KeyProvider } from "@tidefern/crypto";
+import type { KeyCache } from "@tidefern/crypto";
 import { schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { uuidv7 } from "@tidefern/core";
 import {
   Id,
   Note,
@@ -30,7 +29,8 @@ import {
 import type { RequestActor } from "../actor";
 import { requireActor } from "../auth";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/audit";
+import type { AreaOptions } from "./index";
+import { audit, auditActions, auditDay } from "../middleware/audit";
 import { problem } from "../problem";
 
 /**
@@ -49,27 +49,6 @@ const NOTE_CATEGORIES: readonly NoteCategory[] = noteCategoryValues;
 
 type NoteCategory = (typeof noteCategoryValues)[number];
 type NoteRow = typeof schema.notes.$inferSelect;
-
-/**
- * What a host or a test may hand these routes through Hono's environment
- * slot (`app.fetch(request, env)` and `app.request(path, init, env)`): the
- * database `withActor()` opens the actor's transaction on, and the KEK
- * provider that unwraps data keys. Absent, which is what the Next.js host
- * passes, the production database and `TIDEFERN_KEK_V1` are used. A `db`
- * and `keys` on the request context would replace this; see the E6 report.
- */
-export interface NotesBindings {
-  db?: ActorDatabase | undefined;
-  keys?: KeyProvider | undefined;
-}
-
-/** Reads `TIDEFERN_KEK_V1` on first use, so the contract emitter and a build without it still start. */
-const envKeys = new EnvKeyProvider();
-
-function bindingsOf(c: Context<ApiEnv>): { db: ActorDatabase | undefined; keys: KeyProvider } {
-  const bindings = (c.env ?? {}) as NotesBindings;
-  return { db: bindings.db, keys: bindings.keys ?? envKeys };
-}
 
 /** The signed-in actor; `requireActor` on every route guarantees one. */
 function actorOf(c: Context<ApiEnv>): RequestActor {
@@ -224,9 +203,10 @@ function isUniqueViolation(error: unknown): boolean {
 
 /**
  * The calendar day a partner read is filed under (architecture 8.3 step 6):
- * today in the subject's time zone, never the server clock. The subject's
- * profile row is readable to anyone with an active grant from her; without
- * one the day falls back to UTC.
+ * today in the subject's time zone, never the server's zone, on the real
+ * clock (`auditDay`), because it is the day the read happened. The
+ * subject's profile row is readable to anyone with an active grant from
+ * her; without one the day falls back to UTC.
  */
 async function subjectDay(tx: Transaction, subjectId: string): Promise<string> {
   const [profile] = await tx
@@ -236,7 +216,7 @@ async function subjectDay(tx: Transaction, subjectId: string): Promise<string> {
     .limit(1);
   const timeZone =
     profile !== undefined && isKnownTimeZone(profile.timeZone) ? profile.timeZone : "UTC";
-  return todayIn(timeZone);
+  return auditDay(timeZone);
 }
 
 /**
@@ -305,10 +285,10 @@ async function findNote(tx: Transaction, id: string): Promise<NoteRow | undefine
   return row;
 }
 
-export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
+export function registerNotes(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db, keys: provider } = options;
   app.openapi(createNoteRoute, async (c) => {
     const actor = actorOf(c);
-    const { db, keys: provider } = bindingsOf(c);
     const input = c.req.valid("json");
     const subjectId = input.subject ?? actor.id;
     const category = input.category;
@@ -377,7 +357,6 @@ export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(listNotesRoute, async (c) => {
     const actor = actorOf(c);
-    const { db, keys: provider } = bindingsOf(c);
     const query = c.req.valid("query");
     const subjectId = query.subject ?? actor.id;
     const access = categoriesFor(actor, subjectId);
@@ -456,7 +435,6 @@ export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(getNoteRoute, async (c) => {
     const actor = actorOf(c);
-    const { db, keys: provider } = bindingsOf(c);
     const { id } = c.req.valid("param");
     const keys = createKeyCache();
     try {
@@ -492,7 +470,6 @@ export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(updateNoteRoute, async (c) => {
     const actor = actorOf(c);
-    const { db, keys: provider } = bindingsOf(c);
     const { id } = c.req.valid("param");
     const expected = c.req.valid("header")["If-Match"];
     const input = c.req.valid("json");
@@ -553,7 +530,6 @@ export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(shareNoteRoute, async (c) => {
     const actor = actorOf(c);
-    const { db, keys: provider } = bindingsOf(c);
     const { id } = c.req.valid("param");
     const expected = c.req.valid("header")["If-Match"];
     const input = c.req.valid("json");
@@ -604,7 +580,6 @@ export function registerNotes(app: OpenAPIHono<ApiEnv>): void {
 
   app.openapi(deleteNoteRoute, async (c) => {
     const actor = actorOf(c);
-    const { db } = bindingsOf(c);
     const { id } = c.req.valid("param");
     return withActor(
       actor.id,

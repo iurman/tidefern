@@ -4,7 +4,7 @@ import type { StatusCode } from "hono/utils/http-status";
 import { and, eq } from "drizzle-orm";
 import { schema, withActor } from "@tidefern/db";
 import type { ActorDatabase } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import { uuidv7 } from "@tidefern/core";
 
 import type { ApiEnv } from "../context";
 import { problem } from "../problem";

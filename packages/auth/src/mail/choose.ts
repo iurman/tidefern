@@ -1,6 +1,6 @@
 import { CaptureMailer, ConsoleMailer } from "../mailer";
 import type { Mailer } from "../mailer";
-import { setCaptureMailer } from "./capture";
+import { activeCaptureMailer, setCaptureMailer } from "./capture";
 import { ResendMailer } from "./resend";
 
 /** The subset of the environment the transport choice is made from; the index signature is as in `HostEnvironment`. */
@@ -61,7 +61,9 @@ export function chooseMailTransport(env: MailEnvironment): MailTransport {
 export function chooseMailer(env: MailEnvironment, options: ChooseMailerOptions = {}): Mailer {
   const transport = chooseMailTransport(env);
   if (transport === "capture") {
-    const mailer = new CaptureMailer();
+    // Every copy of this module in one process shares one store, so a
+    // second evaluation reuses the mailer the first one made.
+    const mailer = activeCaptureMailer() ?? new CaptureMailer();
     setCaptureMailer(mailer);
     return mailer;
   }

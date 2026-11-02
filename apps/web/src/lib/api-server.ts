@@ -1,5 +1,7 @@
 import "server-only";
 
+import { headers } from "next/headers";
+import { cache } from "react";
 import { createApiClient, forwardedRequest, readMe } from "@tidefern/api-client";
 import type { ApiClient, MeLookup } from "@tidefern/api-client";
 import { GET as app } from "@/app/api/[[...route]]/route";
@@ -28,3 +30,11 @@ export async function readSessionMe(incoming: Headers): Promise<MeLookup> {
   if (incoming.get("cookie") === null) return { kind: "anonymous" };
   return readMe(serverApiClient(incoming));
 }
+
+/**
+ * GET /api/v1/me once per server request. React's `cache` is scoped to the
+ * request, so the (app) layout and every page under it share one answer and
+ * a page never repeats the layout's read; it calls `headers()` itself so it
+ * takes no argument and every caller hits the same entry.
+ */
+export const sessionMe = cache(async (): Promise<MeLookup> => readSessionMe(await headers()));

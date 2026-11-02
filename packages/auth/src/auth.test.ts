@@ -103,8 +103,14 @@ describe("the configuration", () => {
     expect("socialProviders" in options).toBe(false);
   });
 
-  test("enables exactly the two-factor and passkey plugins", async () => {
-    expect(auth.options.plugins?.map((plugin) => plugin.id)).toEqual(["two-factor", "passkey"]);
+  test("enables exactly the two-factor and passkey plugins, then the session audit", async () => {
+    // Task C7 added the session audit on purpose, last, so its after-hook runs
+    // once two-factor's has dropped a sign-in that still owes the second factor.
+    expect(auth.options.plugins?.map((plugin) => plugin.id)).toEqual([
+      "two-factor",
+      "passkey",
+      "session-audit",
+    ]);
     // The passkey plugin keeps its relying party and origin in a closure, so
     // the endpoint list is the observable evidence it is mounted.
     const context = await auth.$context;

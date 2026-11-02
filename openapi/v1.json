@@ -32,6 +32,14 @@
             ],
             "description": "The profile summary, or null until onboarding creates the profile"
           },
+          "today": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date",
+            "description": "Today in the profile's time zone on the server's calendar clock, the one today every screen counts from instead of the device clock; null until onboarding creates the profile"
+          },
           "guardianOf": {
             "type": "array",
             "items": {
@@ -70,6 +78,7 @@
         "required": [
           "id",
           "profile",
+          "today",
           "guardianOf",
           "grants",
           "session"
@@ -662,9 +671,10 @@
           },
           "descriptionVersion": {
             "type": "string",
-            "minLength": 1,
-            "maxLength": 32,
-            "description": "The version of the plain-words category descriptions she saw"
+            "enum": [
+              "2026-10"
+            ],
+            "description": "The version of the plain-words category descriptions she saw, a key of the sharing descriptions catalog"
           }
         },
         "required": [
@@ -1495,13 +1505,41 @@
               "female",
               "male"
             ]
+          },
+          "guardianConsent": {
+            "$ref": "#/components/schemas/GuardianConsentInput"
           }
         },
         "required": [
           "displayName",
-          "dateOfBirth"
+          "dateOfBirth",
+          "guardianConsent"
         ],
-        "description": "Creates a child in the actor's household"
+        "description": "Creates a child in the actor's household with the guardian's consent"
+      },
+      "GuardianConsentInput": {
+        "type": "object",
+        "properties": {
+          "given": {
+            "type": "boolean",
+            "enum": [
+              true
+            ],
+            "description": "Set only by the guardian's own check of the box; the form never pre-checks it"
+          },
+          "textVersion": {
+            "type": "string",
+            "enum": [
+              "2026-10"
+            ],
+            "description": "The version of the guardian's consent text the form showed"
+          }
+        },
+        "required": [
+          "given",
+          "textVersion"
+        ],
+        "description": "The guardian's consent on the child's behalf; a child is never created without it"
       },
       "ChildList": {
         "type": "object",
@@ -1662,6 +1700,32 @@
             ],
             "description": "The breast a feed was given from; null otherwise"
           },
+          "feedMethod": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "breast",
+              "bottle",
+              "solids",
+              null
+            ],
+            "description": "How a feed was given; null on any other kind and on a feed logged without one"
+          },
+          "diaperContents": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "enum": [
+              "wet",
+              "dirty",
+              "mixed",
+              null
+            ],
+            "description": "What a diaper held; null on any other kind and on a diaper logged without it"
+          },
           "note": {
             "type": [
               "string",
@@ -1703,6 +1767,8 @@
           "milestoneId",
           "quantityMl",
           "side",
+          "feedMethod",
+          "diaperContents",
           "note",
           "authorId",
           "createdAt",
@@ -1763,6 +1829,24 @@
               "both"
             ],
             "description": "A breast feed's side; absent for a bottle feed"
+          },
+          "feedMethod": {
+            "type": "string",
+            "enum": [
+              "breast",
+              "bottle",
+              "solids"
+            ],
+            "description": "How a feed was given; a breast feed may carry a side, a bottle feed a volume, solids neither"
+          },
+          "diaperContents": {
+            "type": "string",
+            "enum": [
+              "wet",
+              "dirty",
+              "mixed"
+            ],
+            "description": "What a diaper held; absent on any other kind"
           },
           "note": {
             "type": "string",
@@ -1886,6 +1970,24 @@
               "both"
             ],
             "description": "A breast feed's side; absent for a bottle feed"
+          },
+          "feedMethod": {
+            "type": "string",
+            "enum": [
+              "breast",
+              "bottle",
+              "solids"
+            ],
+            "description": "How a feed was given; a breast feed may carry a side, a bottle feed a volume, solids neither"
+          },
+          "diaperContents": {
+            "type": "string",
+            "enum": [
+              "wet",
+              "dirty",
+              "mixed"
+            ],
+            "description": "What a diaper held; absent on any other kind"
           },
           "note": {
             "type": "string",
@@ -3061,6 +3163,21 @@
             "format": "date-time",
             "description": "When the person attested to being 18 or older"
           },
+          "termsVersion": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "description": "The version of the terms last accepted; null when none was recorded"
+          },
+          "termsAcceptedAt": {
+            "type": [
+              "string",
+              "null"
+            ],
+            "format": "date-time",
+            "description": "When that version was accepted; null when none was recorded"
+          },
           "version": {
             "type": "integer",
             "minimum": 1,
@@ -3085,6 +3202,8 @@
           "units",
           "notificationDetail",
           "ageAttestedAt",
+          "termsVersion",
+          "termsAcceptedAt",
           "version",
           "createdAt",
           "updatedAt"
@@ -3154,6 +3273,11 @@
               true
             ],
             "description": "The attestation of being 18 or older; required when the profile is created"
+          },
+          "termsVersion": {
+            "type": "string",
+            "pattern": "^[0-9A-Za-z][0-9A-Za-z.-]{0,39}$",
+            "description": "The version of the terms accepted; a new version records a new acceptance"
           }
         },
         "required": [
@@ -3627,7 +3751,7 @@
           "identity"
         ],
         "summary": "The signed-in actor",
-        "description": "The actor id, the profile summary, guardianships, active grants held and the session expiry: every client bootstraps from this one call.",
+        "description": "The actor id, the profile summary with today's date in its time zone, guardianships, active grants held and the session expiry: every client bootstraps from this one call.",
         "responses": {
           "200": {
             "description": "The actor",
@@ -11042,9 +11166,9 @@
           "children"
         ],
         "summary": "Create a child",
-        "description": "Creates the child in the actor's household (a household is opened when she has none), makes her its first guardian and provisions the child's data key, all in one transaction.",
+        "description": "Creates the child in the actor's household (a household is opened when she has none), makes her its first guardian, records her consent on the child's behalf (a consents row with the child as subject and her as the consenting guardian, its purpose and text version from the catalog) and provisions the child's data key, all in one transaction. A body without the consent is refused with 422 and writes nothing.",
         "requestBody": {
-          "description": "The child",
+          "description": "The child, with the guardian's consent",
           "required": true,
           "content": {
             "application/json": {
@@ -11287,6 +11411,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,
@@ -12867,7 +12993,7 @@
           "children"
         ],
         "summary": "Events by date",
-        "description": "Ordered by day; `updatedSince` returns every row changed since, deleted ones as tombstones.",
+        "description": "Oldest first by day and id, or with `order=desc` newest first by day and then by when each event happened (its start, or when it was logged), so `kind=feed&order=desc&limit=1` is the last feed; `updatedSince` returns every row changed since, deleted ones as tombstones.",
         "parameters": [
           {
             "schema": {
@@ -12883,6 +13009,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,
@@ -12946,6 +13074,21 @@
             },
             "required": false,
             "name": "kind",
+            "in": "query"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "enum": [
+                "asc",
+                "desc"
+              ],
+              "default": "asc",
+              "description": "asc pages by day then id, as a sync reads; desc reads newest first, by day then by when each event happened"
+            },
+            "required": false,
+            "description": "asc pages by day then id, as a sync reads; desc reads newest first, by day then by when each event happened",
+            "name": "order",
             "in": "query"
           }
         ],
@@ -14038,6 +14181,8 @@
           {
             "schema": {
               "type": "string",
+              "minLength": 1,
+              "maxLength": 200,
               "description": "Opaque; from the previous page's nextCursor"
             },
             "required": false,

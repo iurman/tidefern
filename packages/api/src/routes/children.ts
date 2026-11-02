@@ -1,7 +1,23 @@
+import { createHash } from "node:crypto";
 import { createRoute, z } from "@hono/zod-openapi";
 import type { OpenAPIHono } from "@hono/zod-openapi";
 import type { Context, TypedResponse } from "hono";
-import { and, asc, eq, gt, inArray, isNull, lte, gte, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  desc,
+  eq,
+  getTableColumns,
+  gt,
+  inArray,
+  isNull,
+  lt,
+  lte,
+  gte,
+  or,
+  sql,
+} from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 import {
   CDC_MILESTONES_ATTRIBUTION,
   NOT_A_SCREENING_TOOL,
@@ -12,11 +28,9 @@ import {
   milestoneChecklists,
   milestoneFraming,
   projectRow,
-  todayIn,
 } from "@tidefern/core";
 import type { Action, MilestoneItem, Scope } from "@tidefern/core";
 import {
-  EnvKeyProvider,
   createKeyCache,
   decryptFieldFor,
   encryptFieldFor,
@@ -25,9 +39,10 @@ import {
 } from "@tidefern/crypto";
 import type { KeyCache, KeyProvider } from "@tidefern/crypto";
 import { schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { uuidv7 } from "@tidefern/core";
 import {
+  CHILD_CONSENT_DISCLOSURES,
   Child,
   ChildEvent,
   ChildEventInput,
@@ -47,13 +62,19 @@ import {
   MilestoneCheckInput,
   MilestoneChecklist,
   Problem,
+  RealCalendarDate,
 } from "@tidefern/schemas";
-import type { GrowthIndicator as PlacedIndicator, GrowthPlacement } from "@tidefern/schemas";
+import type {
+  ChildConsentTextVersion,
+  GrowthIndicator as PlacedIndicator,
+  GrowthPlacement,
+} from "@tidefern/schemas";
 
 import type { RequestActor } from "../actor";
 import { requireActor, requireFreshAuth } from "../auth";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/index";
+import type { AreaOptions } from "./index";
+import { audit, auditActions, auditDay } from "../middleware/index";
 import { problem as sharedProblem } from "../problem";
 import type { ProblemCode } from "../problem";
 
@@ -65,39 +86,6 @@ import type { ProblemCode } from "../problem";
  * action and the route keeps the scope whose `childId` is the one addressed.
  * Row level security (B8) applies the same rule underneath in `withActor()`.
  */
-
-export interface ChildrenOptions {
-  /**
-   * The database `withActor()` opens the actor's transaction on. The host's
-   * pooled client is the default; the test harness passes PGlite.
-   */
-  db?: ActorDatabase | undefined;
-  /**
-   * Wraps and unwraps the children's data keys. `EnvKeyProvider` over
-   * `TIDEFERN_KEK_V1` (read on first use) unless a test passes its own.
-   */
-  keys?: KeyProvider | undefined;
-}
-
-/**
- * The registry calls `registerChildren(app)` with nothing else, and the
- * request context carries no database, so this area keeps its runtime here.
- * Production needs no call: `withActor()` defaults to the pooled client and
- * the key provider reads the environment. The test harness calls
- * `configureChildren()` before its first request. The day the host puts the
- * database and the key provider on the context, this seam goes.
- */
-const runtime: ChildrenOptions = {};
-
-export function configureChildren(options: ChildrenOptions): void {
-  runtime.db = options.db;
-  runtime.keys = options.keys;
-}
-
-function keys(): KeyProvider {
-  runtime.keys ??= new EnvKeyProvider();
-  return runtime.keys;
-}
 
 type ProblemStatus = Parameters<typeof sharedProblem>[1];
 type ProblemBody =
@@ -189,9 +177,9 @@ export const createChildRoute = createRoute({
   tags: TAG,
   summary: "Create a child",
   description:
-    "Creates the child in the actor's household (a household is opened when she has none), makes her its first guardian and provisions the child's data key, all in one transaction.",
+    "Creates the child in the actor's household (a household is opened when she has none), makes her its first guardian, records her consent on the child's behalf (a consents row with the child as subject and her as the consenting guardian, its purpose and text version from the catalog) and provisions the child's data key, all in one transaction. A body without the consent is refused with 422 and writes nothing.",
   middleware: [requireActor] as const,
-  request: { body: jsonBody(ChildInput, "The child") },
+  request: { body: jsonBody(ChildInput, "The child, with the guardian's consent") },
   responses: {
     201: jsonResponse(Child, "The child as its guardian sees it"),
     401: UNAUTHENTICATED,
@@ -294,7 +282,7 @@ export const listEventsRoute = createRoute({
   tags: TAG,
   summary: "Events by date",
   description:
-    "Ordered by day; `updatedSince` returns every row changed since, deleted ones as tombstones.",
+    "Oldest first by day and id, or with `order=desc` newest first by day and then by when each event happened (its start, or when it was logged), so `kind=feed&order=desc&limit=1` is the last feed; `updatedSince` returns every row changed since, deleted ones as tombstones.",
   middleware: [requireActor] as const,
   request: { params: ChildParams, query: ChildEventListQuery },
   responses: {
@@ -414,9 +402,14 @@ function childScope(actor: RequestActor, childId: string, action: Action): Scope
   return listScope(actor, action).find((scope) => scope.childId === childId) ?? null;
 }
 
-/** The calendar day a partner's read is filed under: the actor's zone, UTC until she has a profile. */
-function auditDay(actor: RequestActor): string {
-  return todayIn(actor.profile?.timeZone ?? "UTC");
+/**
+ * The zone the actor's own days are read in, UTC until she has a profile:
+ * the day her partner read is filed under (`auditDay`, the real day), and
+ * the today a child's checklist age and an undated check-off are counted
+ * to (the calendar clock's).
+ */
+function actorZone(actor: RequestActor): string {
+  return actor.profile?.timeZone ?? "UTC";
 }
 
 /** A partner's read or write (reason `grant`) is audited; a guardian's is not (architecture 8.3 step 6). */
@@ -434,7 +427,7 @@ async function auditPartner(
     subjectId: childId,
     category: "child",
     childId,
-    ...(action === "read" ? { day: auditDay(actor) } : {}),
+    ...(action === "read" ? { day: auditDay(actorZone(actor)) } : {}),
   });
 }
 
@@ -512,6 +505,8 @@ function serializeEvent(row: EventRow, note: string | null, scope: Scope): Child
       milestoneId: row.milestoneId,
       quantityMl: row.quantityMl,
       side: row.side,
+      feedMethod: row.feedMethod,
+      diaperContents: row.diaperContents,
       note,
       authorId: row.authorId,
       createdAt: instant(row.createdAt),
@@ -648,6 +643,137 @@ function invalidCursor(c: Context<ApiEnv>) {
   });
 }
 
+/**
+ * The position a children-list cursor names: exactly an id, checked before it
+ * reaches a query, so a cursor this list never issued (a forged id, or another
+ * list's cursor) is a 422 and not a database error. Null means refuse;
+ * undefined means the first page.
+ */
+function childrenCursor(
+  raw: Record<string, string> | null | undefined,
+): { i: string } | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const { i, ...rest } = raw;
+  if (Object.keys(rest).length > 0) return null;
+  if (i === undefined || !Id.safeParse(i).success) return null;
+  return { i };
+}
+
+/**
+ * The position a measurements cursor names: exactly a real day and an id,
+ * checked the same way as `childrenCursor`.
+ */
+function measurementCursor(
+  raw: Record<string, string> | null | undefined,
+): { d: string; i: string } | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const { d, i, ...rest } = raw;
+  if (Object.keys(rest).length > 0) return null;
+  if (d === undefined || !RealCalendarDate.safeParse(d).success) return null;
+  if (i === undefined || !Id.safeParse(i).success) return null;
+  return { d, i };
+}
+
+/**
+ * When an event happened, for the newest-first order: its start, or when it
+ * was logged when it has none (a diaper or a milestone logged without a
+ * time). `created_at` is never null, so neither is this.
+ */
+const EVENT_MOMENT = sql`coalesce(${schema.childEvents.startedAt}, ${schema.childEvents.createdAt})`;
+
+/**
+ * The same instant as UTC text at the column's full precision, the form a
+ * newest-first cursor carries: a JavaScript `Date` keeps milliseconds only,
+ * and a cursor rounded to them would skip or repeat rows that differ below.
+ */
+const EVENT_MOMENT_TEXT = sql<string>`to_char(${EVENT_MOMENT} at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"')`;
+
+const MOMENT_TEXT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/;
+
+/**
+ * A moment as `EVENT_MOMENT_TEXT` writes it, for a time that exists (2026-02-31 does not)
+ * and that Postgres can cast: JavaScript reads year 0000 as 1 BC, but Postgres has no year
+ * zero and refuses it, so a moment must fall in year 0001 or later.
+ */
+function isMomentText(value: string): boolean {
+  if (!MOMENT_TEXT.test(value)) return false;
+  const parsed = new Date(value);
+  return (
+    !Number.isNaN(parsed.getTime()) &&
+    parsed.getUTCFullYear() >= 1 &&
+    parsed.toISOString().slice(0, 23) === value.slice(0, 23)
+  );
+}
+
+/** Where an events page ends: the day and the id, and the moment for the newest-first order. */
+interface EventCursor {
+  d: string;
+  i: string;
+  t?: string;
+}
+
+/**
+ * The position an events cursor names, checked before any of it reaches a
+ * query, so a cursor this list never issued is a 422 and not a database
+ * error: a real day and a uuid, and for the newest-first order its marker
+ * and a moment. A cursor continues only the order that issued it. Null means
+ * refuse; undefined means the first page.
+ */
+function eventCursor(
+  raw: Record<string, string> | null | undefined,
+  newestFirst: boolean,
+): EventCursor | null | undefined {
+  if (raw === undefined) return undefined;
+  if (raw === null) return null;
+  const { d, i, t, o } = raw;
+  if (d === undefined || !RealCalendarDate.safeParse(d).success) return null;
+  if (i === undefined || !Id.safeParse(i).success) return null;
+  if (!newestFirst) return o === undefined && t === undefined ? { d, i } : null;
+  if (o !== "desc" || t === undefined || !isMomentText(t)) return null;
+  return { d, i, t };
+}
+
+/** The rows after an events cursor in the order it was issued for. */
+function afterEventCursor(after: EventCursor): SQL | undefined {
+  const { childEvents } = schema;
+  if (after.t === undefined) {
+    return or(
+      gt(childEvents.date, after.d),
+      and(eq(childEvents.date, after.d), gt(childEvents.id, after.i)),
+    );
+  }
+  return or(
+    lt(childEvents.date, after.d),
+    and(eq(childEvents.date, after.d), sql`${EVENT_MOMENT} < ${after.t}::timestamptz`),
+    and(
+      eq(childEvents.date, after.d),
+      sql`${EVENT_MOMENT} = ${after.t}::timestamptz`,
+      lt(childEvents.id, after.i),
+    ),
+  );
+}
+
+/**
+ * SHA-256 of the guardian's consent as the form showed it, over a canonical
+ * JSON form of the catalog entry and its version, the way the collection
+ * consent hashes its disclosure (`disclosureHash` in ./profile). The row
+ * keeps it as `text_hash`, so the exact words agreed to stay provable after
+ * a later version changes them.
+ */
+export function guardianConsentHash(version: ChildConsentTextVersion): string {
+  const disclosure = CHILD_CONSENT_DISCLOSURES[version];
+  const canonical = JSON.stringify({
+    category: disclosure.category,
+    basis: disclosure.basis,
+    purpose: disclosure.purpose,
+    text: disclosure.text,
+    textVersion: version,
+  });
+  return createHash("sha256").update(canonical).digest("hex");
+}
+
 function isUniqueViolation(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
   const code = (error as { code?: unknown }).code;
@@ -708,8 +834,8 @@ async function decryptNotes(
   return notes;
 }
 
-export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOptions = {}): void {
-  if (options.db !== undefined || options.keys !== undefined) configureChildren(options);
+export function registerChildren(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db, keys } = options;
 
   app.openapi(createChildRoute, async (c) => {
     const actor = actorOf(c);
@@ -751,13 +877,29 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           await tx
             .insert(schema.childGuardians)
             .values({ id: uuidv7(), childId, userId: actor.id });
+          // Her consent on the child's behalf (architecture 8.4), after the guardian row:
+          // B8's consents policy admits a guardian recording her own consent for a child
+          // she guards. The catalog supplies every word; the client sent only the version.
+          // `granted_at` takes the transaction's now(), the child's `created_at` exactly.
+          const { textVersion } = input.guardianConsent;
+          const consent = CHILD_CONSENT_DISCLOSURES[textVersion];
+          await tx.insert(schema.consents).values({
+            id: uuidv7(),
+            subjectId: childId,
+            consentingGuardianId: actor.id,
+            category: consent.category,
+            basis: consent.basis,
+            purpose: consent.purpose,
+            policyVersion: textVersion,
+            textHash: guardianConsentHash(textVersion),
+          });
           // After the guardian row: B8's subject_keys policy admits a guardian's insert.
-          await provisionChildKey(tx, childId, keys());
+          await provisionChildKey(tx, childId, keys);
           const child = await findChild(tx, childId);
           if (child === null) throw new Error("the new child is not visible to its guardian");
           return { child, guardians: [actor.id] };
         },
-        runtime.db,
+        db,
       );
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -780,7 +922,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
   app.openapi(listChildrenRoute, async (c) => {
     const actor = actorOf(c);
     const { limit, cursor } = c.req.valid("query");
-    const after = decodeCursor(cursor);
+    const after = childrenCursor(decodeCursor(cursor));
     if (after === null) return invalidCursor(c);
     const scopes = new Map<string, Scope>();
     for (const scope of listScope(actor, "summary")) {
@@ -795,7 +937,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           inArray(schema.children.id, [...scopes.keys()]),
           isNull(schema.children.deletedAt),
         ];
-        if (after?.["i"] !== undefined) conditions.push(gt(schema.children.id, after["i"]));
+        if (after !== undefined) conditions.push(gt(schema.children.id, after.i));
         const rows = await tx
           .select()
           .from(schema.children)
@@ -817,7 +959,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
             rows.length > limit && last !== undefined ? encodeCursor({ i: last.id }) : null,
         };
       },
-      runtime.db,
+      db,
     );
     return c.json(page, 200);
   });
@@ -834,7 +976,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         const guardians = loaded.scope.reason === "guardian" ? await guardiansOf(tx, id) : null;
         return serializeChild(loaded.child, guardians, loaded.scope);
       },
-      runtime.db,
+      db,
     );
     if (found === null) return problem(c, 404, "not_found");
     return c.json(found, 200);
@@ -867,7 +1009,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         const guardians = loaded.scope.reason === "guardian" ? await guardiansOf(tx, id) : null;
         return serializeChild(updated, guardians, loaded.scope);
       },
-      runtime.db,
+      db,
     );
     if (outcome === null) return problem(c, 404, "not_found");
     if (outcome === "stale") return problem(c, 409, "conflict", { detail: STALE_VERSION });
@@ -916,7 +1058,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         };
         return guardian;
       },
-      runtime.db,
+      db,
     );
     if (outcome === null) return problem(c, 404, "not_found");
     if (outcome === "not_member") {
@@ -954,7 +1096,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           );
         return "ended" as const;
       },
-      runtime.db,
+      db,
     );
     if (outcome === null) return problem(c, 404, "not_found");
     if (outcome === "last") return problem(c, 409, "conflict", { detail: LAST_GUARDIAN });
@@ -977,7 +1119,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           const sealed =
             input.note === undefined
               ? { note: null, kekVersion: null }
-              : await encryptNote(tx, keys(), cache, id, eventId, input.note);
+              : await encryptNote(tx, keys, cache, id, eventId, input.note);
           const [row] = await tx
             .insert(schema.childEvents)
             .values({
@@ -991,6 +1133,8 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
               milestoneId: input.milestoneId ?? null,
               quantityMl: input.quantityMl ?? null,
               side: input.side ?? null,
+              feedMethod: input.feedMethod ?? null,
+              diaperContents: input.diaperContents ?? null,
               note: sealed.note,
               kekVersion: sealed.kekVersion,
             })
@@ -999,7 +1143,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           await auditPartner(tx, actor, loaded.scope, id, "write");
           return serializeEvent(row, input.note ?? null, loaded.scope);
         },
-        runtime.db,
+        db,
       );
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
@@ -1015,8 +1159,9 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
   app.openapi(listEventsRoute, async (c) => {
     const actor = actorOf(c);
     const { id } = c.req.valid("param");
-    const { limit, cursor, from, to, updatedSince, kind } = c.req.valid("query");
-    const after = decodeCursor(cursor);
+    const { limit, cursor, from, to, updatedSince, kind, order } = c.req.valid("query");
+    const newestFirst = order === "desc";
+    const after = eventCursor(decodeCursor(cursor), newestFirst);
     if (after === null) return invalidCursor(c);
     const cache = createKeyCache();
     try {
@@ -1034,24 +1179,27 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           } else {
             conditions.push(gt(schema.childEvents.updatedAt, new Date(updatedSince)));
           }
-          const afterDate = after?.["d"];
-          const afterId = after?.["i"];
-          if (afterDate !== undefined && afterId !== undefined) {
-            const beyond = or(
-              gt(schema.childEvents.date, afterDate),
-              and(eq(schema.childEvents.date, afterDate), gt(schema.childEvents.id, afterId)),
-            );
+          if (after !== undefined) {
+            const beyond = afterEventCursor(after);
             if (beyond !== undefined) conditions.push(beyond);
           }
           const rows = await tx
-            .select()
+            .select({ ...getTableColumns(schema.childEvents), moment: EVENT_MOMENT_TEXT })
             .from(schema.childEvents)
             .where(and(...conditions))
-            .orderBy(asc(schema.childEvents.date), asc(schema.childEvents.id))
+            .orderBy(
+              ...(newestFirst
+                ? [
+                    desc(schema.childEvents.date),
+                    sql`${EVENT_MOMENT} desc`,
+                    desc(schema.childEvents.id),
+                  ]
+                : [asc(schema.childEvents.date), asc(schema.childEvents.id)]),
+            )
             .limit(limit + 1);
           const kept = rows.slice(0, limit);
           const live = kept.filter((row) => row.deletedAt === null);
-          const notes = await decryptNotes(tx, keys(), cache, id, live);
+          const notes = await decryptNotes(tx, keys, cache, id, live);
           await auditPartner(tx, actor, loaded.scope, id, "read");
           const items = kept.map((row) =>
             row.deletedAt === null
@@ -1059,15 +1207,17 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
               : serializeTombstone(row, row.deletedAt),
           );
           const last = kept[kept.length - 1];
-          return {
-            items,
-            nextCursor:
-              rows.length > limit && last !== undefined
-                ? encodeCursor({ d: last.date, i: last.id })
-                : null,
-          };
+          let nextCursor: string | null = null;
+          if (rows.length > limit && last !== undefined) {
+            nextCursor = encodeCursor(
+              newestFirst
+                ? { o: "desc", d: last.date, t: last.moment, i: last.id }
+                : { d: last.date, i: last.id },
+            );
+          }
+          return { items, nextCursor };
         },
-        runtime.db,
+        db,
       );
       if (page === null) return problem(c, 404, "not_found");
       return c.json(page, 200);
@@ -1105,7 +1255,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           const sealed =
             input.note === undefined
               ? { note: null, kekVersion: null }
-              : await encryptNote(tx, keys(), cache, id, eventId, input.note);
+              : await encryptNote(tx, keys, cache, id, eventId, input.note);
           const [row] = await tx
             .update(schema.childEvents)
             .set({
@@ -1115,6 +1265,8 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
               milestoneId: input.milestoneId ?? null,
               quantityMl: input.quantityMl ?? null,
               side: input.side ?? null,
+              feedMethod: input.feedMethod ?? null,
+              diaperContents: input.diaperContents ?? null,
               note: sealed.note,
               kekVersion: sealed.kekVersion,
               updatedAt: new Date(),
@@ -1131,7 +1283,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           await auditPartner(tx, actor, loaded.scope, id, "write");
           return serializeEvent(row, input.note ?? null, loaded.scope);
         },
-        runtime.db,
+        db,
       );
       if (outcome === null) return problem(c, 404, "not_found");
       if (outcome === "stale") return problem(c, 409, "conflict", { detail: STALE_VERSION });
@@ -1180,6 +1332,8 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
             kekVersion: null,
             quantityMl: null,
             side: null,
+            feedMethod: null,
+            diaperContents: null,
             startedAt: null,
             endedAt: null,
           })
@@ -1194,7 +1348,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         await auditPartner(tx, actor, loaded.scope, id, "write");
         return "deleted";
       },
-      runtime.db,
+      db,
     );
     if (outcome === null) return problem(c, 404, "not_found");
     return c.body(null, 204);
@@ -1229,7 +1383,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
           await auditPartner(tx, actor, loaded.scope, id, "write");
           return serializeMeasurement(row, loaded.child, loaded.scope);
         },
-        runtime.db,
+        db,
       );
     } catch (error) {
       if (!isUniqueViolation(error)) throw error;
@@ -1249,7 +1403,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
     const actor = actorOf(c);
     const { id } = c.req.valid("param");
     const { limit, cursor, from, to, updatedSince } = c.req.valid("query");
-    const after = decodeCursor(cursor);
+    const after = measurementCursor(decodeCursor(cursor));
     if (after === null) return invalidCursor(c);
     const page = await withActor(
       actor.id,
@@ -1265,14 +1419,12 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         if (updatedSince !== undefined) {
           conditions.push(gt(schema.childMeasurements.updatedAt, new Date(updatedSince)));
         }
-        const afterDate = after?.["d"];
-        const afterId = after?.["i"];
-        if (afterDate !== undefined && afterId !== undefined) {
+        if (after !== undefined) {
           const beyond = or(
-            gt(schema.childMeasurements.date, afterDate),
+            gt(schema.childMeasurements.date, after.d),
             and(
-              eq(schema.childMeasurements.date, afterDate),
-              gt(schema.childMeasurements.id, afterId),
+              eq(schema.childMeasurements.date, after.d),
+              gt(schema.childMeasurements.id, after.i),
             ),
           );
           if (beyond !== undefined) conditions.push(beyond);
@@ -1294,7 +1446,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
               : null,
         };
       },
-      runtime.db,
+      db,
     );
     if (page === null) return problem(c, 404, "not_found");
     return c.json(page, 200);
@@ -1317,8 +1469,9 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         const checklist =
           age === undefined
             ? // Before two months there is no list yet; the first one is what a parent sees.
-              (checklistFor(diffDays(loaded.child.dateOfBirth, auditDay(actor))) ??
-              milestoneChecklists[0])
+              (checklistFor(
+                diffDays(loaded.child.dateOfBirth, c.var.clock.today(actorZone(actor))),
+              ) ?? milestoneChecklists[0])
             : milestoneChecklists.find((candidate) => candidate.months === age);
         if (checklist === undefined) throw new Error("the checklist data has no ages");
         const itemIds = checklist.items.map((item) => item.id);
@@ -1364,7 +1517,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         };
         return body;
       },
-      runtime.db,
+      db,
     );
     if (outcome === null) return problem(c, 404, "not_found");
     return c.json(outcome, 200);
@@ -1405,7 +1558,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         let check: { id: string; date: string } | null = existing[existing.length - 1] ?? null;
         if (input.checked) {
           if (check === null) {
-            const date = input.date ?? auditDay(actor);
+            const date = input.date ?? c.var.clock.today(actorZone(actor), now);
             const eventId = uuidv7();
             await tx.insert(schema.childEvents).values({
               id: eventId,
@@ -1456,7 +1609,7 @@ export function registerChildren(app: OpenAPIHono<ApiEnv>, options: ChildrenOpti
         };
         return body;
       },
-      runtime.db,
+      db,
     );
     if (outcome === null) return problem(c, 404, "not_found");
     return c.json(outcome, 200);

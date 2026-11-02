@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import { expect, test, type Page } from "@playwright/test";
 import { buildCatalog, designChapters } from "../../src/lib/design-catalog";
+import { signInRedirect } from "./sign-in-redirect";
 
 const repository = resolve(__dirname, "../../../..");
 const catalog = buildCatalog();
@@ -104,33 +105,14 @@ test("every catalog href resolves to exactly one element, and every section is c
   expect(unknown).toEqual([]);
 });
 
-/**
- * Product destinations the specimens link to with synthetic data (the shell's
- * tabs, a day's log, the journey and family screens). Phase 1 builds these
- * routes in later tasks, so today they may answer 404; every other internal
- * link must answer 200. docs/design/COVERAGE.md lists them.
+/*
+ * Every internal link a specimen makes must answer 200, or 307 to sign-in
+ * for a signed-in route. The last specimen links to unbuilt routes
+ * (`/journey/dating`, `/journey/start`, `/family/child/milestones`, `/log`)
+ * moved to the routes that exist in task J3f, when the cycle ring's empty
+ * action was found sending a person with no log yet to the `/log` 404 on
+ * Today; no 404 is allowed any more.
  */
-const plannedProductRoutes = new Set([
-  "/calendar",
-  "/journey",
-  "/journey/dating",
-  "/journey/start",
-  "/family",
-  "/family/child/milestones",
-  "/sharing",
-  "/settings",
-  "/log",
-]);
-const plannedDayLogRoute = /^\/log\/\d{4}-\d{2}-\d{2}$/;
-
-/**
- * Only the exact unbuilt paths are allowed, so a route that exists today
- * (`/settings/sound`, `/settings/devices`, `/settings/two-factor`) still fails
- * the check if it disappears.
- */
-function isPlannedProductRoute(path: string): boolean {
-  return plannedProductRoutes.has(path) || plannedDayLogRoute.test(path);
-}
 
 test("every internal link on every /design page answers 200 and every fragment resolves once", async ({
   page,
@@ -160,8 +142,7 @@ test("every internal link on every /design page answers 200 and every fragment r
     const response = await request.get(path, { maxRedirects: 0 });
     const status = response.status();
     // A signed-in route seen signed out sends the visitor to sign in; that is the route working.
-    const toSignIn = status === 307 && response.headers()["location"] === "/sign-in";
-    if (status === 404 && isPlannedProductRoute(path) && fragments.size === 0) continue;
+    const toSignIn = status === 307 && response.headers()["location"] === signInRedirect(path);
     if (status !== 200 && !toSignIn) {
       broken.push(`${path} answered ${status}`);
       continue;

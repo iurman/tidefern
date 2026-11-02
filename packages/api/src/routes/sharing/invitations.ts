@@ -18,6 +18,7 @@ import {
 
 import { requireActor, requireFreshAuth } from "../../auth";
 import type { ApiEnv } from "../../context";
+import type { AreaOptions } from "../index";
 import type { MailMessage } from "../../jobs/notice";
 import { ownOriginOf } from "../../middleware/cross-site";
 import {
@@ -244,7 +245,8 @@ async function helperAnswers(tx: Transaction, query: ReturnType<typeof sql>): Pr
   return result.rows[0]?.ok === true;
 }
 
-export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
+export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(createInvitationRoute, (c) => {
     const actor = actorOf(c);
     const input = c.req.valid("json");
@@ -304,7 +306,7 @@ export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
           await mailer.send(invitationMail(inviteeEmail, link));
           return inserted;
         },
-        deps.db,
+        db,
       );
       c.header("Location", `${c.req.path}/${row.id}`);
       return c.json(invitationBody(row), 201);
@@ -332,7 +334,7 @@ export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
                     and(eq(schema.invitations.inviterId, owner.subjectId), openInvitation(now)),
                   )
                   .orderBy(schema.invitations.id),
-              deps.db,
+              db,
             );
       const paged = page(rows, cursor, query.limit);
       return c.json({ items: paged.items.map(invitationBody), nextCursor: paged.nextCursor }, 200);
@@ -356,7 +358,7 @@ export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
           if (withdrawn.length === 0) throw new SharingRefusal(404, "not_found");
           await auditInvitation(tx, actor.id, invitationAuditActions.withdraw, now);
         },
-        deps.db,
+        db,
       );
       return c.body(null, 204);
     });
@@ -434,7 +436,7 @@ export function registerInvitationRoutes(app: OpenAPIHono<ApiEnv>): void {
           await auditInvitation(tx, actor.id, invitationAuditActions.accept, now);
           return { invitationId: invitation.id, joined: true, householdId: invitation.householdId };
         },
-        deps.db,
+        db,
       );
       return c.json(outcome, 200);
     });

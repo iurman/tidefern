@@ -1,7 +1,7 @@
 import { schema } from "@tidefern/db";
 
 import { createApp } from "../app";
-import { configureCycle } from "../routes/cycle";
+import { realCalendarClock } from "../clock";
 import { ANNA, BEN, CARA, OWN_ORIGIN, TOKENS, createActorFixture } from "./actors";
 import { sessionHeaders } from "./auth-fake";
 import type { ApiTestDatabase } from "./database";
@@ -121,8 +121,10 @@ export async function createCycleFixture(): Promise<{
     },
   ]);
 
-  configureCycle({ db });
-  const app = createApp({ auth, db, log: { sink: () => undefined } });
+  // The real calendar whatever the runner's environment says: CI exports
+  // TIDEFERN_FAKE_NOW for its seeded server, and the cycle suite counts its
+  // expectations from the real today.
+  const app = createApp({ auth, db, log: { sink: () => undefined }, clock: realCalendarClock });
   return { harness, app };
 }
 

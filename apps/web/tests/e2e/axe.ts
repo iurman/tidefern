@@ -3,6 +3,9 @@ import { expect, type Page } from "@playwright/test";
 
 export type Theme = "light" | "dark";
 
+/** The WCAG 2.2 AA tag set every axe run in the suite asks for. */
+export const AXE_TAGS = ["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"];
+
 /**
  * Opens a route, applies the theme the way the product does (the data-theme
  * attribute on the root) and asserts no WCAG 2.2 AA violation. Every design
@@ -14,8 +17,6 @@ export async function expectNoAxeViolations(page: Page, path: string, theme: The
   await page.evaluate((value) => {
     document.documentElement.dataset.theme = value;
   }, theme);
-  const results = await new AxeBuilder({ page })
-    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
-    .analyze();
+  const results = await new AxeBuilder({ page }).withTags(AXE_TAGS).analyze();
   expect(results.violations, `${path} in ${theme}`).toEqual([]);
 }

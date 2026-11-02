@@ -186,7 +186,6 @@ beforeAll(async () => {
   auth.signIn("anna-stale", ANNA, "anna@example.com", 11 * 60);
   app = createApp({ auth, db, log: { sink: () => undefined } });
   configureSharing(app, {
-    db,
     mailer: {
       async send(message) {
         sent.push(message);

@@ -42,14 +42,27 @@ test("the brand chapter renders every image and offers the downloads", async ({ 
   const images = page.locator("img");
   const count = await images.count();
   expect(count).toBeGreaterThan(20);
-  for (let index = 0; index < count; index += 1) {
-    const image = images.nth(index);
-    await expect(image, `image ${index}`).toHaveJSProperty("complete", true);
-    expect(
-      await image.evaluate((el: HTMLImageElement) => el.naturalWidth),
-      `image ${index}`,
-    ).toBeGreaterThan(0);
+  // The marks come in a light and a dark variant, both lazy, so the variant a theme
+  // hides is never fetched (J2b). Each image must render in the theme that shows it,
+  // and every image must be shown by at least one theme, so none escapes the check.
+  const shown = new Set<number>();
+  for (const theme of ["light", "dark"] as const) {
+    await page.evaluate((value) => {
+      document.documentElement.dataset.theme = value;
+    }, theme);
+    for (let index = 0; index < count; index += 1) {
+      const image = images.nth(index);
+      if (!(await image.isVisible())) continue;
+      shown.add(index);
+      await image.scrollIntoViewIfNeeded();
+      await expect(image, `image ${index} in ${theme}`).toHaveJSProperty("complete", true);
+      expect(
+        await image.evaluate((el: HTMLImageElement) => el.naturalWidth),
+        `image ${index} in ${theme}`,
+      ).toBeGreaterThan(0);
+    }
   }
+  expect(shown.size, "images no theme shows").toBe(count);
   const downloads = page.locator("a[download]");
   expect(await downloads.count()).toBeGreaterThanOrEqual(13);
   await expect(page.getByText("Pending the owner's approval.", { exact: true })).toBeVisible();

@@ -1,40 +1,40 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
-import { Button } from "@/components/ui/button";
-import { readSessionMe } from "@/lib/api-server";
+import { todayCopy } from "@/components/pages/today/copy";
+import { TodayScreen } from "@/components/pages/today/today-screen";
+import { serverApiClient, sessionMe } from "@/lib/api-server";
 import { pageMetadata } from "@/lib/site";
-import { authCopy } from "../../(public)/(auth)/copy";
+import { loadToday } from "./load";
+import styles from "./today.module.css";
 
-const copy = authCopy.today;
-
-export const metadata = pageMetadata("/today", copy.title, copy.description, false);
+// The title from CONTENT.md: never a stage, a date or a health word in it.
+export const metadata = pageMetadata("/today", todayCopy.title, todayCopy.description, false);
 
 // Authenticated: rendered per request, never cached (architecture 6.2).
 export const dynamic = "force-dynamic";
 
 /**
- * A placeholder for the home screen (task H2 builds the real one): the
- * actor's display name from GET /api/v1/me, read through the in-process
- * client of architecture 5.2 (lib/api-server.ts), and the sign-out form,
- * which is a POST and nothing else. No session sends the person to sign in.
- * A read that failed shows only the heading: the (app) layout above already
- * says the profile could not be loaded and how to retry.
+ * The home screen (task H2, DESIGN.md 3.3). The session is the (app)
+ * layout's read (`sessionMe` shares one answer per request); the layout
+ * sends a visitor without a session to sign in, a closing account to its
+ * own page and a person without a profile to /welcome, and since Next
+ * renders this page beside the layout, the page renders nothing in those
+ * cases rather than assuming a profile. A read that failed keeps the page's
+ * heading under the layout's notice, which already says what to do.
+ * Everything else is read through the API in process (`loadToday`) and
+ * shaped by stage before it renders.
  */
 export default async function TodayPage() {
-  const lookup = await readSessionMe(await headers());
-  if (lookup.kind === "anonymous") redirect("/sign-in");
-  return (
-    <section className="wrap narrow section" aria-labelledby="today-title">
-      {lookup.kind === "ok" ? (
-        <h1 id="today-title">{lookup.me.profile?.displayName ?? "Welcome"}</h1>
-      ) : (
-        <h1 id="today-title">{copy.title}</h1>
-      )}
-      <form method="post" action="/sign-out">
-        <Button type="submit" variant="secondary">
-          {copy.signOut}
-        </Button>
-      </form>
-    </section>
-  );
+  const lookup = await sessionMe();
+  if (lookup.kind === "failed") {
+    return <h1 className={styles.heading}>{todayCopy.title}</h1>;
+  }
+  if (lookup.kind !== "ok") return null;
+  const { me } = lookup;
+  if (me.profile === null || me.today === null) return null;
+  const view = await loadToday(serverApiClient(await headers()), {
+    me,
+    profile: me.profile,
+    today: me.today,
+  });
+  return <TodayScreen view={view} />;
 }

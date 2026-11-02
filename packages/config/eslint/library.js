@@ -26,13 +26,14 @@ export const libraryRules = {
 /**
  * A no-restricted-imports path entry for packages that talk to the database.
  * The raw db and pool live behind "@tidefern/db/client"; route code reaches
- * them only through withActor() and withSystem(). Task E1 adds this to the
- * api package's rule; packages/db/README.md shows the composition.
+ * them only through withActor(), and the job runner and the seed through
+ * withSystem(). Task E1 adds this to the api package's rule;
+ * packages/db/README.md shows the composition.
  */
 export const dbClientRestriction = {
   name: "@tidefern/db/client",
   message:
-    'Route code goes through withActor() and withSystem() from "@tidefern/db"; the raw db and pool stay inside packages/db.',
+    'Route code goes through withActor() from "@tidefern/db" (the job runner and the seed use withSystem()); the raw db and pool stay inside packages/db.',
 };
 
 export function libraryConfig({ allowReact = false } = {}) {

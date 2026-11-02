@@ -1,0 +1,36 @@
+/* The route's own frames: the heading kept when the session read failed, and the loading state. */
+
+.heading {
+  margin: 0;
+  font-size: var(--type-heading);
+  line-height: var(--leading-heading);
+}
+
+/* While the server reads: the ring's place, the sentences' lines and the open card's place. */
+.loading {
+  container: today-loading / inline-size;
+  display: grid;
+  gap: var(--space-6);
+  max-width: var(--size-container);
+}
+
+.loadingHero {
+  display: grid;
+  gap: var(--space-6);
+}
+
+.loadingRing {
+  width: min(100%, 220px);
+}
+
+@container today-loading (min-width: 600px) {
+  .loadingHero {
+    grid-template-columns: 260px minmax(0, 1fr);
+    column-gap: var(--space-12);
+    align-items: center;
+  }
+
+  .loadingRing {
+    width: min(100%, 260px);
+  }
+}

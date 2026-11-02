@@ -53,4 +53,15 @@ const config: NextConfig = {
   },
 };
 
-export default config;
+// The webpack bundle analyzer (task J2) loads only when ANALYZE=true asks for it, from a
+// devDependency that `next start` never needs. It builds with webpack into its own distDir so
+// the Turbopack production output in .next stays untouched; see docs/design/PERFORMANCE.md.
+export default async function nextConfig(): Promise<NextConfig> {
+  if (process.env.ANALYZE !== "true") return config;
+  const { default: bundleAnalyzer } = await import("@next/bundle-analyzer");
+  const analyzerMode = process.env.ANALYZE_MODE === "json" ? "json" : "static";
+  return bundleAnalyzer({ enabled: true, openAnalyzer: false, analyzerMode })({
+    ...config,
+    distDir: ".next/analyze-webpack",
+  });
+}

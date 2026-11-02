@@ -3,22 +3,22 @@ import type { Context } from "hono";
 import { and, asc, eq, gt, gte, isNull, lte, or, sql } from "drizzle-orm";
 import {
   changeDueDate,
+  compareDates,
   endPregnancy,
   isCalendarDate,
   shouldRedate,
   stageAfter,
-  todayIn,
 } from "@tidefern/core";
 import { createKeyCache } from "@tidefern/crypto";
-import type { KeyProvider } from "@tidefern/crypto";
 import { schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { uuidv7 } from "@tidefern/core";
 import type { PregnancyEvent, PregnancyEventTombstone } from "@tidefern/schemas";
 
 import type { RequestActor } from "../../actor";
 import type { ApiEnv } from "../../context";
-import { audit, auditActions } from "../../middleware/audit";
+import type { AreaOptions } from "../index";
+import { audit, auditActions, auditDay } from "../../middleware/audit";
 import { problem } from "../../problem";
 import {
   createEventRoute,
@@ -67,11 +67,6 @@ export const ID_IN_USE = "id_in_use";
 export const REMINDER_JOB_TYPE = "reminder.send";
 export const REMINDER_PAYLOAD_KEY = "pregnancyId";
 
-export interface PregnancyRouteOptions {
-  db?: ActorDatabase | undefined;
-  keys: KeyProvider;
-}
-
 function actorOn(c: Context<ApiEnv>): RequestActor {
   const actor = c.var.actor;
   if (actor === null) throw new Error("requireActor must run before a pregnancy handler");
@@ -101,7 +96,7 @@ async function auditWrite(
   });
 }
 
-/** A grantee's read collapses to one row per day in the subject's zone. */
+/** A grantee's read collapses to one row per day in the subject's zone (a real day, `auditDay`). */
 async function auditRead(
   tx: Transaction,
   actor: RequestActor,
@@ -136,9 +131,11 @@ const badCursor = (c: Context<ApiEnv>) =>
  * by subject, dating with its owner-only history, events with an encrypted
  * detail, and the ending whose reason is hers alone. Every query runs in
  * the actor's transaction, so B8's policies enforce the same rule `can()`
- * decided; a denied or absent record is 404 either way.
+ * decided; a denied or absent record is 404 either way. The gestation a
+ * view shows is counted to today on the calendar clock (`c.var.clock`); the
+ * day a grantee's read is audited under is the real one (`auditDay`).
  */
-export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRouteOptions): void {
+export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
   const { db, keys } = options;
 
   app.openapi(startRoute, async (c) => {
@@ -210,7 +207,7 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
     }
     if ("conflict" in outcome) return problem(c, 409, "conflict", { detail: outcome.conflict });
     // ownerOnly above: the starter is the subject, so the answer is her whole record.
-    const view = ownerView(outcome.row, todayIn(profile.timeZone));
+    const view = ownerView(outcome.row, c.var.clock.today(profile.timeZone, now));
     c.header("Location", `${c.req.path}/${outcome.row.id}`);
     return c.json(view, 201);
   });
@@ -232,9 +229,9 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
           .orderBy(sql`${schema.pregnancies.startedAt} desc`, sql`${schema.pregnancies.id} desc`)
           .limit(1);
         if (row === undefined) return null;
-        const today = todayIn(await subjectTimeZone(tx, subject));
-        await auditRead(tx, actor, resolved, subject, today);
-        return { row, today };
+        const zone = await subjectTimeZone(tx, subject);
+        await auditRead(tx, actor, resolved, subject, auditDay(zone));
+        return { row, today: c.var.clock.today(zone) };
       },
       db,
     );
@@ -255,9 +252,9 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
         if (row === null) return null;
         const resolved = resolveAccess(actor, row.subjectId, "summary");
         if (resolved === null) return null;
-        const today = todayIn(await subjectTimeZone(tx, row.subjectId));
-        await auditRead(tx, actor, resolved, row.subjectId, today);
-        return { row, resolved, today };
+        const zone = await subjectTimeZone(tx, row.subjectId);
+        await auditRead(tx, actor, resolved, row.subjectId, auditDay(zone));
+        return { row, resolved, today: c.var.clock.today(zone) };
       },
       db,
     );
@@ -288,7 +285,7 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
         if (resolved === null) return { status: 404 as const };
         if (row.version !== expected) return { status: 409 as const, detail: STALE_VERSION };
         if (row.endedAt !== null) return { status: 409 as const, detail: closedFor(resolved) };
-        const today = todayIn(await subjectTimeZone(tx, row.subjectId));
+        const today = c.var.clock.today(await subjectTimeZone(tx, row.subjectId), now);
         // ACOG CO 700 (architecture 8.4): a scan replaces a due date set from the
         // last period only past the discrepancy band for the age it measured;
         // inside the band the date stands and nothing changes. A due date given
@@ -477,8 +474,8 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
           if (row === null) return null;
           const resolved = resolveAccess(actor, row.subjectId, "summary");
           if (resolved === null) return null;
-          const today = todayIn(await subjectTimeZone(tx, row.subjectId));
-          await auditRead(tx, actor, resolved, row.subjectId, today);
+          const day = auditDay(await subjectTimeZone(tx, row.subjectId));
+          await auditRead(tx, actor, resolved, row.subjectId, day);
           // Paused for a grantee: no dates of any kind (architecture 8.4).
           if (row.endedAt !== null && resolved.decision.reason !== "owner") return { empty: true };
           const rows = await tx
@@ -546,8 +543,8 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
           if (row === null) return null;
           const resolved = resolveAccess(actor, row.subjectId, "summary");
           if (resolved === null) return null;
-          const today = todayIn(await subjectTimeZone(tx, row.subjectId));
-          await auditRead(tx, actor, resolved, row.subjectId, today);
+          const day = auditDay(await subjectTimeZone(tx, row.subjectId));
+          await auditRead(tx, actor, resolved, row.subjectId, day);
           // Paused for a grantee: no dates of any kind (architecture 8.4), as in the list.
           if (row.endedAt !== null && resolved.decision.reason !== "owner") return null;
           const found = await loadEvent(tx, row.id, eventId);
@@ -673,6 +670,9 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
     const actor = actorOn(c);
     const { id } = c.req.valid("param");
     const body = c.req.valid("json");
+    // A day that is not on the calendar is named as such, as the event routes do,
+    // so the "early" refusal below only ever means a day before day 0.
+    if (!isCalendarDate(body.endedAt)) return notADay(c, "endedAt");
     const now = new Date();
     const outcome = await withActor(
       actor.id,
@@ -687,8 +687,15 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
         try {
           result = endPregnancy(toRecord(row), { endedAt: body.endedAt, reason: body.reason });
         } catch (error) {
-          if (error instanceof RangeError) return { status: 422 as const };
+          if (error instanceof RangeError)
+            return { status: 422 as const, refused: "early" as const };
           throw error;
+        }
+        // An ending is something that has happened: a day after today in her
+        // zone, on the calendar clock, is refused before anything is written.
+        const today = c.var.clock.today(await subjectTimeZone(tx, row.subjectId), now);
+        if (compareDates(body.endedAt, today) > 0) {
+          return { status: 422 as const, refused: "future" as const };
         }
         const [updated] = await tx
           .update(schema.pregnancies)
@@ -725,7 +732,6 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
               ),
             );
         }
-        const today = todayIn(await subjectTimeZone(tx, row.subjectId));
         return { status: 200 as const, row: updated, resolved, today };
       },
       db,
@@ -733,9 +739,11 @@ export function registerPregnancy(app: OpenAPIHono<ApiEnv>, options: PregnancyRo
     if (outcome.status === 404) return problem(c, 404, "not_found");
     if (outcome.status === 409) return ended(c);
     if (outcome.status === 422) {
-      return problem(c, 422, "validation_failed", {
-        errors: [{ path: "endedAt", message: "Not a day after the pregnancy began." }],
-      });
+      const message =
+        outcome.refused === "future"
+          ? "Not a day that has happened yet."
+          : "Not a day after the pregnancy began.";
+      return problem(c, 422, "validation_failed", { errors: [{ path: "endedAt", message }] });
     }
     const view = serializePregnancy(outcome.row, outcome.resolved.access, outcome.today);
     if (view === null || view.status !== "ended") return problem(c, 404, "not_found");

@@ -20,3 +20,5 @@ The existing Playwright configuration loads and complete test collection passes;
 The root package entrypoint and database-free port 3001 are included. The exact root package command passed the isolated browser smoke locally.
 
 Draft review: https://github.com/iurman/tidefern/pull/113
+
+Latest main was integrated before handoff, preserving upstream application changes. The new byte-budget browser also uses the isolated helper; Lighthouse rejects a local Chromium below the security floor.

@@ -306,9 +306,9 @@ export default function ColorPage() {
           </li>
           <li>
             The toggle stores an explicit choice and rewrites both <code>theme-color</code> metas.
-            Clearing this site&apos;s data in the browser removes the key and returns to following
-            the system; the key is listed on <TextLink href="/privacy">the privacy page</TextLink>{" "}
-            under Appearance.
+            Choosing Follow system under Theme in Settings, or clearing this site&apos;s data in the
+            browser, removes the key and returns to following the system; the key is listed on{" "}
+            <TextLink href="/privacy">the privacy page</TextLink> under Appearance.
           </li>
           <li>
             Images never invert; the mark swaps to its dark variant. Warmth pairs with text, accent

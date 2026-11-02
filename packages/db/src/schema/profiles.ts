@@ -9,7 +9,9 @@ import { notificationDetailEnum, stageEnum, unitsEnum } from "./enums";
  * generated `user.id` column). Calendar facts elsewhere are dates read in
  * `time_zone`, an IANA name the API validates with core's isKnownTimeZone.
  * `age_attested_at` records the sign-up attestation of being 18 or older;
- * no date of birth is stored (architecture record 7.4).
+ * no date of birth is stored (architecture record 7.4). `terms_version` and
+ * `terms_accepted_at` record the terms last accepted, on every onboarding
+ * path; accepting terms is never consent, so no consent row holds it.
  *
  * The B8 policies bind this table to the actor; `.enableRLS()` here already
  * leaves the app role with zero rows until they land.
@@ -28,6 +30,8 @@ export const profiles = pgTable(
     units: unitsEnum("units").notNull().default("metric"),
     notificationDetail: notificationDetailEnum("notification_detail").notNull().default("generic"),
     ageAttestedAt: timestamp("age_attested_at", { withTimezone: true }).notNull(),
+    termsVersion: text("terms_version"),
+    termsAcceptedAt: timestamp("terms_accepted_at", { withTimezone: true }),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     version: integer("version").notNull().default(1),

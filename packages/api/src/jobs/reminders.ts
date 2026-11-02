@@ -7,6 +7,8 @@ import { assertSweepRole, enqueue } from "@tidefern/db/jobs";
 import type { Job } from "@tidefern/db/jobs";
 import { PERIOD_FLOWS } from "@tidefern/schemas";
 
+import { realCalendarClock } from "../clock";
+import type { CalendarClock } from "../clock";
 import { PERIOD_GAP_DAYS, periodStartsFrom } from "../routes/cycle";
 import { REMINDER_JOB_TYPE, REMINDER_PAYLOAD_KEY } from "../routes/pregnancy/index";
 import type { JobContext } from "./index";
@@ -54,6 +56,14 @@ import type { Mailer } from "./notice";
  * account is closing, gets nothing. The email is the same at every
  * detail level: `notification_detail` changes only in-app text and the
  * lock-screen preview in Phase 1, so the handler never reads it.
+ *
+ * Two clocks, kept apart (clock.ts, task E11). Which day it is in each
+ * person's zone (tomorrow's appointments, today's and yesterday's period
+ * starts, an appointment still due when the job runs) is the calendar
+ * clock's instant, frozen by `TIDEFERN_FAKE_NOW` outside production. The
+ * jobs' `run_after`, the lookback over earlier jobs and the one-a-day rule
+ * read the real instant, because they compare with times that were really
+ * stored.
  */
 
 /** The job type, shared with the pregnancy routes that cancel it. */
@@ -122,15 +132,15 @@ interface DueAppointment {
 }
 
 /**
- * Appointments dated tomorrow in the subject's zone. Every zone's
- * tomorrow lies between UTC today and UTC today plus two, so the query
- * narrows to that and the zone decides the rest.
+ * Appointments dated tomorrow in the subject's zone on the calendar clock.
+ * Every zone's tomorrow lies between UTC today and UTC today plus two, so
+ * the query narrows to that and the zone decides the rest.
  */
-async function dueAppointments(tx: Transaction, now: Date): Promise<DueAppointment[]> {
+async function dueAppointments(tx: Transaction, calendarNow: Date): Promise<DueAppointment[]> {
   const events = schema.pregnancyEvents;
   const pregnancies = schema.pregnancies;
   const profiles = schema.profiles;
-  const anchor = utcToday(now);
+  const anchor = utcToday(calendarNow);
   const rows = await tx
     .select({
       id: events.id,
@@ -155,7 +165,7 @@ async function dueAppointments(tx: Transaction, now: Date): Promise<DueAppointme
       ),
     );
   return rows
-    .filter((row) => row.date === addDays(todayIn(row.timeZone, now), 1))
+    .filter((row) => row.date === addDays(todayIn(row.timeZone, calendarNow), 1))
     .map(({ id, subjectId, pregnancyId }) => ({ id, subjectId, pregnancyId }));
 }
 
@@ -235,19 +245,20 @@ interface PeriodStartRow {
 }
 
 /**
- * Period starts dated today or yesterday in each owner's zone. The days
- * read reach `PERIOD_GAP_DAYS` before yesterday, so a bleeding day that
- * continues an earlier run is never taken for a start.
+ * Period starts dated today or yesterday in each owner's zone on the
+ * calendar clock. The days read reach `PERIOD_GAP_DAYS` before yesterday,
+ * so a bleeding day that continues an earlier run is never taken for a
+ * start.
  */
 async function recentPeriodStarts(
   tx: Transaction,
   ownerIds: readonly string[],
-  now: Date,
+  calendarNow: Date,
 ): Promise<PeriodStartRow[]> {
   if (ownerIds.length === 0) return [];
   const entries = schema.cycleEntries;
   const profiles = schema.profiles;
-  const anchor = utcToday(now);
+  const anchor = utcToday(calendarNow);
   const rows = await tx
     .select({
       id: entries.id,
@@ -272,7 +283,7 @@ async function recentPeriodStarts(
   for (const row of rows) byOwner.set(row.subjectId, [...(byOwner.get(row.subjectId) ?? []), row]);
   const starts: PeriodStartRow[] = [];
   for (const [ownerId, days] of byOwner) {
-    const today = todayIn((days[0] as (typeof rows)[number]).timeZone, now);
+    const today = todayIn((days[0] as (typeof rows)[number]).timeZone, calendarNow);
     const yesterday = addDays(today, -1);
     const window = days.filter(
       (day) => day.date >= addDays(yesterday, -PERIOD_GAP_DAYS) && day.date <= today,
@@ -322,7 +333,10 @@ async function alreadyQueued(tx: Transaction, now: Date): Promise<Queued> {
 /**
  * Of these recipients, the ones who already have a reminder job due on
  * the local day `now` falls on in their own zone: one email a day per
- * person, counted in her day, not the server's.
+ * person, counted in her day, not the server's. `now` is the real instant,
+ * never the calendar clock's: the jobs' `run_after` were really stored, and
+ * a frozen calendar must not let a second run on the same real day write a
+ * second job.
  */
 async function remindedToday(
   tx: Transaction,
@@ -390,26 +404,30 @@ function payloadOf(userId: string, reasons: Reasons): ReminderPayload {
  * period starts to tell, and enqueues one `reminder.send` job per
  * recipient with ids only, due now. It reads every person's rows, so it
  * runs under `withSystem` on the job runner's owner connection and refuses
- * the app role, where the system flag reads nothing.
+ * the app role, where the system flag reads nothing. `now` is the real
+ * instant of the run; each person's day is read on `clock`, which the job
+ * route passes as the app's calendar clock (the real calendar when absent).
  */
 export async function enqueueReminders(
   db: ActorDatabase,
   now: Date = new Date(),
+  clock: CalendarClock = realCalendarClock,
 ): Promise<ReminderSweepCounts> {
   await assertSweepRole(db);
+  const calendarNow = clock.now(now);
   return withSystem(async (tx) => {
     await tx.execute(sql`select ${REMINDER_LOCK}`);
     const queued = await alreadyQueued(tx, now);
     const byRecipient = new Map<string, Reasons>();
 
-    for (const appointment of await dueAppointments(tx, now)) {
+    for (const appointment of await dueAppointments(tx, calendarNow)) {
       const reasons = reasonsFor(byRecipient, appointment.subjectId);
       reasons.pregnancyId = appointment.pregnancyId;
       reasons.eventIds.add(appointment.id);
     }
 
     const told = toldBy(await notifyGrants(tx));
-    for (const start of await recentPeriodStarts(tx, [...told.keys()], now)) {
+    for (const start of await recentPeriodStarts(tx, [...told.keys()], calendarNow)) {
       if (queued.entries.has(start.entryId)) continue;
       for (const granteeId of told.get(start.ownerId) ?? []) {
         reasonsFor(byRecipient, granteeId).entryIds.add(start.entryId);
@@ -510,15 +528,15 @@ export function parseReminderPayload(payload: unknown): ReminderPayload {
 
 /**
  * Of the appointments named, whether one is still hers, still on an open
- * pregnancy and still dated tomorrow in her zone, or today for a retry
- * that crossed her midnight. One moved to a later date waits for the run
- * the day before it.
+ * pregnancy and still dated tomorrow in her zone on the calendar clock, or
+ * today for a retry that crossed her midnight. One moved to a later date
+ * waits for the run the day before it.
  */
 async function appointmentStillDue(
   tx: Transaction,
   userId: string,
   eventIds: readonly string[],
-  now: Date,
+  calendarNow: Date,
 ): Promise<boolean> {
   if (eventIds.length === 0) return false;
   const events = schema.pregnancyEvents;
@@ -539,7 +557,7 @@ async function appointmentStillDue(
       ),
     );
   return rows.some((row) => {
-    const today = todayIn(row.timeZone, now);
+    const today = todayIn(row.timeZone, calendarNow);
     return row.date === today || row.date === addDays(today, 1);
   });
 }
@@ -576,11 +594,11 @@ interface Recipient {
   firstName: string | undefined;
 }
 
-async function recipientOf(tx: Transaction, payload: ReminderPayload, now: Date) {
+async function recipientOf(tx: Transaction, payload: ReminderPayload, calendarNow: Date) {
   const allowed = await reachable(tx, [payload.userId]);
   if (!allowed.has(payload.userId)) return null;
   const due =
-    (await appointmentStillDue(tx, payload.userId, payload.eventIds ?? [], now)) ||
+    (await appointmentStillDue(tx, payload.userId, payload.eventIds ?? [], calendarNow)) ||
     (await periodNoticeStillAllowed(tx, payload.userId, payload.entryIds ?? []));
   if (!due) return null;
   const [row] = await tx
@@ -608,7 +626,10 @@ export async function sendReminder(job: Job, context: JobContext): Promise<void>
   const payload = parseReminderPayload(job.payloadJson);
   const dependencies = configured;
   if (!dependencies) throw new ReminderMailUnavailableError();
-  const recipient = await withSystem((tx) => recipientOf(tx, payload, context.now), context.db);
+  const recipient = await withSystem(
+    (tx) => recipientOf(tx, payload, context.calendarNow),
+    context.db,
+  );
   if (!recipient) return;
   const link = new URL(REMINDER_PATH, dependencies.siteUrl).toString();
   const content = dependencies.template(link, recipient.firstName);

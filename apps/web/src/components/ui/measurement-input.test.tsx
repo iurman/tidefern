@@ -45,6 +45,20 @@ describe("MeasurementInput", () => {
     expect(onChange).toHaveBeenLastCalledWith(3430);
   });
 
+  it("drops its own toggle when the form's one unit control drives it", () => {
+    const { rerender } = render(
+      <MeasurementInput label="Weight" kind="weight" value={3402} unit="metric" hideUnitToggle />,
+    );
+    expect(screen.queryByRole("radio")).toBeNull();
+    expect(screen.queryByRole("group", { name: "Unit" })).toBeNull();
+    expect(screen.getByRole("textbox", { name: "Weight" })).toHaveValue("3.402");
+    rerender(
+      <MeasurementInput label="Weight" kind="weight" value={3402} unit="imperial" hideUnitToggle />,
+    );
+    expect(screen.getByRole("textbox", { name: "Weight" })).toHaveValue("7");
+    expect(screen.getByRole("textbox", { name: "Weight, ounces" })).toHaveValue("8");
+  });
+
   it("keeps a controlled value in the chosen unit", () => {
     const { rerender } = render(
       <MeasurementInput label="Length" kind="length" value={505} unit="imperial" />,

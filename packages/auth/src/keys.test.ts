@@ -3,13 +3,14 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 
 import { FixedKeyProvider, readSubjectKey } from "@tidefern/crypto";
 import type { KeyProvider } from "@tidefern/crypto";
+import type { ActorDatabase } from "@tidefern/db";
 import * as schema from "@tidefern/db/schema";
 
 import { createAuth } from "./auth";
 import type { HostFacts } from "./hosts";
 import { createUserKeyHook, userKeyDatabaseHooks } from "./keys";
 import { CaptureMailer } from "./mailer";
-import { createAuthTestDatabase } from "./test/database";
+import { createMigratedAuthTestDatabase } from "./test/migrated-database";
 
 const SECRET = "a-fixed-test-secret-that-is-long-enough";
 const FACTS: HostFacts = {
@@ -21,6 +22,7 @@ const FACTS: HostFacts = {
 
 // Synthetic ids only; nothing here is a real person.
 const DIRECT_USER = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f50";
+const APP_ROLE_USER = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f51";
 const kek = new FixedKeyProvider(
   Uint8Array.from({ length: 32 }, (_, index) => (index * 3 + 1) % 256),
   "v1",
@@ -28,7 +30,7 @@ const kek = new FixedKeyProvider(
 
 type Row = Record<string, unknown>;
 
-let harness: Awaited<ReturnType<typeof createAuthTestDatabase>>;
+let harness: Awaited<ReturnType<typeof createMigratedAuthTestDatabase>>;
 
 function rows(result: unknown): Row[] {
   return (result as { rows: Row[] }).rows;
@@ -48,12 +50,11 @@ async function userIdFor(email: string): Promise<string | undefined> {
 }
 
 beforeAll(async () => {
-  harness = await createAuthTestDatabase();
-  await harness.db.insert(schema.user).values({
-    id: DIRECT_USER,
-    name: "A tester",
-    email: "direct@example.com",
-  });
+  harness = await createMigratedAuthTestDatabase();
+  await harness.db.insert(schema.user).values([
+    { id: DIRECT_USER, name: "A tester", email: "direct@example.com" },
+    { id: APP_ROLE_USER, name: "A second tester", email: "app-role@example.com" },
+  ]);
 });
 
 afterAll(async () => {
@@ -61,7 +62,7 @@ afterAll(async () => {
 });
 
 describe("createUserKeyHook", () => {
-  test("provisions the user's key through withSystem and is idempotent", async () => {
+  test("provisions the user's key as that user and is idempotent", async () => {
     const hook = createUserKeyHook({ provider: kek, database: harness.db });
     const user = {
       id: DIRECT_USER,
@@ -79,6 +80,35 @@ describe("createUserKeyHook", () => {
     const again = await readSubjectKey(harness.db, DIRECT_USER);
     expect(Buffer.from(again.wrapped).equals(Buffer.from(first.wrapped))).toBe(true);
     expect((await keyRows()).filter((row) => row.subject_id === DIRECT_USER)).toHaveLength(1);
+  });
+
+  test("provisions the key when the connection itself is the app role, as outside PGlite", async () => {
+    // DATABASE_URL names tidefern_app on CI and in production (architecture
+    // 7.2), the role is_system() refuses, so the hook must act as the new user.
+    const appRole: ActorDatabase = {
+      transaction: (fn) =>
+        harness.db.transaction(async (tx) => {
+          await tx.execute(sql`set local role tidefern_app`);
+          return fn(tx);
+        }),
+    };
+    const hook = createUserKeyHook({ provider: kek, database: appRole });
+    await hook(
+      {
+        id: APP_ROLE_USER,
+        name: "A second tester",
+        email: "app-role@example.com",
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      null,
+    );
+    expect(await readSubjectKey(harness.db, APP_ROLE_USER)).toMatchObject({
+      subjectId: APP_ROLE_USER,
+      kind: "user",
+      kekVersion: "v1",
+    });
   });
 
   test("builds the databaseHooks object with only the user create.after hook", () => {

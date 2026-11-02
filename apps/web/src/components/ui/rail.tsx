@@ -8,8 +8,10 @@ import styles from "./rail.module.css";
 export interface RailProps {
   destinations: Destination[];
   current: DestinationKey;
-  /** The quick-log button opens nothing yet; the Today route passes the sheet opener here. */
+  /** The quick-log action: what the page on screen registered with `useQuickLog` (quick-log.tsx). */
   onQuickLog?: () => void;
+  /** Whether the quick-log button shows; Today by default, and never for a stage that asks no body question. */
+  quickLog?: boolean;
 }
 
 /**
@@ -18,7 +20,12 @@ export interface RailProps {
  * 24 px icons and labels, `aria-current="page"`, and the quick-log action
  * while the person is on Today.
  */
-export function Rail({ destinations, current, onQuickLog }: RailProps) {
+export function Rail({
+  destinations,
+  current,
+  onQuickLog,
+  quickLog = current === "today",
+}: RailProps) {
   return (
     <nav className={styles.rail} aria-label="Main">
       <Link href="/today" prefetch={false} className={styles.home}>
@@ -43,8 +50,13 @@ export function Rail({ destinations, current, onQuickLog }: RailProps) {
           );
         })}
       </ul>
-      {current === "today" ? (
-        <button type="button" className={styles.quickLog} onClick={onQuickLog}>
+      {quickLog ? (
+        <button
+          type="button"
+          className={styles.quickLog}
+          onClick={onQuickLog}
+          disabled={onQuickLog === undefined}
+        >
           <Icon name="plus" size={20} />
           <span>Log today</span>
         </button>

@@ -9,10 +9,10 @@ database access goes through. Imported by `packages/api` (and later
 | Variable                | Used by                                      | Value                                                   |
 | ----------------------- | -------------------------------------------- | ------------------------------------------------------- |
 | `DATABASE_URL`          | `src/client.ts` (the app)                    | The pooled Neon string (host contains `-pooler`)        |
-| `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run` | The owner role's direct string; migrations and the job runner |
+| `DATABASE_URL_UNPOOLED` | `scripts/migrate.ts`, `drizzle.config.ts`, `pnpm jobs:run`, the web host's job runner (`ownerDatabase` in `src/owner.ts`) | The owner role's direct string; migrations and the job runner |
 | `MIGRATE_DESTRUCTIVE`   | the owner-triggered migration workflow (B12) | `1` lets the runner apply a contract migration (DROP, RENAME, ALTER COLUMN ... TYPE, TRUNCATE) |
 | `TIDEFERN_KEK_V1`       | `scripts/seed.ts`                            | The KEK the seed seals its free text under; base64 of 32 bytes, the environment's own value |
-| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`                            | An ISO 8601 instant that freezes the seed's "today"; refused when `VERCEL_ENV` is `production` |
+| `TIDEFERN_FAKE_NOW`     | `scripts/seed.ts`, and the API's calendar clock (`packages/api/src/clock.ts`) | An ISO 8601 instant that freezes "today" for the seed and for every calendar decision the API makes outside production (task E11), handed to `cycle_status_for` as `app.calendar_now`; refused when `VERCEL_ENV` is `production` |
 | `DATABASE_URL` and `DATABASE_URL_UNPOOLED` together | `scripts/grant-login.ts` (CI only) | The owner URL runs `ALTER ROLE tidefern_app WITH LOGIN PASSWORD`, with the role and password taken from `DATABASE_URL`; refused when `VERCEL_ENV` is `production` |
 
 ## Commands
@@ -31,6 +31,17 @@ express) starts with `pnpm --filter @tidefern/db exec drizzle-kit generate --cus
 then the SQL goes into the file it created. Commit the SQL together with
 `drizzle/meta/_journal.json` and the snapshot exactly as drizzle-kit wrote
 them; never edit the journal by hand and never run `drizzle-kit up`.
+
+When another migration reaches main first, generate yours again on top of
+it rather than renaming your files onto the next number: start from main's
+journal, delete your SQL file and snapshot, run the same command, paste the
+SQL back in, and run `pnpm --filter @tidefern/db exec drizzle-kit check`.
+A renamed migration keeps a snapshot whose parent is now another
+migration's parent (the next `drizzle-kit generate` reports a collision
+and writes nothing), and it can keep a `when` older than the entry above
+it, which the migrator then skips on every database that already has that
+entry while a fresh test database applies it anyway. `src/schema.test.ts`
+fails on both.
 
 The Vercel build command runs `pnpm -w db:migrate` before `next build`, so
 every environment migrates itself. Migrations are expand then contract: a
@@ -90,6 +101,15 @@ is rejected before the transaction opens.
 seeds, sweeps and backfills. The policy helpers (task B8) honour
 `app.system` only when `current_user` is not `tidefern_app`, so an app
 connection can never claim system context.
+
+That is also why no request path uses `withSystem`: the request pool is
+`tidefern_app` on CI and in production, where it gets neither system
+context nor an actor, so it reads nothing under RLS and every guarded
+write is refused. A request runs as the person
+inside `withActor`, and a step her own policies refuse goes through a
+narrow `SECURITY DEFINER` function that re-checks the actor itself, as
+`cycle_status_for()` and `refresh_cycle_prediction()` (task B14) and
+`revoke_closure_grants()` (task E10) do.
 
 Both helpers take the database as their last argument, defaulting to the
 production client, so tests pass the PGlite instance.
@@ -190,8 +210,15 @@ revoked_at IS NULL`, so two active grants on one tuple cannot exist,
   for milestones and a span for sleep, and a feed may carry a `side`
   (`left`, `right` or `both`, the closed nullable `child_event_side` enum
   from migration `0009`, task B13) that the `child_events_side_is_for_feed`
-  check refuses on any other kind; `child_measurements` need at least
-  one positive value.
+  check refuses on any other kind; a feed may also carry a `feed_method`
+  (`breast`, `bottle` or `solids`, the `child_event_feed_method` enum) and a
+  diaper its `diaper_contents` (`wet`, `dirty` or `mixed`, the
+  `child_event_diaper_contents` enum), both closed and nullable from
+  migration `0012` (task E12) and refused on any other kind by
+  `child_events_feed_method_is_for_feed` and
+  `child_events_diaper_contents_is_for_diaper`; which side or volume a
+  method allows is the API's validation rule, not a check;
+  `child_measurements` need at least one positive value.
 - Platform: `photos` hold the object key, status, content type, size,
   dimensions, an encrypted caption and the day taken, never a filename or
   EXIF; `audit_events` have no content columns and a partial unique
@@ -235,8 +262,9 @@ behaviour on PGlite inside `withActor`, which drops to `tidefern_app`.
 | `is_household_member(household_id, role)`, `has_members(household_id)`, `may_join(household_id, role)` | definer | membership and invitation lookups |
 | `is_related(other_id)` | definer | a grant in either direction, a shared household, or a shared child |
 | `accept_invitation(invitation_id)` | definer, writes | sets `accepted_at` on an open invitation to the actor's verified email and nothing else; true when it closed one |
-| `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise |
+| `cycle_status_for(subject)` | definer | migration `0010`, task B14: when `can_read(subject, 'cycle.status')` holds, one row with today in the subject's zone, the day of the cycle, the day of the period while bleeding and whether today is in the fertile window, and for anyone but the subject no cycle or period day while a pregnancy continues and none counted from before one ended; no row otherwise. Since migration `0011` (task E11) "today" is the instant in `app.calendar_now` when the transaction carries one, else `now()` |
 | `refresh_cycle_prediction(subject)` | definer, writes | migration `0010`, task B14: when `can_write(subject, 'cycle.history')` holds, keeps the live `cycle_predictions` row equal to the entries and pregnancies and answers true; false and nothing written otherwise |
+| `revoke_closure_grants(closing_at)` | definer, writes | migration `0013`, task E10: when the current actor has an open closure, revokes every live grant she owns or holds at `closing_at`, files one `grant.revoke` audit row per grant in her name (the child as subject for a child grant, the owner otherwise) and answers true; false and nothing written with no actor, no instant or no open closure. It takes no person, so it acts on nobody else |
 
 The `category` argument is text and the policies pass the literal they file
 under, so a row never spans categories except `cycle_entries`, where either
@@ -246,13 +274,13 @@ a child record is the child (architecture record 8.3). `journal.private`
 is never granted: both helpers return false for it unless the actor is the
 subject. A grant is active while `revoked_at` is null; there is no expiry
 column, as in `can()`. Every helper is `STABLE` with `SET search_path =
-pg_catalog, public`, except `accept_invitation()`, which is `VOLATILE`
-because it writes. `current_actor()`, `is_system()` and
+pg_catalog, public, pg_temp`, except `accept_invitation()`, which is
+`VOLATILE` because it writes. `current_actor()`, `is_system()` and
 `in_policy_helper()` carry `COST 1` so they stay the cheapest arm of every
 policy; Postgres keeps the written order only among terms of equal cost,
 and the lookup helpers keep the default cost of 100.
 
-Two rules the SQL has to keep that `can()` never faces:
+Three rules the SQL has to keep that `can()` never faces:
 
 - `is_system()` appears only in policy expressions, never inside a helper.
   Inside a `SECURITY DEFINER` body `current_user` is the function owner, so
@@ -269,12 +297,24 @@ Two rules the SQL has to keep that `can()` never faces:
   and `invitations_update` does too, for the one write a helper makes
   (`accept_invitation()`). Migration `0010` adds the marker to
   `cycle_entries_select` and `pregnancies_select` for the two cycle
-  functions below.
+  functions below. Migration `0013` adds it to `grants_update` and
+  `audit_events_insert` for `revoke_closure_grants()`, and there only for
+  the current actor's own rows: a grant she is a party to, an audit row in
+  her own name.
   The marker counts only when `current_user` is not `tidefern_app`, so the
   app role setting it by hand changes nothing. `src/rls.test.ts` proves
   that from both roles, and its last block re-owns the helpers to a role
   that cannot bypass RLS (the shape of a Neon owner) and runs the scenarios
   again; task B10 repeats the check on a real Neon branch.
+- Every function's `search_path` ends with `pg_temp`. Left out of the
+  path, the session's temporary schema is searched first for tables and
+  types, and the app role may create temporary tables, so it could hand a
+  helper its own `child_guardians` or `grants` and be told it guards a
+  child or holds a grant. Migrations `0007`, `0010` and `0011` wrote
+  `pg_catalog, public`; migration `0013` (task E10) moved `pg_temp` to the
+  end of every path, and `src/e10-closure-grants.test.ts` fails on any
+  function in `public` whose path does not end that way, and shows four
+  such attempts failing.
 
 #### The policies
 
@@ -316,8 +356,10 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   shows nothing about another member's records (architecture record 8.1).
 - `grants`: both parties see a grant; only the owner makes one, and a child
   grant only by a guardian of that child; the owner or a co-guardian
-  revokes (an update); the owner removes the row. `consents`: the subject,
-  or a guardian consenting on a child's behalf and recorded as such.
+  revokes (an update), and a person closing her account revokes the grants
+  she holds as well through `revoke_closure_grants()`; the owner removes
+  the row. `consents`: the subject, or a guardian consenting on a child's
+  behalf and recorded as such.
 - `children` and `child_guardians`: a child is visible through
   `can_read(id, 'child')`, so a household partner without guardianship or a
   grant sees none; an active member of the household creates a child and
@@ -330,7 +372,9 @@ Four permissive policies per table, named `<table>_select`, `_insert`,
   an actor appends only as herself and only about a subject she holds a
   key relationship to (`can_use_key`: herself, a child she guards, a person
   who granted to her, or that child), so nobody files a read that could not
-  have happened; nothing edits the log and only the system removes. `data_requests`: hers to read, file and cancel; the
+  have happened; the one exception is `revoke_closure_grants()`, which
+  files a closing person's revocations in her name even for a child she no
+  longer guards; nothing edits the log and only the system removes. `data_requests`: hers to read, file and cancel; the
   system closes. `disclosures`: hers to read, the product's to write.
 
 #### The derived cycle status and the prediction refresh
@@ -344,11 +388,22 @@ back derived values only:
 
 - `cycle_status_for(subject)` re-checks `can_read(subject, 'cycle.status')`
   for the current actor, so a grant revoked after the session was loaded
-  answers no row. It takes no date: "today" is computed from `now()` in the
-  subject's profile zone (then the actor's, then UTC), so a grantee cannot
-  walk it back through the history. `GET /v1/cycle/status` calls it for the
-  subject and for a grantee alike and audits a grantee's read under
-  `cycle.status`.
+  answers no row. It takes no date, so no request can walk it back through
+  the history: "today" is read in the subject's profile zone (then the
+  actor's, then UTC) from `now()`, or, since migration
+  `0011_cycle_status_calendar_clock` (task E11), from the instant in the
+  transaction-local setting `app.calendar_now` when the transaction carries
+  one (an empty value counts as none, because a pooled connection keeps the
+  setting defined and empty after the transaction that set it). The API
+  sets it inside the actor's `withActor` transaction just before the call,
+  and only when `TIDEFERN_FAKE_NOW` froze its calendar clock outside
+  production, so production always reads `now()`. The value comes from the
+  clock, never from a request; code that could write it as `tidefern_app`
+  could equally write `app.actor_id`, which the policies already trust.
+  `GET /v1/cycle/status` calls it for the subject and for a grantee alike
+  and audits a grantee's read under `cycle.status` on the real day.
+  `src/e11-calendar-clock.test.ts` proves the setting, the fallback and that
+  the setting never outlives its transaction.
 - `refresh_cycle_prediction(subject)` re-checks `can_write(subject,
   'cycle.history')` and writes the live prediction row under the caller's
   own insert and update policies; `PUT /v1/cycle/entries/{date}` calls it
@@ -483,9 +538,9 @@ else; never reuse one anywhere real.
 | --- | --- | --- | --- | --- | --- |
 | Noor | `noor@example.test` | `tidefern-seed-noor` | Europe/Berlin, `cycle` | A, owner | Her own day sheet (17 days, 14 symptoms, 3 period starts 28 days apart), the live prediction, a private note and a shared one, 4 consents, the invitations she sent, the grants she made |
 | Theo | `theo@example.test` | `tidefern-seed-theo` | Europe/Berlin, `none` | A, partner | Noor's day sheet through a `read` grant on `cycle.symptoms` and a status card through a `summary` grant on `cycle.status` (notify on); his `read` grant on `cycle.history` was revoked 20 days ago, so no prediction; the shared note, never the private journal |
-| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events, 5 measurements, 5 checked milestones, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there) |
-| Lena | `lena@example.test` | `tidefern-seed-lena` | America/Vancouver, `pregnancy` | B, partner | Her open pregnancy (22 weeks, redated by 8 days at the 14 week scan; the `due_date_changes` row is hers alone), 4 events, 2 notes under `pregnancy.overview`, both children as a guardian; nothing of Mira's history |
-| Pia | `pia@example.test` | `tidefern-seed-pia` | America/New_York, `none`, imperial | none | Sol alone, through a `read` grant on `child` for that child: Sol's events and measurements, Sol's key, never Ilo and never the guardians |
+| Mira | `mira@example.test` | `tidefern-seed-mira` | America/Vancouver, `postpartum` | B, owner | Both children (Ilo, six weeks; Sol, thirty months) as a guardian: 10 events (Ilo's 90 ml `bottle` feed, a `breast` feed with a note, a night's sleep and a `mixed` diaper; Sol's night; 5 checked milestones), 6 measurements (Sol's newest weight is beyond two standard deviations for his age, so her answers carry the pointing-to-care flag), the consent she gave on each child's behalf in the guardian's consent wording, her ended pregnancy (reason `birth`, hers alone), her private note, and Lena's journey through a `contribute` grant on `pregnancy.overview` (she authored one appointment and one note there); she shared her own pregnancy with Lena through a `summary` grant while it was open |
+| Lena | `lena@example.test` | `tidefern-seed-lena` | America/Vancouver, `pregnancy` | B, partner | Her open pregnancy (22 weeks, redated by 8 days at the 14 week scan; the `due_date_changes` row is hers alone), 4 events, 2 notes under `pregnancy.overview`, both children as a guardian; Mira's ended pregnancy through the `summary` grant, which the API answers with the neutral paused state of architecture 8.4 rule 2 (no week, no dates, never the reason), and nothing else of Mira's |
+| Pia | `pia@example.test` | `tidefern-seed-pia` | America/New_York, `none`, imperial | none | Sol alone, through a `read` grant on `child` for that child: Sol's events and his 3 measurements (the far one too, without the care flag, which only a guardian's answer carries), Sol's key, never Ilo and never the guardians |
 
 Invitations, all from household A unless noted: Theo's accepted one, a
 pending one to `kim@example.test` (expires in two days), an expired one to
@@ -504,18 +559,34 @@ Rows per table, which `src/seed/seed.test.ts` pins:
 | `households` | 2 | `cycle_predictions` | 1 |
 | `household_members` | 4 | `pregnancies` | 2 |
 | `invitations` | 5 | `pregnancy_events` | 5 |
-| `grants` | 5 | `due_date_changes` | 1 |
+| `grants` | 6 | `due_date_changes` | 1 |
 | `consents` | 11 | `child_events` | 10 |
-| `children` | 2 | `child_measurements` | 5 |
+| `children` | 2 | `child_measurements` | 6 |
 | `child_guardians` | 4 | `notes` | 5 |
-| `vocabulary` | 27 | `audit_events` | 18 |
+| `vocabulary` | 27 | `audit_events` | 19 |
 
-The audit trail holds one `session.sign_in` per person, every grant made
-and the one revoked, the pending invitation's creation and the withdrawn
-one's withdrawal, Theo's two reads of Noor's symptoms (one row per actor,
-subject, category and day, keyed by `dedupe_key`, the day being the
-reader's own calendar day), Pia's read of Sol, and
-Mira's two writes for Lena. `photos`, `jobs`, `idempotency_keys`,
+The audit trail uses the API's own names (`auditActions` in
+`packages/api/src/middleware/audit.ts`): one `session.sign_in` per person,
+every grant made (`grant.create`, Mira's summary grant to Lena among them)
+and the one revoked (`grant.revoke`), the pending invitation's creation and
+the withdrawn one's withdrawal, Theo's two reads of Noor's symptoms and
+Pia's read of Sol as `partner.read`, and Mira's two writes for Lena as
+`partner.write`. A read is one row per actor, subject, category and day,
+keyed by `dedupe_key` in the API's format (`actor/subject/category/day`),
+the day read where the API reads it: in the subject's own zone for a
+person and in the reader's zone for a child. Theo's two reads sit at the
+seed's `now` and at noon on the day before in Noor's zone, so they land on
+today and yesterday in Berlin at any hour on any date, CI's midnight UTC
+and Berlin's 25-hour day included; an API read on a seeded day collapses
+onto the seeded row.
+
+Sol's newest measurement (`SOL_BEYOND_BAND` in `src/seed/cast.ts`) is a
+weight of 10500 g at 912 days, which `growthAssessment` in packages/core
+places on the CDC weight-for-age chart at z -2.40 (the 0.8th percentile,
+under the 2.3rd percentile edge of 10934 g), beyond two standard
+deviations: a guardian's answer carries `pointToCare: true`, a grantee's
+carries no such field. This package does not depend on core, so the test
+pins the row and this paragraph records the placement. `photos`, `jobs`, `idempotency_keys`,
 `data_requests`, `product_events` and `disclosures` stay empty, as do the
 Better Auth session tables. No name, email, id or action name carries a
 health word; the test scans them.
@@ -546,7 +617,8 @@ person opens `withActor` itself.
   `reminder.send`, `account.delete`, `export.step` and so on) and the
   payload is checked to hold UUIDs only, as strings or lists under camelCase
   keys; anything else is a `JobPayloadError`. The id is a UUIDv7 from
-  `jobId()` unless the caller mints one.
+  `jobId()` unless the caller mints one; `jobId()` calls `uuidv7` from
+  `@tidefern/core`, the one minter the API and the client share.
 - `claimDue(db, limit, now)` claims up to `limit` jobs that are `queued` or
   `failed` with `run_after` in the past, plus any `running` row whose lock
   is older than `CLAIM_LOCK_TIMEOUT_MS` (15 minutes, a drain that died). The
@@ -585,6 +657,24 @@ a connection the sweep would refuse is refused before any job is claimed.
 with its single connection two claimers run back to back there, and B10
 covers the pooled endpoint.
 
+The web host (`apps/web/src/app/api/[[...route]]/route.ts`, task I3)
+passes the runner to `createApp` only when `DATABASE_URL_UNPOOLED` is set.
+Its connection comes from `ownerDatabase(url)` in `src/owner.ts`, reached
+through `@tidefern/db/client`: one `pg` client (`max` 1) on that URL, the
+app pool's 5 second idle timeout, registered with `attachDatabasePool`, and
+an `error` listener that logs only the error's name and driver code.
+Nothing connects until the first query. One connection is enough because
+the runner's work is serial and the direct endpoint has no pooler in front
+of it. The host also passes the handler registry, `CRON_SECRET`, Better
+Auth's mailer, `OWNER_EMAIL` for the dead-queue notice and a drain budget
+of half the route's 60 second `maxDuration` (the API's default budget
+assumes Hobby's 300 seconds). It configures reminders and closure with the
+same mailer. Without the variable the endpoint is not mounted (404) and
+the inline drain is a no-op.
+`pnpm jobs:run` configures neither reminders nor closure, because their
+transport and template live in `@tidefern/auth`; the comment in `run.ts`
+says what happens to those jobs there.
+
 ## Account closure
 
 Architecture record 11, task I2. Closing an account is a state machine on
@@ -609,6 +699,18 @@ a step that already ran finds nothing the second time.
 | `in_progress` | `rows` | One table of `closureDeletions`, in foreign key order |
 | `in_progress` | `tombstone` | `user_id` set to null and `email_hmac` to the HMAC of her email, then the `user` row deleted and her id stripped from the closure's own jobs (`forgetClosureJobs`), in one transaction |
 | `in_progress`, no user left | `done` | The content-free processor notice to the owner, then `completed` |
+
+Both ways into a closure, `POST /v1/me/close` and the consent withdrawal
+(`POST /v1/me/consents/{id}/withdraw`), run as the person inside
+`withActor` on the request pool (task E10): they take the closure's
+advisory lock, write the request row first, then call
+`revoke_closure_grants()` for the grants and end every other session
+(`session` sits outside RLS and the app role may write it). The undo, the
+state read and the export were always `withActor` paths.
+`src/e10-closure-grants.test.ts` proves the function's checks, its
+privileges and the two marker terms, and re-owns it to a role that cannot
+bypass RLS to prove the Neon path, including that each marker term is
+needed there.
 
 What this package holds for it, in `src/closure.ts`:
 
@@ -663,10 +765,12 @@ the job cleanup, and both sweep duties; the API's
   constants and the `Job`, `JobType`, `JobPayload` and `SweepCounts` types).
   The api package imports it at runtime without pulling the migration runner
   into a bundle.
-- `@tidefern/db/client`: the raw `db` and `pool`. Only `withActor` and
-  `withSystem` inside this package and the Better Auth adapter (task C1) may
-  import it. The `jobs:run` entry in `packages/api/src/jobs/run.ts` opens its
-  own one-connection pool on the owner role's URL instead.
+- `@tidefern/db/client`: the raw `db` and `pool`, and `ownerDatabase(url)`,
+  the job runner's owner-role connection (see Jobs). Only `withActor` and
+  `withSystem` inside this package, the Better Auth adapter (task C1) and
+  the web host's API entry may import it. The `jobs:run` entry in
+  `packages/api/src/jobs/run.ts` opens its own one-connection pool on the
+  owner role's URL instead.
 - `@tidefern/db/schema`: the tables, for drizzle-kit and the auth adapter.
 
 ### Keeping route code out of the raw client

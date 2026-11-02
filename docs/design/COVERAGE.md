@@ -82,10 +82,10 @@ Gaps:
 
 - Overview (`/design`): the exports now list the JSON tokens, the CSS
   variables, the Markdown reference, the catalog and the OpenAPI contract.
-  The intro still says "the seven chapters below are the planned structure",
-  which is no longer true: all seven are published. The hub does not offer
-  the searchable pattern catalog that the site-build guidance suggests. The
-  catalog exists as JSON and Markdown but is not rendered on the hub.
+  The intro says the seven chapters render the real tokens and components
+  and the files are the live exports (J3e); all seven are published. The
+  hub does not offer the searchable pattern catalog that the site-build
+  guidance suggests. The catalog exists as JSON and Markdown but is not rendered on the hub.
 - Brand: complete for the shipped files; the mark itself is pending the
   owner's approval, as the chapter says.
 - Color: matches 13.8 (both themes, measured contrast, a sandboxed checker,
@@ -104,17 +104,17 @@ Gaps:
   Actions and feedback, Forms, Structure and overlays, Calendar, Marks and
   charts, Patterns, and Patterns continues to Motion.
 
-## Links the specimens make to routes that do not exist yet
+## Links the specimens make
 
-Specimens use the product's real destinations with synthetic data. These
-answer 404 on main because later Phase 1 tasks build them: `/calendar`,
-`/journey`, `/journey/dating`, `/journey/start`, `/family`,
-`/family/child/milestones`, `/sharing`, `/settings`, `/log` and
-`/log/<date>`. The link check allows a 404 only for those exact paths (and a
-`YYYY-MM-DD` date under `/log`). Every other
-internal link must answer 200, or 307 to `/sign-in` for a signed-in route
-(`/today`, `/settings/sound`). When a route lands, its links start answering
-200 with no change to the test.
+Specimens use the product's real destinations with synthetic data, and
+every one of them is a built route: the week card and the ring's empty
+action link to `/journey` and `/log/<date>`, and the family specimens to
+`/family`. The link check allows no 404 (task J3f removed the allowance it
+kept for `/journey/dating`, `/journey/start`, `/family/child/milestones` and
+`/log`). Every internal link must answer 200, or, for a signed-in route
+(`/today`, `/calendar`, `/journey`, `/family`, `/sharing`, `/settings`,
+`/settings/sound`, `/log/<date>`), the redirect to sign-in that carries the
+path to return to.
 
 ## Not checked here
 

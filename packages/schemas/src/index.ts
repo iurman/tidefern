@@ -1,4 +1,4 @@
-import { z } from "zod";
+import * as z from "zod";
 
 /** Calendar facts are dates, never timestamps. ISO 8601 YYYY-MM-DD. */
 export const CalendarDate = z

@@ -495,12 +495,12 @@ appears in `/design/components`. The rows below add what each one must do.
 | Segmented date input | Three fields in the profile's order with an example line; `inputMode="numeric"`; validated with core's date check |
 | Date range selection | First tap starts, second ends, swapped if earlier, hover preview, APG keyboard model, `data-range-start`, `-middle`, `-end`, cells named "selected" |
 | Flow scale | Five values as a single-select group; `none` first; selected value on the period data color |
-| Chip group (symptoms) | Multi-select; 44 px; a "More" chip opens the full list; pressed state uses the action fill |
+| Chip group (symptoms) | Multi-select; 44 px; a "More" chip opens the full list; pressed state uses the action fill; the labels are the API's own (`SYMPTOM_LABELS`, the vocabulary route's list) |
 | Mood selector | Three values, single select |
 | Measurement input with unit toggle | SI stored, display converted at the edge; the toggle is a segmented control |
 | Segmented control | Swaps content in place, never navigates |
 | Calendar month grid and list | Seven columns, two-letter headers, greyed neighbours, logged solid, predicted dashed and estimated dotted pills, today's row underlined by the tide line, `today` as a prop, per-day accessible label |
-| Day sheet | Bottom sheet on phones, dialog on desktop; see 3.4 |
+| Day sheet | Bottom sheet on phones, dialog on desktop, and a page at `/log/[date]` (the date as the h1, the days and Close as links); see 3.4. In the pregnancy stage it has no Period switch and no flow scale (symptoms, mood, note), while cycle and postpartum keep both |
 | Cycle ring | Section 6.1 |
 | Pregnancy week card | Section 6.4 |
 | Timeline | Vertical, date-led rows; the newest row on warmth only on `/family/[childId]`, where nothing else uses it (on `/journey` the week card is the warmth and every row is plain); dashed connector for expected items |
@@ -524,15 +524,27 @@ appears in `/design/components`. The rows below add what each one must do.
    `/calendar` tapping a day opens the day sheet for that date.
 2. The period toggle is one control: tap logs a period day, the same tap
    unlogs it. A range comes from tapping a start day and an end day in the
-   calendar, with the Nord-style rules written in Tidefern's words.
+   calendar, with the Nord-style rules written in Tidefern's words. A
+   period day is a day whose flow is light, medium or heavy (the API has no
+   period flag), so the flow scale is always shown, turning the switch on
+   selects Medium on it (visible and changeable before Save), a day of
+   spotting or none opens and saves with that value, and turning the switch
+   off clears only a period flow, to unset.
 3. Flow is a five-value scale with `none` first; symptoms are chips
    (multi-select, "More" opens the full vocabulary); mood is three values.
 4. The note is its own field. Saving writes it as a private row; "Share
    this note with..." is an explicit action that re-files it under
-   `cycle.symptoms` or `pregnancy.overview` and says what that means.
+   `cycle.symptoms` or `pregnancy.overview` and says what that means. A
+   note already shared is shown read-only, labelled by who can read it
+   ("Shared with people who can see your symptoms", or "your pregnancy
+   overview") and never under "Only you can read this.", and because
+   sharing is one way its confirm step says a shared note cannot be made
+   private again, only deleted.
 5. Save shows "Saved for Sunday, Oct 5" inline with an Undo for ten
    seconds; a failure keeps the sheet open with the error under the field
-   that failed and "Try again".
+   that failed and "Try again". The Undo is compensating writes: a day the
+   save created is deleted, otherwise the previous values go back with the
+   new version as If-Match, and a share has no undo.
 6. Pending state: the Save control reads "Saving" and stays the same width;
    nothing else changes until the response.
 
@@ -584,6 +596,11 @@ the cell and the ring.
   dotted arcs, with that copy.
 - Accessible name: "Cycle day 12 of about 28"; the sentences beside the
   ring carry every fact; the ring is `role="img"`.
+- The ring draws the API's prediction (GET `/v1/cycle/predictions`) as it
+  is, placed from the latest period start (the status `date` minus
+  `cycleDay` plus one), and never recomputes a prediction from period
+  starts, because the grouping of bleeding days and the pregnancy boundary
+  are the server's.
 - Reduced motion: no arc animation; otherwise the progress arc settles in
   600 ms once per page entrance, transform and opacity only.
 

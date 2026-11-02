@@ -19,16 +19,7 @@ import { ACCOUNT_CLOSING } from "../auth";
 import { IDEMPOTENCY_KEY_HEADER } from "../middleware/idempotency";
 import { ANNA, BEN, CARA, OWN_ORIGIN } from "../test/actors";
 import { sessionHeaders } from "../test/auth-fake";
-import {
-  CHILD,
-  HOUSEHOLD,
-  KEK,
-  NOTES,
-  TEXTS,
-  TOKENS,
-  createAccountFixture,
-  withInjected,
-} from "../test/account";
+import { CHILD, HOUSEHOLD, KEK, NOTES, TEXTS, TOKENS, createAccountFixture } from "../test/account";
 import type { AccountFixture } from "../test/account";
 import {
   ClosureConfigurationError,
@@ -38,7 +29,7 @@ import {
   processorNotice,
 } from "./closure";
 import type { ClosureSettings, ObjectStore } from "./closure";
-import { drainDue } from "./index";
+import { drainDue, jobContext } from "./index";
 import type { MailMessage, Mailer } from "./notice";
 
 /**
@@ -82,7 +73,7 @@ class Bucket implements ObjectStore {
 
 interface World {
   fixture: AccountFixture;
-  client: ReturnType<typeof withInjected>;
+  client: ReturnType<typeof createApp>;
   inbox: Inbox;
   bucket: Bucket;
   settings: ClosureSettings;
@@ -162,8 +153,7 @@ async function createWorld(): Promise<World> {
     height: 10,
     byteLength: 5,
   });
-  const app = createApp({ auth: fixture.auth, db, log: { sink: () => undefined } });
-  const client = withInjected(app, { db, keys: KEK });
+  const client = createApp({ auth: fixture.auth, db, keys: KEK, log: { sink: () => undefined } });
   const inbox = new Inbox();
   const bucket = new Bucket();
   return {
@@ -484,7 +474,7 @@ describe("a closure with the undo window, walked one step at a time", () => {
     const handler = createClosureHandler({ settings: () => world.settings });
     const [job] = await closureJobs(world);
     expect(job).toBeDefined();
-    if (job !== undefined) await handler(job, { db: db(), now: afterWindow() });
+    if (job !== undefined) await handler(job, jobContext(db(), afterWindow()));
     expect(world.inbox.sent).toHaveLength(1);
     expect((await requestRow(world, requestId))?.state).toBe("completed");
   });
@@ -531,7 +521,7 @@ describe("undo inside the window", () => {
     ).toEqual({ step: "finished", state: "cancelled" });
     // A job that slipped past the undo's delete still finds nothing to do.
     const handler = createClosureHandler({ settings: () => world.settings });
-    if (job !== undefined) await handler(job, { db: world.fixture.harness.db, now: after });
+    if (job !== undefined) await handler(job, jobContext(world.fixture.harness.db, after));
     expect(await count(world, schema.user, eq(schema.user.id, ANNA))).toBe(1);
     expect(await count(world, schema.subjectKeys, eq(schema.subjectKeys.subjectId, ANNA))).toBe(1);
     expect(await count(world, schema.children, eq(schema.children.id, CHILD))).toBe(1);
@@ -611,7 +601,7 @@ describe("a run that spends its budget", () => {
     const [job] = await claimDue(world.fixture.harness.db, 1, now);
     expect(job).toBeDefined();
     if (job === undefined) return;
-    await handler(job, { db: world.fixture.harness.db, now });
+    await handler(job, jobContext(world.fixture.harness.db, now));
     // One step only: the window is over, so it started.
     expect((await requestRow(world, requestId))?.state).toBe("in_progress");
     expect(await count(world, schema.subjectKeys, eq(schema.subjectKeys.subjectId, BEN))).toBe(1);
@@ -631,14 +621,14 @@ describe("a run that spends its budget", () => {
     // Pretend the original was lost: the run makes sure one is waiting.
     await world.fixture.harness.db.delete(schema.jobs).where(eq(schema.jobs.id, original.id));
     const handler = createClosureHandler({ settings: () => world.settings });
-    await handler(original, { db: world.fixture.harness.db, now: new Date() });
+    await handler(original, jobContext(world.fixture.harness.db, new Date()));
     const waiting = (await closureJobs(world)).filter(
       (row) => row.payloadJson["requestId"] === requestId,
     );
     expect(waiting).toHaveLength(1);
     expect(waiting[0]?.runAfter.getTime()).toBe(undoUntil?.getTime());
     // A second early run adds no second job.
-    await handler(original, { db: world.fixture.harness.db, now: new Date() });
+    await handler(original, jobContext(world.fixture.harness.db, new Date()));
     expect(
       (await closureJobs(world)).filter((row) => row.payloadJson["requestId"] === requestId),
     ).toHaveLength(1);
@@ -651,10 +641,7 @@ describe("a run that spends its budget", () => {
     await expect(
       handler(
         { ...job, payloadJson: { requestId: "not-an-id" } },
-        {
-          db: world.fixture.harness.db,
-          now: new Date(),
-        },
+        jobContext(world.fixture.harness.db, new Date()),
       ),
     ).rejects.toBeInstanceOf(TypeError);
   });

@@ -1,4 +1,9 @@
-import { z } from "zod";
+import * as z from "zod";
+import {
+  INVITATION_TOKEN_PATTERN,
+  INVITEE_EMAIL_MAX_LENGTH,
+  sharingDescriptionVersions,
+} from "./constants";
 
 /**
  * The sharing contract (architecture 8.1 to 8.4 and 11): who the actor
@@ -24,6 +29,24 @@ const GrantCategory = z.enum([
 ]);
 
 const GrantLevel = z.enum(["summary", "read", "contribute"]);
+
+/*
+ * The sharing screen's plain words, their version line and the placeholder
+ * filler live in the Zod-free ./constants (task J2b) so client components
+ * can read them without Zod; they are re-exported here, so the root entry
+ * keeps them.
+ */
+export {
+  CURRENT_SHARING_DESCRIPTION_VERSION,
+  SHARING_DESCRIPTIONS,
+  fillSharingWords,
+  sharingDescriptionVersions,
+} from "./constants";
+export type {
+  SharingDescription,
+  SharingDescriptionVersion,
+  SharingDescriptions,
+} from "./constants";
 
 /** The roles an invitation can hand out; the owner role is never invited into. */
 export const InvitableRole = z.enum(["partner", "guardian"]);
@@ -84,7 +107,7 @@ export const InvitationInput = z
     id: z.uuidv7().optional().describe("Optional client-minted UUIDv7 for offline-first clients"),
     inviteeEmail: z
       .email()
-      .max(254)
+      .max(INVITEE_EMAIL_MAX_LENGTH)
       .describe("The address the invitation is bound to; acceptance needs a sign-in with it"),
     role: InvitableRole,
   })
@@ -120,7 +143,7 @@ export const InvitationAcceptInput = z
   .object({
     token: z
       .string()
-      .regex(/^[A-Za-z0-9_-]{32,128}$/, "Expected the token from the invitation link"),
+      .regex(INVITATION_TOKEN_PATTERN, "Expected the token from the invitation link"),
     household: HouseholdChoice.optional().describe(
       "Required on the second call when the invitee already belongs to another household: move leaves it, stay keeps it and declines to join",
     ),
@@ -169,10 +192,10 @@ export const GrantSetInput = z
       .max(32)
       .describe("The version of the sharing policy the owner saw when she chose these"),
     descriptionVersion: z
-      .string()
-      .min(1)
-      .max(32)
-      .describe("The version of the plain-words category descriptions she saw"),
+      .enum(sharingDescriptionVersions)
+      .describe(
+        "The version of the plain-words category descriptions she saw, a key of the sharing descriptions catalog",
+      ),
   })
   .meta({ id: "GrantSetInput" });
 export type GrantSetInput = z.infer<typeof GrantSetInput>;

@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { SymptomCode, cycleVocabulary } from "@tidefern/schemas";
 import { describe, expect, it, vi } from "vitest";
 import { ChipGroup, labelFromCode, symptomOptions, toggleSelection } from "./chip-group";
 
@@ -15,6 +16,18 @@ describe("chip selection rules", () => {
     expect(labelFromCode("other")).toBe("Other");
     expect(symptomOptions[0]).toEqual({ value: "cramps", label: "Cramps" });
     expect(symptomOptions).toHaveLength(19);
+  });
+
+  // The chips used to label themselves from the code ("Insomnia", "Other");
+  // they now carry the API's labels so the sheet and every summary agree.
+  it("labels every symptom chip exactly as the API's vocabulary does, in its order", () => {
+    const vocabulary = cycleVocabulary().symptoms;
+    expect(symptomOptions.map(({ value, label }) => ({ code: value, label }))).toEqual(vocabulary);
+    expect(symptomOptions.map((option) => option.value)).toEqual(SymptomCode.options);
+    expect(symptomOptions.find((option) => option.value === "insomnia")?.label).toBe(
+      "Trouble sleeping",
+    );
+    expect(symptomOptions.find((option) => option.value === "other")?.label).toBe("Something else");
   });
 });
 

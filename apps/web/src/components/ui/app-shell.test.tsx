@@ -22,6 +22,14 @@ describe("shellDestinations", () => {
     }
   });
 
+  it("adds Journey for someone a pregnancy is shared with, whatever their own stage", () => {
+    expect(
+      shellDestinations({ stage: "none", hasChild: false, sharedPregnancy: true }).map(
+        (d) => d.label,
+      ),
+    ).toEqual(["Today", "Calendar", "Journey", "Sharing", "Settings"]);
+  });
+
   it("adds Family when a child exists, and both when both apply", () => {
     expect(shellDestinations({ stage: "none", hasChild: true }).map((d) => d.label)).toEqual([
       "Today",
@@ -71,6 +79,15 @@ describe("AppShell", () => {
     expect(buttons).toHaveLength(2);
     await user.click(buttons[0] as HTMLElement);
     expect(onQuickLog).toHaveBeenCalledTimes(1);
+  });
+
+  it("leaves the quick-log button out for the none stage, which is never asked a body question", () => {
+    render(
+      <AppShell stage="none" hasChild current="today" onQuickLog={vi.fn()}>
+        <p>Today</p>
+      </AppShell>,
+    );
+    expect(screen.queryByRole("button", { name: "Log today" })).not.toBeInTheDocument();
   });
 
   it("never puts a health word in an attribute", () => {

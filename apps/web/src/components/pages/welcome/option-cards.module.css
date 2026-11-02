@@ -1,0 +1,194 @@
+.group {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.options {
+  display: grid;
+  gap: var(--space-3);
+}
+
+.compact .options {
+  gap: var(--space-2);
+}
+
+.option {
+  position: relative;
+  display: grid;
+}
+
+/* The native radio covers its card, transparent, so clicks, taps and hover land on the input and the
+   global focus ring draws around the whole card. */
+.radio {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-card);
+  cursor: pointer;
+}
+
+/* The global ring keeps the card's corners instead of its own 4 px ones. */
+.radio:focus-visible {
+  border-radius: var(--radius-card);
+}
+
+.face {
+  display: grid;
+  grid-template-columns: var(--size-icon) minmax(0, 1fr);
+  align-items: start;
+  gap: var(--space-3);
+  min-height: var(--size-control);
+  padding: var(--space-4);
+  border: 1px solid var(--soft-border);
+  border-radius: var(--radius-card);
+  background: var(--surface);
+  color: var(--text);
+  transition:
+    border-color var(--duration-feedback) var(--ease-interface),
+    background var(--duration-feedback) var(--ease-interface);
+}
+
+.dot {
+  display: grid;
+  place-items: center;
+  width: var(--size-icon);
+  height: var(--size-icon);
+  margin-top: 1px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-round);
+  background: var(--surface);
+  transition:
+    border-color var(--duration-feedback) var(--ease-interface),
+    transform var(--duration-feedback) var(--ease-interface);
+}
+
+.dot::after {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: var(--radius-round);
+  background: transparent;
+  transition: background var(--duration-feedback) var(--ease-interface);
+}
+
+.text {
+  display: grid;
+  gap: var(--space-1);
+  min-width: 0;
+}
+
+.title {
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+.line {
+  font-size: var(--type-small);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.radio:hover + .face {
+  border-color: var(--accent);
+}
+
+.radio:active + .face .dot {
+  transform: scale(0.94);
+}
+
+/* The chosen card: the action color on its edge and in its dot. The edge grows to 2 px and the padding
+   gives the pixel back, so nothing moves. */
+.radio:checked + .face {
+  border-width: 2px;
+  border-color: var(--action);
+  padding: calc(var(--space-4) - 1px);
+}
+
+.radio:checked + .face .dot {
+  border-color: var(--action);
+}
+
+.radio:checked + .face .dot::after {
+  background: var(--action);
+}
+
+.group[data-invalid="true"] .radio:not(:checked) + .face .dot {
+  border-color: var(--danger);
+}
+
+.radio:disabled {
+  cursor: not-allowed;
+}
+
+.radio:disabled + .face {
+  background: var(--panel);
+  color: var(--muted);
+}
+
+.compact .radio,
+.compact .radio:focus-visible,
+.compact .face {
+  border-radius: var(--radius-control);
+}
+
+.compact .face {
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+}
+
+.compact .radio:checked + .face {
+  padding: calc(var(--space-3) - 1px) calc(var(--space-4) - 1px);
+}
+
+.compact .dot {
+  margin-top: 0;
+}
+
+.error {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.5;
+  color: var(--danger);
+}
+
+@media (forced-colors: active) {
+  .face,
+  .dot {
+    border-color: CanvasText;
+  }
+
+  .radio:checked + .face,
+  .radio:checked + .face .dot {
+    border-color: Highlight;
+  }
+
+  .radio:checked + .face .dot::after {
+    background: Highlight;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .face,
+  .dot,
+  .dot::after {
+    transition-duration: 0ms;
+  }
+}

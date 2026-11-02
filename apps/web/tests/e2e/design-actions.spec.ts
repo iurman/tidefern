@@ -21,8 +21,10 @@ test("the chapter has one H1, the chapter rail and every specimen in both themes
   await expect(page.getByRole("link", { name: "Next: Forms" })).toBeVisible();
   const light = page.locator('main [data-theme="light"]');
   const dark = page.locator('main [data-theme="dark"]');
-  await expect(light).toHaveCount(16);
-  await expect(dark).toHaveCount(16);
+  // Sixteen specimens from G5, and the back link the lead added before the page routes.
+  await expect(light).toHaveCount(17);
+  await expect(dark).toHaveCount(17);
+  await expect(page.getByRole("link", { name: "Back to Settings" }).first()).toBeVisible();
   const html = await page.content();
   expect(html).not.toContain(String.fromCharCode(0x2014));
 });

@@ -11,7 +11,6 @@ import {
   plausibleCycleLengths,
   predictCycle,
   projectRow,
-  todayIn,
 } from "@tidefern/core";
 import type {
   Access,
@@ -20,8 +19,8 @@ import type {
   PeriodStart,
 } from "@tidefern/core";
 import { schema, withActor } from "@tidefern/db";
-import type { ActorDatabase, Transaction } from "@tidefern/db";
-import { jobId as uuidv7 } from "@tidefern/db/jobs";
+import type { Transaction } from "@tidefern/db";
+import { uuidv7 } from "@tidefern/core";
 import {
   CycleEntry,
   CycleEntryList,
@@ -39,8 +38,11 @@ import type { PredictionBasis, SymptomCode } from "@tidefern/schemas";
 
 import type { RequestActor } from "../actor";
 import { requireActor } from "../auth";
+import { pinCalendar } from "../clock";
+import type { CalendarClock } from "../clock";
 import type { ApiEnv } from "../context";
-import { audit, auditActions } from "../middleware/audit";
+import type { AreaOptions } from "./index";
+import { audit, auditActions, auditDay } from "../middleware/audit";
 import { problem } from "../problem";
 import type { ProblemCode } from "../problem";
 
@@ -63,27 +65,6 @@ import type { ProblemCode } from "../problem";
  * `refresh_cycle_prediction()`, which re-checks her `cycle.history`
  * contribute grant and sees the pregnancy she cannot.
  */
-
-export interface CycleOptions {
-  /**
-   * The database `withActor()` opens the actor's transaction on. The pooled
-   * production client is the default; the test harness passes PGlite.
-   */
-  db?: ActorDatabase | undefined;
-}
-
-/**
- * The registry calls `registerCycle(app)` with nothing else and the request
- * context carries no database, so this area keeps its one runtime setting
- * here. Production needs no call: `withActor()` defaults to the pooled
- * client. The test harness calls `configureCycle()` before its first
- * request. The day the host puts the database on the context, this goes.
- */
-const runtime: CycleOptions = {};
-
-export function configureCycle(options: CycleOptions): void {
-  runtime.db = options.db;
-}
 
 /** The problem statuses the cycle routes declare. */
 type CycleProblemStatus = 404 | 409 | 422;
@@ -183,14 +164,14 @@ async function subjectTimeZone(
   return row?.timeZone ?? fallback;
 }
 
-/** One `partner.read` row per category, collapsed per day by the audit helper. */
+/** One `partner.read` row per category, collapsed per day (a real day, `auditDay`) by the audit helper. */
 async function auditPartnerRead(
   tx: Transaction,
   actor: RequestActor,
   subjectId: string,
   categories: readonly (CycleCategory | "cycle.status")[],
 ): Promise<void> {
-  const day = todayIn(
+  const day = auditDay(
     await subjectTimeZone(tx, subjectId, actor.profile?.timeZone ?? DEFAULT_TIME_ZONE),
   );
   for (const category of categories) {
@@ -411,9 +392,17 @@ async function storePrediction(
  * function re-checks `can_read(subject, 'cycle.status')` for the actor of
  * the transaction and answers no row when it does not hold, so a grant
  * revoked after the session was loaded still ends in a 404. It takes no
- * date, so nobody can ask it about another day, and it returns no entry.
+ * date, so no request can ask it about another day, and it returns no
+ * entry. Which day is today is the calendar clock's: a frozen instant
+ * reaches the function through `app.calendar_now` (migration 0011), set in
+ * this same transaction from the clock and never from the request.
  */
-async function statusFor(tx: Transaction, subjectId: string): Promise<CycleStatus | null> {
+async function statusFor(
+  tx: Transaction,
+  subjectId: string,
+  clock: CalendarClock,
+): Promise<CycleStatus | null> {
+  await pinCalendar(tx, clock);
   const result = (await tx.execute(
     sql`select to_char(s.today, 'YYYY-MM-DD') as today, s.cycle_day, s.period_day, s.in_fertile_window from cycle_status_for(${subjectId}::uuid) s`,
   )) as {
@@ -801,7 +790,8 @@ async function symptomsByEntry(
   return byEntry;
 }
 
-export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
+export function registerCycle(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(vocabularyRoute, (c) => c.json(cycleVocabulary(), 200));
 
   app.openapi(listEntriesRoute, async (c) => {
@@ -881,7 +871,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
             : null;
         return { items, nextCursor };
       },
-      runtime.db,
+      db,
     );
     return c.json(page, 200);
   });
@@ -1000,7 +990,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         }
         return { kind: "written", item: entryItem(row, symptoms, access) };
       },
-      runtime.db,
+      db,
     ).catch((error: unknown): { kind: "refused" } => {
       // A grant revoked after the session was loaded: the write rolled back.
       if (error instanceof ContributeGrantGoneError) return { kind: "refused" };
@@ -1056,7 +1046,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
         await storePrediction(tx, subjectId, computed.prediction, now);
         return "deleted";
       },
-      runtime.db,
+      db,
     );
     if (outcome === "missing") return fail(c, 404, "not_found");
     if (outcome === "stale") return fail(c, 409, "conflict", { detail: VERSION_MISMATCH });
@@ -1084,7 +1074,7 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
             ? predictionBody(subjectId, now, factsOf(null))
             : predictionBody(subjectId, live.computedAt, factsOfRow(live));
         },
-        runtime.db,
+        db,
       );
       return c.json(shared, 200);
     }
@@ -1093,14 +1083,15 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
       async (tx): Promise<CyclePrediction> => {
         const computed = await computePrediction(tx, subjectId);
         await storePrediction(tx, subjectId, computed.prediction, now);
-        const today = todayIn(actor.profile?.timeZone ?? DEFAULT_TIME_ZONE, now);
+        // How late the period is counts calendar days: the clock's today, not the stamp's.
+        const today = c.var.clock.today(actor.profile?.timeZone ?? DEFAULT_TIME_ZONE, now);
         return ownerExtras(
           predictionBody(subjectId, now, factsOf(computed.prediction)),
           computed,
           today,
         );
       },
-      runtime.db,
+      db,
     );
     return c.json(body, 200);
   });
@@ -1118,14 +1109,14 @@ export function registerCycle(app: OpenAPIHono<ApiEnv>): void {
     const status = await withActor(
       actor.id,
       async (tx): Promise<CycleStatus | null> => {
-        const derived = await statusFor(tx, subjectId);
+        const derived = await statusFor(tx, subjectId, c.var.clock);
         if (derived === null) return null;
         if (decision.reason === "grant") {
           await auditPartnerRead(tx, actor, subjectId, ["cycle.status"]);
         }
         return derived;
       },
-      runtime.db,
+      db,
     );
     if (status === null) return fail(c, 404, "not_found");
     return c.json(status, 200);

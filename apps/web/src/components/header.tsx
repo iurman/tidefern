@@ -1,5 +1,5 @@
-import Link from "next/link";
 import { Logo } from "./logo";
+import { PublicNav } from "./public-nav";
 import { SoundToggle } from "@/components/ui/sound-toggle";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 
@@ -8,11 +8,7 @@ export function Header() {
     <header className="site-header wrap">
       <div className="header-bar">
         <Logo />
-        <nav className="site-nav" aria-label="Primary">
-          <Link href="/design" prefetch={false}>
-            Design system
-          </Link>
-        </nav>
+        <PublicNav />
         <div className="header-controls">
           <SoundToggle />
           <ThemeToggle />

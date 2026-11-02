@@ -1,16 +1,27 @@
 import { OpenAPIHono } from "@hono/zod-openapi";
-import { secureHeaders } from "hono/secure-headers";
+import type { KeyProvider } from "@tidefern/crypto";
 import type { ActorDatabase } from "@tidefern/db";
 import { withSession } from "./auth";
 import type { SessionAuth } from "./auth";
+import { calendarClock } from "./clock";
+import type { CalendarClock } from "./clock";
 import type { ApiEnv, Defer, DrainJobs } from "./context";
 import { drainEnqueued } from "./jobs/index";
-import { crossSite, idempotency, logger, rateLimit, routeTemplate } from "./middleware/index";
+import {
+  crossSite,
+  idempotency,
+  logger,
+  rateLimit,
+  routeTemplate,
+  securityHeaders,
+} from "./middleware/index";
 import type { CrossSiteOptions, LoggerOptions } from "./middleware/index";
 import { problem } from "./problem";
 import { healthRoute } from "./routes/health";
 import { internalJobs } from "./routes/internal/jobs";
 import type { JobsOptions } from "./routes/internal/jobs";
+import { internalMailCapture } from "./routes/internal/mail-capture";
+import type { MailCaptureOptions } from "./routes/internal/mail-capture";
 import { registerRoutes } from "./routes/index";
 import { meBody, meRoute } from "./routes/me";
 
@@ -48,10 +59,18 @@ export interface ApiOptions {
    */
   db?: ActorDatabase;
   /**
+   * The key encryption key provider for the encrypted columns (architecture
+   * 9.2), handed to every route area with `db`. Without one the areas share
+   * an `EnvKeyProvider` over `TIDEFERN_KEK_V1`, read on first use; tests
+   * pass a fixed provider.
+   */
+  keys?: KeyProvider;
+  /**
    * The job runner (architecture 10.1): the owner-role connection, the
    * handler registry, `CRON_SECRET`, and the mailer and address for the
    * dead-queue notice. Without it the inline drain is a no-op and
-   * `/api/internal/jobs/run` is not mounted.
+   * `/api/internal/jobs/run` is not mounted; with `inlineDrain: false` only
+   * the inline drain is a no-op.
    */
   jobs?: JobsOptions;
   /**
@@ -66,6 +85,25 @@ export interface ApiOptions {
    * sink. Without a secret the lines carry no actor field at all.
    */
   log?: LoggerOptions;
+  /**
+   * The browser suite's window onto the capture mailer (architecture 15 and
+   * 17.1): `GET /api/internal/e2e/mail` answers the captured messages and
+   * `DELETE` forgets them. The host passes it only when `E2E_MAIL_CAPTURE`
+   * is exactly `true` off Vercel; without it the path is not mounted.
+   */
+  mailCapture?: MailCaptureOptions | undefined;
+  /**
+   * The calendar clock every decision about which calendar day it is reads
+   * (clock.ts). Without one it is resolved here from `process.env`:
+   * `TIDEFERN_FAKE_NOW` freezes it outside production, and on production
+   * the variable makes this call throw `ClockConfigurationError`, so the
+   * host's route module, which calls this at module scope, fails to load
+   * and no request is ever answered on a frozen calendar. A bare
+   * `createApp()` reads the runner's environment too, and CI exports
+   * `TIDEFERN_FAKE_NOW` to the unit tests, so a test whose answer depends on
+   * the day passes `realCalendarClock` or `calendarClock(facts)`.
+   */
+  clock?: CalendarClock | undefined;
 }
 
 /**
@@ -76,18 +114,20 @@ export interface ApiOptions {
  */
 export function createApp(options: ApiOptions = {}) {
   const defer: Defer = options.defer ?? ((task) => void task());
+  const clock = options.clock ?? calendarClock(process.env);
   const jobs = options.jobs;
-  const drainJobs: DrainJobs = jobs
-    ? (ids) =>
-        defer(async () => {
-          try {
-            await drainEnqueued(jobs.db, ids, jobs.handlers ?? {});
-          } catch (error) {
-            // A failed claim, not a failed job: those are recorded on the row.
-            console.error("jobs_drain_error", { name: (error as Error).name });
-          }
-        })
-    : () => undefined;
+  const drainJobs: DrainJobs =
+    jobs && jobs.inlineDrain !== false
+      ? (ids) =>
+          defer(async () => {
+            try {
+              await drainEnqueued(jobs.db, ids, jobs.handlers ?? {}, new Date(), clock);
+            } catch (error) {
+              // A failed claim, not a failed job: those are recorded on the row.
+              console.error("jobs_drain_error", { name: (error as Error).name });
+            }
+          })
+      : () => undefined;
   const app = new OpenAPIHono<ApiEnv>({
     defaultHook: (result, c) => {
       if (!result.success) {
@@ -105,9 +145,10 @@ export function createApp(options: ApiOptions = {}) {
   app.use("*", async (c, next) => {
     c.set("defer", defer);
     c.set("drainJobs", drainJobs);
+    c.set("clock", clock);
     await next();
   });
-  app.use("*", secureHeaders());
+  app.use("*", securityHeaders());
   app.use("*", async (c, next) => {
     await next();
     // Nothing from the API is ever cacheable by a shared cache.
@@ -153,7 +194,10 @@ export function createApp(options: ApiOptions = {}) {
 
   // Outside /v1 and outside the OpenAPI document: a plain sub-app, not app.openapi().
   if (jobs) {
-    app.route("/internal", internalJobs(jobs));
+    app.route("/internal", internalJobs(jobs, clock));
+  }
+  if (options.mailCapture) {
+    app.route("/internal", internalMailCapture(options.mailCapture));
   }
 
   app.openapi(healthRoute, (c) =>
@@ -169,7 +213,7 @@ export function createApp(options: ApiOptions = {}) {
   );
 
   app.openapi(meRoute, (c) => c.json(meBody(c), 200));
-  registerRoutes(app, { db: options.db });
+  registerRoutes(app, { db: options.db, keys: options.keys });
 
   app.notFound((c) => problem(c, 404, "not_found"));
   app.onError((error, c) => {

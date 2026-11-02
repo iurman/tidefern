@@ -1,3 +1,5 @@
+import { settingsCopy, settingsPaths } from "@/components/pages/settings/copy";
+import { BackLink } from "@/components/ui/back-link";
 import { TextLink } from "@/components/ui/text-link";
 import { pageMetadata } from "@/lib/site";
 import { devicesCopy as copy } from "./copy";
@@ -15,6 +17,7 @@ export const metadata = pageMetadata("/settings/devices", copy.title, copy.descr
 export default function DevicesPage() {
   return (
     <section className={styles.page} aria-labelledby="devices-title">
+      <BackLink href={settingsPaths.index}>{settingsCopy.back}</BackLink>
       <h1 id="devices-title" className={styles.heading}>
         {copy.heading}
       </h1>

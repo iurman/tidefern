@@ -30,6 +30,16 @@ describe("Button", () => {
     expect(onClick).not.toHaveBeenCalled();
   });
 
+  it("keeps the loading text in the cell while idle, hidden, so pressing Save never widens it", () => {
+    render(<Button loadingText="Saving">Save</Button>);
+    const button = screen.getByRole("button", { name: "Save" });
+    expect(button).toHaveTextContent(/^Save$/);
+    expect(button.querySelector("[data-loading-text]")).toHaveAttribute(
+      "data-loading-text",
+      "Saving",
+    );
+  });
+
   it("calls onClick when it is not loading and never when disabled", async () => {
     const user = userEvent.setup();
     const onClick = vi.fn();

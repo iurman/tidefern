@@ -57,7 +57,7 @@ export interface paths {
     };
     /**
      * The signed-in actor
-     * @description The actor id, the profile summary, guardianships, active grants held and the session expiry: every client bootstraps from this one call.
+     * @description The actor id, the profile summary with today's date in its time zone, guardianships, active grants held and the session expiry: every client bootstraps from this one call.
      */
     get: {
       parameters: {
@@ -4274,7 +4274,7 @@ export interface paths {
     put?: never;
     /**
      * Create a child
-     * @description Creates the child in the actor's household (a household is opened when she has none), makes her its first guardian and provisions the child's data key, all in one transaction.
+     * @description Creates the child in the actor's household (a household is opened when she has none), makes her its first guardian, records her consent on the child's behalf (a consents row with the child as subject and her as the consenting guardian, its purpose and text version from the catalog) and provisions the child's data key, all in one transaction. A body without the consent is refused with 422 and writes nothing.
      */
     post: {
       parameters: {
@@ -4283,7 +4283,7 @@ export interface paths {
         path?: never;
         cookie?: never;
       };
-      /** @description The child */
+      /** @description The child, with the guardian's consent */
       requestBody: {
         content: {
           "application/json": components["schemas"]["ChildInput"];
@@ -5019,7 +5019,7 @@ export interface paths {
     };
     /**
      * Events by date
-     * @description Ordered by day; `updatedSince` returns every row changed since, deleted ones as tombstones.
+     * @description Oldest first by day and id, or with `order=desc` newest first by day and then by when each event happened (its start, or when it was logged), so `kind=feed&order=desc&limit=1` is the last feed; `updatedSince` returns every row changed since, deleted ones as tombstones.
      */
     get: {
       parameters: {
@@ -5034,6 +5034,8 @@ export interface paths {
           /** @description Rows changed since, tombstones included */
           updatedSince?: string;
           kind?: "milestone" | "feed" | "sleep" | "diaper";
+          /** @description asc pages by day then id, as a sync reads; desc reads newest first, by day then by when each event happened */
+          order?: "asc" | "desc";
         };
         header?: never;
         path: {
@@ -8809,6 +8811,11 @@ export interface components {
       id: string;
       /** @description The profile summary, or null until onboarding creates the profile */
       profile: components["schemas"]["MeProfile"] | null;
+      /**
+       * Format: date
+       * @description Today in the profile's time zone on the server's calendar clock, the one today every screen counts from instead of the device clock; null until onboarding creates the profile
+       */
+      today: string | null;
       /** @description Children this actor is a guardian of */
       guardianOf: string[];
       /** @description Active grants where this actor is the grantee */
@@ -9078,8 +9085,11 @@ export interface components {
       grants: components["schemas"]["GrantSetting"][];
       /** @description The version of the sharing policy the owner saw when she chose these */
       policyVersion: string;
-      /** @description The version of the plain-words category descriptions she saw */
-      descriptionVersion: string;
+      /**
+       * @description The version of the plain-words category descriptions she saw, a key of the sharing descriptions catalog
+       * @enum {string}
+       */
+      descriptionVersion: "2026-10";
     };
     GrantSetting: {
       /** @enum {string} */
@@ -9399,7 +9409,7 @@ export interface components {
       updatedAt: string;
       version: number;
     };
-    /** @description Creates a child in the actor's household */
+    /** @description Creates a child in the actor's household with the guardian's consent */
     ChildInput: {
       /**
        * Format: uuid
@@ -9412,6 +9422,20 @@ export interface components {
       dateOfBirth: string;
       /** @enum {string} */
       sex?: "female" | "male";
+      guardianConsent: components["schemas"]["GuardianConsentInput"];
+    };
+    /** @description The guardian's consent on the child's behalf; a child is never created without it */
+    GuardianConsentInput: {
+      /**
+       * @description Set only by the guardian's own check of the box; the form never pre-checks it
+       * @enum {boolean}
+       */
+      given: true;
+      /**
+       * @description The version of the guardian's consent text the form showed
+       * @enum {string}
+       */
+      textVersion: "2026-10";
     };
     ChildList: {
       items: components["schemas"]["Child"][];
@@ -9476,6 +9500,16 @@ export interface components {
        * @enum {string|null}
        */
       side: "left" | "right" | "both" | null;
+      /**
+       * @description How a feed was given; null on any other kind and on a feed logged without one
+       * @enum {string|null}
+       */
+      feedMethod: "breast" | "bottle" | "solids" | null;
+      /**
+       * @description What a diaper held; null on any other kind and on a diaper logged without it
+       * @enum {string|null}
+       */
+      diaperContents: "wet" | "dirty" | "mixed" | null;
       /** @description Decrypted for the actor after access is decided */
       note: string | null;
       /**
@@ -9520,6 +9554,16 @@ export interface components {
        * @enum {string}
        */
       side?: "left" | "right" | "both";
+      /**
+       * @description How a feed was given; a breast feed may carry a side, a bottle feed a volume, solids neither
+       * @enum {string}
+       */
+      feedMethod?: "breast" | "bottle" | "solids";
+      /**
+       * @description What a diaper held; absent on any other kind
+       * @enum {string}
+       */
+      diaperContents?: "wet" | "dirty" | "mixed";
       /** @description Free text, encrypted at rest with the child's data key */
       note?: string;
     };
@@ -9570,6 +9614,16 @@ export interface components {
        * @enum {string}
        */
       side?: "left" | "right" | "both";
+      /**
+       * @description How a feed was given; a breast feed may carry a side, a bottle feed a volume, solids neither
+       * @enum {string}
+       */
+      feedMethod?: "breast" | "bottle" | "solids";
+      /**
+       * @description What a diaper held; absent on any other kind
+       * @enum {string}
+       */
+      diaperContents?: "wet" | "dirty" | "mixed";
       /** @description Free text, encrypted at rest with the child's data key */
       note?: string;
     };
@@ -10049,6 +10103,13 @@ export interface components {
        * @description When the person attested to being 18 or older
        */
       ageAttestedAt: string;
+      /** @description The version of the terms last accepted; null when none was recorded */
+      termsVersion: string | null;
+      /**
+       * Format: date-time
+       * @description When that version was accepted; null when none was recorded
+       */
+      termsAcceptedAt: string | null;
       /** @description The value `If-Match` carries on the next update */
       version: number;
       /**
@@ -10086,6 +10147,8 @@ export interface components {
        * @enum {boolean}
        */
       ageAttested?: true;
+      /** @description The version of the terms accepted; a new version records a new acceptance */
+      termsVersion?: string;
     };
     ConsentRecord: {
       /**

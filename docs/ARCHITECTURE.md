@@ -261,7 +261,11 @@ tests and the production build. CI runs the same plus the browser suite.
 
 - Everything under `/api/v1`. Additive changes only inside `v1`; a breaking
   change means `/api/v2` with an overlap period, because installed mobile
-  builds run for months.
+  builds run for months. Until the first installed client ships, the web
+  app deploys with the API from one commit, so the lead may approve an
+  error-level change that no deployed code calls by a dated line in
+  `openapi/BREAKING.md`, which the `oasdiff` step reads as its ignore file;
+  the first such line is E12's required guardian consent on child creation.
 - `packages/schemas` imports `z` from plain `zod` and names reusable
   components with `.meta({ id, description })`, which zod-to-openapi 9
   reads exactly like `.openapi("Name")`; `z` from `@hono/zod-openapi` and
@@ -501,8 +505,10 @@ such membership, and the app never connects as a role that can bypass RLS:
   can_write(subject_id, category)`, `FOR UPDATE USING ... WITH CHECK
   can_write(...)`, `FOR DELETE USING subject_id = current_actor()`. The
   helpers are `SECURITY DEFINER`, `STABLE`, with `SET search_path =
-  pg_catalog, public`, and they mirror `can()` in `core`: ownership,
-  guardianship, and an active grant at a sufficient level.
+  pg_catalog, public, pg_temp` (`pg_temp` last, so a temporary table the
+  app role creates can never shadow a table a helper reads; task E10), and
+  they mirror `can()` in `core`: ownership, guardianship, and an active
+  grant at a sufficient level.
 - `withActor(actorId, fn)` in `packages/db` opens a transaction, runs
   `select set_config('app.actor_id', $1, true)` and `SET LOCAL ROLE
   tidefern_app` (a no-op when already that role, and the way tests on
@@ -536,7 +542,8 @@ such membership, and the app never connects as a role that can bypass RLS:
   offline queue on mobile can sync later without a schema change.
 - Hard delete by default. The one grace period: closing an account locks it
   and revokes every session and grant at once, then waits seven days
-  during which signing in again cancels the closure; the DEK is destroyed
+  during which signing in shows the locked closing view, where the person can
+  undo the closure (signing in alone cancels nothing); the DEK is destroyed
   at the end of that window, or immediately when the person chooses
   "delete now". Nothing else is soft-deleted.
 - Encrypted columns are `bytea` holding `version || iv || tag ||
@@ -651,6 +658,11 @@ response contains no field outside the granted categories.
 6. Write an audit event for every partner read of a shared category
    (summarized per day), every partner write, and every grant change. Invitations write
    `invitation.create`, `invitation.withdraw` and `invitation.accept`.
+   Better Auth's hooks write `session.sign_in` when a request hands a person a
+   session she did not already hold, and `session.revoke` once per request to
+   its three revoke endpoints that signs out another of her devices; a password
+   reset ends every session and writes none, and signing out the device in hand
+   writes nothing.
 
 The scaffold already ships `can()` with tests for owner, guardian, summary
 versus read, revoked grants, per-child scoping, the private journal and the
@@ -1198,12 +1210,17 @@ EB Garamond and Plus Jakarta Sans.
 Files: the roman Newsreader file is the optical-size build (both axes, 132
 KB) so browsers serve the sturdier cut at 16 px and the higher-contrast cut
 at display sizes with no CSS. The Newsreader italic is the weight-only
-build (64 KB; the optical-size italic is 147 KB) and it is kept knowingly:
-`next/font/local` preloads every file in a `src` array on every route,
-and the estimate sentence that uses it is a signature element on most
-authenticated screens. The roman file comes first in `src` so the Times
-New Roman fallback metrics are computed from it. Figtree ships roman and
-italic (21 KB). Two facts about the fontsource builds from verification:
+build (64 KB; the optical-size italic is 147 KB). `next/font/local`
+preloads every file in a call's `src` array on every route, so since task
+J2b the italic is its own call with `preload: false` (CSS variable
+`--font-newsreader-italic`, named first by the `.estimate` class): the
+browser fetches it when a page sets the estimate sentence, the only italic
+in the product, and the two roman files are the only preloads. Each call
+computes its Times New Roman fallback metrics from its own file. Figtree
+ships the roman file only: no style sets Figtree in italic, so J2b removed
+its italic (21 KB), and a stray italic would be synthesized. The measured
+effect is in `docs/design/PERFORMANCE.md`. Two facts about the fontsource
+builds from verification:
 their weight-only Newsreader file is a fixed opsz 16 instance, and they
 drop the `case`, `sups` and `ordn` features the upstream TTFs carry; the
 product needs none of them, and if a tracked uppercase label ever needs
@@ -1525,14 +1542,19 @@ before a gesture.
 | Security, required | Vitest and Playwright | `withActor()` runs as a role with `rolbypassrls = false`; `withSystem()` is refused for the app role; an insert by a `summary` grantee is rejected by RLS; a query for a foreign subject returns zero rows; `script-src` carries a nonce and no `unsafe-inline`; log lines contain no body fields; idempotency replay never reads a stored body; the job runner answers 404 without `CRON_SECRET`; a child grant for one child does not reach another; a child note survives the author's account closure when a co-guardian exists |
 
 Browser tests sign in against the production build through seeded,
-already-verified users and a mail capture endpoint that exists only when
-`E2E_MAIL_CAPTURE=true`, which Vercel production never sets. Each
+already-verified users and a mail capture endpoint, `GET` and `DELETE
+/api/internal/e2e/mail` (the captured messages' recipients, subjects and
+first links, oldest first, and a reset), that is mounted only when
+`E2E_MAIL_CAPTURE=true` on a server that is not a Vercel deployment, so no
+preview or production ever serves it and Vercel production refuses the
+variable outright. Each
 Playwright worker signs in once and shares its `storageState`, because
 Better Auth's built-in production rule allows three sign-ins per ten
 seconds; tests never relax the rate limit. `@smoke` tests never
 authenticate, because the production deployment they also run against has
 no seeded users. Dates in seeds and assertions are relative to
-`TIDEFERN_FAKE_NOW`, which `todayIn()` honors outside production, so
+`TIDEFERN_FAKE_NOW`, which the seed and the API's calendar clock
+(`packages/api/src/clock.ts`, task E11) honor outside production, so
 prediction copy does not drift with the calendar. CI runs the browser
 suite against a `postgres:18.6` service container that is migrated and
 seeded before `pnpm build` (task B11); PGlite serves unit tests only.
@@ -1551,7 +1573,7 @@ separately from an application defect.
 | `ci.yml` | push to `main`, pull requests, `workflow_dispatch` for a pre-pull-request run; on pull requests it also rejects commit messages that contain an em dash; from task B11 it starts a `postgres:18.6` service and migrates and seeds it before the build | Install from the lockfile; prose gate; tokens, brand and OpenAPI freshness; format; lint; types; unit tests; production build; Playwright with Chromium against the build; report artifact on failure |
 | `deploy-verify.yml`                | `deployment_status` success (sent by Vercel for every deployment) | curl the deployed home page and `/api/v1/health` with the protection bypass header, then the `@smoke` Playwright subset against the deployment URL; failure shows on the pull request                 |
 | `codeql.yml`                       | push, pull requests, weekly                                       | CodeQL security-and-quality for JavaScript and TypeScript                                                                                                                                             |
-| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` pinned by digest (`b9325c9e0a27ab65b0da3b766522cedec6be81dc`, v0.1.18) against the base branch's `openapi/v1.json`, `fail-on: ERR`, and `review: false` because the default uploads both specs to oasdiff.com; the job keeps `contents: read` and reads the result from the job summary |
+| `oasdiff` step in `ci.yml` (Phase 1, task E9) | pull requests | `oasdiff/oasdiff-action/breaking` pinned by digest (`b9325c9e0a27ab65b0da3b766522cedec6be81dc`, v0.1.18) against the base branch's `openapi/v1.json`, `fail-on: ERR` with `err-ignore: openapi/BREAKING.md` (the lead's dated approvals, 5.1), and `review: false` because the default uploads both specs to oasdiff.com; the job keeps `contents: read` and reads the result from the job summary |
 | Renovate (`.github/renovate.json`) | weekly | Grouped minor and patch updates, lockfile maintenance, Better Auth grouped alone and never automerged, action digests pinned, `typescript` held below 7 and the web app's `eslint` below 10 for the reasons in section 4, 0.x packages never automerged. Automerge stays off; if it is ever turned on, the `main` ruleset must require zero approvals or list the Renovate app as a bypass actor, because any required approval leaves its pull requests waiting forever |
 
 Every action is pinned to a commit digest with its version in a comment
@@ -1605,11 +1627,13 @@ what, why, checks run, evidence, build-plan task ids.
 | `TIDEFERN_KEK_V1` | all, sensitive | Phase 1 key encryption key, base64 of 32 random bytes; different per environment; the suffix is the `kek_version` stored in `subject_keys` |
 | `LOG_HMAC_SECRET` | all, sensitive | Keys the HMAC of user ids in log lines |
 | `E2E_MAIL_CAPTURE` | local and CI only | Exposes a test-only endpoint that returns the last verification link; never set on Vercel |
+| `E2E_JOBS_SCHEDULED_ONLY` | CI's seeded server only | Exactly `true` turns off the job runner's inline drain, so work a request enqueues waits for the scheduled run and the browser suite runs it through `/api/internal/jobs/run` (task J3d); refused on any Vercel deployment, where the inline drain always runs |
 | `RESEND_API_KEY`, `EMAIL_FROM` | production only | Transactional email; previews and local use the console transport, so a preview can never send real mail from a seeded persona |
-| `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
+| `TIDEFERN_FAKE_NOW` | local and CI only | Freezes "today" for deterministic seeds and browser assertions: the seed and the API's calendar clock (`packages/api/src/clock.ts`, task E11) honor it outside production for every decision the API makes about which calendar day it is, never for a stored instant; refused when `VERCEL_ENV` is `production`, exactly like `E2E_MAIL_CAPTURE` |
 | `BETTER_AUTH_TELEMETRY` | all, value `0` | Keeps Better Auth's opt-in telemetry off explicitly |
 | `MIGRATE_DESTRUCTIVE` | the owner-triggered migration workflow only | Lets the runner apply a contract migration (section 3.4) |
-| `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset |
+| `CRON_SECRET` | production | Bearer secret for `/api/internal/jobs/run`; the endpoint answers 404 wherever it is unset, and the web host mounts the job runner only where `DATABASE_URL_UNPOOLED` is set |
+| `OWNER_EMAIL` | production | The owner's inbox for the job runner's dead-queue notice and the account closure processor notice; while unset the first is skipped and a closure past its window waits, deleting nothing |
 | `R2_*`                                  | Phase 2                | Private bucket credentials scoped to one bucket                                                                   |
 | `VERCEL_AUTOMATION_BYPASS_SECRET`       | GitHub only            | Lets the smoke workflow reach protected previews                                                                  |
 
@@ -1773,7 +1797,7 @@ has a case.
 
 | Question                                                                                                                     | Owner                 | When                                   |
 | ---------------------------------------------------------------------------------------------------------------------------- | --------------------- | -------------------------------------- |
-| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected (verified on PGlite only)? | build agent | first Neon branch in Phase 1 |
+| Does `SET LOCAL ROLE` pass through Neon's transaction-mode pooler as expected? Answered for PgBouncer 1.26.0 in transaction mode in front of `postgres:18.6` (task J9, every CI `verify` run): two actors at once on two shared server connections each see only their own rows, and after every transaction, a failed one included, the reused connection shows `role` `none` and an empty `app.actor_id`. Neon's own pooler is still open | build agent | task B10, first Neon branch |
 | Does a SQL-created `LOGIN` role (`tidefern_app`) authenticate through Neon's proxy with a password, so the app never connects as a `BYPASSRLS` role? Fallback in section 7.2 | build agent | task B10 |
 | Does the first Vercel build succeed with pnpm 10 from `packageManager` and the monorepo root install?                        | owner and build agent | first preview                          |
 | Exact `deployment.environment` strings Vercel sends (`Preview`, `Production`) for the smoke workflow filter                  | build agent           | first pull request; log the event once |

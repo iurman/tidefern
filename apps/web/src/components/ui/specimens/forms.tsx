@@ -1,4 +1,5 @@
 import type { ComponentState, SpecimenGroup } from "../specimen";
+import { CheckboxField } from "../checkbox-field";
 import { ChipGroup, symptomOptions } from "../chip-group";
 import { FlowScale } from "../flow-scale";
 import { FormField } from "../form-field";
@@ -178,7 +179,7 @@ export const specimens: SpecimenGroup = {
   onChange={setGrams}
 />`,
       keyboard:
-        "Tab reaches the number, then the unit toggle; Left and Right change the unit and the number redraws in it.",
+        "Tab reaches the number, then the unit toggle; Left and Right change the unit and the number redraws in it. A form whose one unit control drives several fields (the growth form on /family/[childId]) passes unit and hideUnitToggle, and the fields redraw together.",
       states: { loading: "none", active: "none" },
       render: (state) => (
         <MeasurementInput
@@ -223,12 +224,17 @@ export const specimens: SpecimenGroup = {
   value={entry.flow}
   onChange={setFlow}
 />`,
-      keyboard: "One tab stop; arrow keys move between the five values and select as they go.",
-      states: { loading: "none", empty: "none" },
+      keyboard:
+        "One tab stop; arrow keys move between the five values and select as they go. With nothing chosen yet, Tab lands on None without choosing it.",
+      /* A fixed set of values: nothing loads. Empty is a day with no flow logged yet, nothing
+         chosen (the product passes value={null}; here no starting value, so it stays pressable).
+         Wide, so the pill shows where it fits; the phone width shows the columns. */
+      states: { loading: "none" },
+      wide: true,
       render: (state) => (
         <FlowScale
           label="Flow"
-          defaultValue="light"
+          defaultValue={state === "empty" ? undefined : "light"}
           error={state === "error" ? "Choose one value for this day." : undefined}
           {...common(state)}
         />
@@ -266,13 +272,45 @@ export const specimens: SpecimenGroup = {
   value={entry.mood}
   onChange={setMood}
 />`,
-      keyboard: "One tab stop; arrow keys move between the three values and select as they go.",
-      states: { loading: "none", empty: "none" },
+      keyboard:
+        "One tab stop; arrow keys move between the three values and select as they go. With nothing chosen yet, Tab lands on Low without choosing it.",
+      /* Empty is a day with no mood logged yet, nothing chosen (value={null} in the product). The
+         day sheet's Clear, which goes back to it, is shown on the patterns page. */
+      states: { loading: "none" },
+      wide: true,
       render: (state) => (
         <MoodSelector
           label="Mood"
-          defaultValue="steady"
+          defaultValue={state === "empty" ? undefined : "steady"}
           error={state === "error" ? "Choose one value for this day." : undefined}
+          {...common(state)}
+        />
+      ),
+    },
+    {
+      name: "Checkbox field",
+      source: "apps/web/src/components/ui/checkbox-field.tsx",
+      usage: `<CheckboxField
+  label="I am 18 or older"
+  help="Tidefern is for adults. No date of birth is stored."
+  name="ageAttested"
+  required
+  error={ageError}
+/>`,
+      keyboard:
+        "Tab reaches the box; Space ticks and unticks it. A click or tap anywhere on the field does the same; a link in the label or the help is followed instead.",
+      /* Every state has a meaning: empty is nothing ticked yet, error an agreement left unticked,
+         loading the checklist use (an item that saves on its own). The label is the age
+         attestation of architecture 8.4, not a milestone: a milestone list carries the 13.10
+         framing and the not-a-screening-tool line once for the whole list, never per item. */
+      render: (state) => (
+        <CheckboxField
+          label="I am 18 or older"
+          help="Tidefern is for adults. No date of birth is stored."
+          required
+          defaultChecked={state !== "empty" && state !== "error"}
+          loading={state === "loading"}
+          error={state === "error" ? "Confirm you are 18 or older to continue." : undefined}
           {...common(state)}
         />
       ),

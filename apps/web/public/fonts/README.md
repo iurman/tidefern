@@ -11,7 +11,10 @@ distributed copies, and the credits page lists both copyright holders.
 | `newsreader-latin-opsz-normal.woff2` | wght 200 to 800, opsz 6 to 72 | Display, headings, the wordmark geometry |
 | `newsreader-latin-wght-italic.woff2` | wght 200 to 800               | The single intro italic (`type-intro`)   |
 | `figtree-latin-wght-normal.woff2`    | wght 300 to 900               | Body, controls, labels, numerals         |
-| `figtree-latin-wght-italic.woff2`    | wght 300 to 900               | Emphasis in body copy                    |
+
+The Figtree italic (21 KB) was removed in task J2b: no style sets Figtree in
+italic, and every file in a `next/font/local` call was preloaded on every
+route. The roman files are preloaded; the Newsreader italic is not.
 
 The roman Newsreader file is the optical-size build (132 KB) so that
 `font-optical-sizing: auto` serves the sturdier low-size cut at 16 px and the

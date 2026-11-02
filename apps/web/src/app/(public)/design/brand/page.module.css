@@ -102,7 +102,7 @@
 .rotated {
   transform: rotate(-14deg);
 }
-.recoloured {
+.recolored {
   filter: hue-rotate(300deg) saturate(1.6);
 }
 /* Misuse demonstration only: 13.6 forbids shadows everywhere else. */

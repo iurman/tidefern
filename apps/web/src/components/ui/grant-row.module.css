@@ -29,6 +29,13 @@
   color: var(--muted);
 }
 
+.level {
+  margin: 0;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  color: var(--text);
+}
+
 .error {
   margin: 0;
   font-size: var(--type-small);

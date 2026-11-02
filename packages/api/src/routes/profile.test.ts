@@ -1,6 +1,7 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { eq, isNull, or } from "drizzle-orm";
+import { and, eq, isNull, or } from "drizzle-orm";
 import { schema } from "@tidefern/db";
+import type { ActorDatabase } from "@tidefern/db";
 import {
   CONSENT_DISCLOSURES,
   Consent,
@@ -18,13 +19,14 @@ import {
 import type { ConsentInput } from "@tidefern/schemas";
 
 import { createApp } from "../app";
-import { FRESH_AUTHENTICATION_REQUIRED } from "../auth";
+import { ACCOUNT_CLOSING, FRESH_AUTHENTICATION_REQUIRED } from "../auth";
 import {
   IDEMPOTENCY_KEY_HEADER,
   IDEMPOTENCY_KEY_REQUIRED,
   IDEMPOTENCY_KEY_REUSED,
   IDEMPOTENCY_REPLAYED_HEADER,
 } from "../middleware/idempotency";
+import { asAppRole } from "../test/account";
 import { sessionHeaders } from "../test/auth-fake";
 import { ANNA, BEN, CARA, OWN_ORIGIN, TOKENS, createActorFixture } from "../test/actors";
 import type { ApiTestDatabase } from "../test/database";
@@ -48,6 +50,8 @@ import {
 
 // Synthetic people and records only. Dan has no relationship with anyone.
 const DAN = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f40";
+// Eve onboards in her own test only, the here-for-someone-else way.
+const EVE = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f41";
 const HOUSEHOLD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9fa0";
 const CHILD = "018f5e7a-1c2b-7d3e-9a4f-5b6c7d8e9f11";
 const CHILD_CONSENT = "018f5e7a-5000-7000-8000-000000000001";
@@ -60,7 +64,7 @@ const BEN_SESSION = "018f5e7a-7000-7000-8000-000000000003";
 // A grant Anna holds: Ben shares his status with her.
 const HELD_GRANT = "018f5e7a-5000-7000-8000-00000000b004";
 
-const TOKEN = { ...TOKENS, dan: "dan", annaStale: "anna-stale" } as const;
+const TOKEN = { ...TOKENS, dan: "dan", eve: "eve", annaStale: "anna-stale" } as const;
 
 // Distinct values so a leak of Anna's profile into another response is visible as text.
 const ANNA_NAME = "Annabel Quill";
@@ -96,6 +100,8 @@ interface CallOptions {
   body?: unknown;
   headers?: Record<string, string>;
   key?: string | null;
+  /** Another app and database than the file's own: the app role block's. */
+  target?: { app: ReturnType<typeof createApp>; db: ActorDatabase };
 }
 
 /** One request through the whole app with the test database bound as the routes' `db`. */
@@ -112,14 +118,15 @@ async function call(
   }
   if (options.body !== undefined) headers.set("content-type", "application/json");
   for (const [name, value] of Object.entries(options.headers ?? {})) headers.set(name, value);
-  return app.request(
+  const target = options.target ?? { app, db: harness.db };
+  return target.app.request(
     `/api${path}`,
     {
       method,
       headers,
       ...(options.body === undefined ? {} : { body: JSON.stringify(options.body) }),
     },
-    { db: harness.db },
+    { db: target.db },
   );
 }
 
@@ -148,6 +155,10 @@ beforeAll(async () => {
     .insert(schema.user)
     .values({ id: DAN, name: "Dan", email: "dan@example.com", emailVerified: true });
   fixture.auth.signIn(TOKEN.dan, DAN, "dan@example.com", 60);
+  await db
+    .insert(schema.user)
+    .values({ id: EVE, name: "Eve", email: "eve@example.com", emailVerified: true });
+  fixture.auth.signIn(TOKEN.eve, EVE, "eve@example.com", 60);
   // Signed in an hour ago: a session, but not a fresh authentication.
   fixture.auth.signIn(TOKEN.annaStale, ANNA, "anna@example.com", 3600);
   // Anna's request session gets a UUID id like a Better Auth row, so the
@@ -491,6 +502,68 @@ describe("GET and PUT /v1/me/profile", () => {
     }
     // Dan, a foreign actor, has no profile and sees no one else's.
     expect((await call("GET", "/v1/me/profile", TOKEN.dan)).status).toBe(404);
+  });
+
+  it("records the terms version accepted at creation, with no consent row, as onboarding sends it", async () => {
+    const before = Date.now();
+    const created = await call("PUT", "/v1/me/profile", TOKEN.eve, {
+      body: profileInput({
+        displayName: "Eve",
+        timeZone: "UTC",
+        stage: "none",
+        ageAttested: true,
+        termsVersion: "2026-10",
+      }),
+    });
+    expect(created.status).toBe(201);
+    const body = Profile.parse(await created.json());
+    expect(body.termsVersion).toBe("2026-10");
+    expect(Date.parse(body.termsAcceptedAt ?? "")).toBeGreaterThanOrEqual(before - 1000);
+    // Accepting the terms is never consent (architecture 7.4): no consent row is written.
+    const consents = await harness.db
+      .select({ id: schema.consents.id })
+      .from(schema.consents)
+      .where(eq(schema.consents.subjectId, EVE));
+    expect(consents).toEqual([]);
+    const read = Profile.parse(await (await call("GET", "/v1/me/profile", TOKEN.eve)).json());
+    expect(read).toEqual(body);
+  });
+
+  it("keeps a profile made without the terms version at null until a write names one", async () => {
+    const plain = Profile.parse(await (await call("GET", "/v1/me/profile", TOKENS.ben)).json());
+    expect(plain.termsVersion).toBeNull();
+    expect(plain.termsAcceptedAt).toBeNull();
+
+    const accepted = await call("PUT", "/v1/me/profile", TOKENS.ben, {
+      body: profileInput({ displayName: "Ben", timeZone: "UTC", termsVersion: "2026-10" }),
+      headers: { "if-match": String(plain.version) },
+    });
+    expect(accepted.status).toBe(200);
+    const first = Profile.parse(await accepted.json());
+    expect(first.termsVersion).toBe("2026-10");
+    expect(first.termsAcceptedAt).not.toBeNull();
+
+    // The same version again, or none, leaves the acceptance as it was.
+    for (const extra of [{ termsVersion: "2026-10" }, {}]) {
+      const current = Profile.parse(await (await call("GET", "/v1/me/profile", TOKENS.ben)).json());
+      const again = await call("PUT", "/v1/me/profile", TOKENS.ben, {
+        body: profileInput({ displayName: "Ben", timeZone: "UTC", ...extra }),
+        headers: { "if-match": String(current.version) },
+      });
+      expect(again.status).toBe(200);
+      const body = Profile.parse(await again.json());
+      expect(body.termsVersion).toBe("2026-10");
+      expect(body.termsAcceptedAt).toBe(first.termsAcceptedAt);
+    }
+
+    // A label that is not a version is refused on the field, as on the consent.
+    const current = Profile.parse(await (await call("GET", "/v1/me/profile", TOKENS.ben)).json());
+    const refused = await call("PUT", "/v1/me/profile", TOKENS.ben, {
+      body: profileInput({ displayName: "Ben", timeZone: "UTC", termsVersion: "I had a loss" }),
+      headers: { "if-match": String(current.version) },
+    });
+    expect(refused.status).toBe(422);
+    expect((await problemOf(refused)).errors?.map((error) => error.path)).toContain("termsVersion");
   });
 });
 
@@ -1016,5 +1089,217 @@ describe("audit events", () => {
       .select({ action: schema.auditEvents.action })
       .from(schema.auditEvents);
     expect(rows.map((row) => row.action)).toEqual(["grant.revoke", "grant.revoke", "grant.revoke"]);
+  });
+});
+
+/**
+ * Task E10: `DATABASE_URL` names `tidefern_app` on CI and in production
+ * (architecture 7.2), and `is_system()` is false for that role by design.
+ * Before E10 the withdrawal ran `withSystem()` on that pool, so its consent
+ * update matched no row and the route answered 409
+ * `consent_already_withdrawn` for a consent nobody had withdrawn. This
+ * block has its own database, so the file's audit count above is unchanged.
+ */
+describe("POST /v1/me/consents/{id}/withdraw on the app role connection", () => {
+  const REQUEST_SESSION = "018f5e7a-7000-7000-8000-0000000000e1";
+  const PHONE_SESSION = "018f5e7a-7000-7000-8000-0000000000e2";
+  const BEN_ROW_SESSION = "018f5e7a-7000-7000-8000-0000000000e3";
+  const FIRST_CONSENT = "018f5e7a-5000-7000-8000-0000000000e1";
+  const SECOND_CONSENT = "018f5e7a-5000-7000-8000-0000000000e2";
+  // Anna shares her history with Ben; Ben shares his status with her.
+  const GIVEN = "018f5e7a-5000-7000-8000-0000000000e3";
+  const HELD = "018f5e7a-5000-7000-8000-0000000000e4";
+
+  let local: ApiTestDatabase;
+  let target: { app: ReturnType<typeof createApp>; db: ActorDatabase };
+  let withdrawal: ConsentWithdrawal;
+
+  beforeAll(async () => {
+    const fixture = await createActorFixture();
+    local = fixture.harness;
+    const { db } = local;
+    const annaLookup = fixture.auth.sessions.get(TOKENS.anna);
+    if (annaLookup === undefined) throw new Error("the actor fixture signs Anna in");
+    fixture.auth.sessions.set(TOKENS.anna, {
+      ...annaLookup,
+      session: { ...annaLookup.session, id: REQUEST_SESSION },
+    });
+    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60_000);
+    await db.insert(schema.session).values([
+      { id: REQUEST_SESSION, token: "e10-anna", userId: ANNA, expiresAt, updatedAt: new Date() },
+      { id: PHONE_SESSION, token: "e10-phone", userId: ANNA, expiresAt, updatedAt: new Date() },
+      { id: BEN_ROW_SESSION, token: "e10-ben", userId: BEN, expiresAt, updatedAt: new Date() },
+    ]);
+    const consent = (id: string, category: "cycle.history" | "journal.private") => ({
+      id,
+      subjectId: ANNA,
+      category,
+      basis: "necessary" as const,
+      purpose: "Keep what she logs.",
+      policyVersion: "2026-10",
+      textHash: "0".repeat(64),
+    });
+    await db
+      .insert(schema.consents)
+      .values([
+        consent(FIRST_CONSENT, "cycle.history"),
+        consent(SECOND_CONSENT, "journal.private"),
+      ]);
+    const versions = { policyVersion: "2026-10", descriptionVersion: "2026-10" };
+    await db.insert(schema.grants).values([
+      {
+        id: GIVEN,
+        ownerId: ANNA,
+        granteeId: BEN,
+        category: "cycle.history",
+        level: "read",
+        ...versions,
+      },
+      {
+        id: HELD,
+        ownerId: BEN,
+        granteeId: ANNA,
+        category: "cycle.status",
+        level: "summary",
+        ...versions,
+      },
+    ]);
+    const appRole = asAppRole(db);
+    target = {
+      app: createApp({ auth: fixture.auth, db: appRole, log: { sink: () => undefined } }),
+      db: appRole,
+    };
+  });
+  afterAll(async () => {
+    await local.close();
+  });
+
+  it("withdraws, revokes every grant in both directions, the one she holds too, and opens the closure", async () => {
+    const response = await call("POST", `/v1/me/consents/${FIRST_CONSENT}/withdraw`, TOKENS.anna, {
+      target,
+    });
+    expect(response.status).toBe(200);
+    withdrawal = ConsentWithdrawal.parse(await response.json());
+    expect(withdrawal).toMatchObject({ id: FIRST_CONSENT, closure: { state: "requested" } });
+    const withdrawnAt = withdrawal.withdrawnAt;
+    expect(Date.parse(withdrawal.closure.undoUntil) - Date.parse(withdrawnAt)).toBe(
+      CLOSURE_UNDO_WINDOW_MS,
+    );
+
+    const consents = await local.db
+      .select({ id: schema.consents.id, withdrawnAt: schema.consents.withdrawnAt })
+      .from(schema.consents)
+      .orderBy(schema.consents.id);
+    expect(consents.map((row) => [row.id, row.withdrawnAt?.toISOString()])).toEqual([
+      [FIRST_CONSENT, withdrawnAt],
+      [SECOND_CONSENT, withdrawnAt],
+    ]);
+
+    const grants = await local.db
+      .select({
+        id: schema.grants.id,
+        revokedAt: schema.grants.revokedAt,
+        version: schema.grants.version,
+      })
+      .from(schema.grants)
+      .orderBy(schema.grants.id);
+    expect(
+      grants.map((grant) => [grant.id, grant.revokedAt?.toISOString(), grant.version]),
+    ).toEqual([
+      [GIVEN, withdrawnAt, 2],
+      [HELD, withdrawnAt, 2],
+    ]);
+
+    const audits = await local.db
+      .select({
+        actorId: schema.auditEvents.actorId,
+        action: schema.auditEvents.action,
+        subjectId: schema.auditEvents.subjectId,
+        category: schema.auditEvents.category,
+        occurredAt: schema.auditEvents.occurredAt,
+      })
+      .from(schema.auditEvents);
+    expect(
+      audits
+        .map((row) => ({ ...row, occurredAt: row.occurredAt.toISOString() }))
+        .sort((a, b) => a.subjectId.localeCompare(b.subjectId)),
+    ).toEqual(
+      [
+        {
+          actorId: ANNA,
+          action: "grant.revoke",
+          subjectId: ANNA,
+          category: "cycle.history",
+          occurredAt: withdrawnAt,
+        },
+        {
+          actorId: ANNA,
+          action: "grant.revoke",
+          subjectId: BEN,
+          category: "cycle.status",
+          occurredAt: withdrawnAt,
+        },
+      ].sort((a, b) => a.subjectId.localeCompare(b.subjectId)),
+    );
+
+    const sessions = await local.db
+      .select({ id: schema.session.id })
+      .from(schema.session)
+      .orderBy(schema.session.id);
+    expect(sessions.map((session) => session.id)).toEqual([REQUEST_SESSION, BEN_ROW_SESSION]);
+
+    const requests = await local.db.select().from(schema.dataRequests);
+    expect(requests).toHaveLength(1);
+    expect(requests[0]).toMatchObject({
+      id: withdrawal.closure.requestId,
+      userId: ANNA,
+      kind: "closure",
+      state: "requested",
+    });
+    const jobs = await local.db
+      .select()
+      .from(schema.jobs)
+      .where(eq(schema.jobs.type, CLOSURE_JOB_TYPE));
+    expect(jobs).toHaveLength(1);
+    expect(jobs[0]?.runAfter.toISOString()).toBe(withdrawal.closure.undoUntil);
+    expect(jobs[0]?.payloadJson).toEqual({ userId: ANNA, requestId: withdrawal.closure.requestId });
+  });
+
+  it("locks the account: GET /v1/me answers 401 account_closing, her consents still answer", async () => {
+    const me = await call("GET", "/v1/me", TOKENS.anna, { target });
+    expect(me.status).toBe(401);
+    expect((await problemOf(me)).detail).toBe(ACCOUNT_CLOSING);
+    const consents = await call("GET", "/v1/me/consents", TOKENS.anna, { target });
+    expect(consents.status).toBe(200);
+  });
+
+  it("reuses the open closure for a newer consent and revokes nothing twice", async () => {
+    const created = await call("POST", "/v1/me/consents", TOKENS.anna, {
+      body: { ...DISCLOSURE, categories: ["cycle.symptoms"] },
+      target,
+    });
+    expect(created.status).toBe(201);
+    const fresh = ConsentRecord.parse(await created.json());
+    const response = await call(
+      "POST",
+      `/v1/me/consents/${fresh.items[0]?.id ?? MISSING}/withdraw`,
+      TOKENS.anna,
+      { target },
+    );
+    expect(response.status).toBe(200);
+    const second = ConsentWithdrawal.parse(await response.json());
+    expect(second.closure.requestId).toBe(withdrawal.closure.requestId);
+    expect(second.closure.undoUntil).toBe(withdrawal.closure.undoUntil);
+    expect(await local.db.select().from(schema.dataRequests)).toHaveLength(1);
+    expect(
+      await local.db.select().from(schema.jobs).where(eq(schema.jobs.type, CLOSURE_JOB_TYPE)),
+    ).toHaveLength(1);
+    const revocations = await local.db
+      .select({ id: schema.auditEvents.id })
+      .from(schema.auditEvents)
+      .where(
+        and(eq(schema.auditEvents.actorId, ANNA), eq(schema.auditEvents.action, "grant.revoke")),
+      );
+    expect(revocations).toHaveLength(2);
   });
 });

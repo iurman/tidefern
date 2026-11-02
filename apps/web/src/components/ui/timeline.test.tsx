@@ -32,6 +32,22 @@ describe("Timeline", () => {
     expect(screen.getByRole("link", { name: "Rolled over" })).toHaveAttribute("href", "/m");
   });
 
+  it("draws a row's own control after its text and leaves the other rows without one", () => {
+    const withAction: TimelineItem[] = [
+      {
+        ...(items[0] as TimelineItem),
+        action: <button type="button">Edit 9 month check-up</button>,
+      },
+      items[1] as TimelineItem,
+    ];
+    render(<Timeline label="Appointments" items={withAction} />);
+    const rows = screen.getByRole("list", { name: "Appointments" }).querySelectorAll("li");
+    const button = screen.getByRole("button", { name: "Edit 9 month check-up" });
+    expect(rows[0]).toContainElement(button);
+    expect(rows[0]?.textContent).toBe("Nov 29 month check-upExpectedEdit 9 month check-up");
+    expect(rows[1]?.querySelector("button")).toBeNull();
+  });
+
   it("puts nothing on warmth unless asked", () => {
     render(<Timeline label="Appointments" items={items} />);
     expect(document.querySelectorAll(".newest")).toHaveLength(0);

@@ -6,9 +6,10 @@ import { SweepRoleError, assertIdsOnly, enqueue } from "@tidefern/db/jobs";
 import type { ActorDatabase, Job } from "@tidefern/db/jobs";
 
 import { createApp } from "../app";
+import { calendarClock, realCalendarClock } from "../clock";
 import { REMINDER_PAYLOAD_KEY } from "../routes/pregnancy/index";
 import { jobHandlers } from "./handlers";
-import { drainDue } from "./index";
+import { drainDue, jobContext } from "./index";
 import {
   REMINDER_JOB_TYPE,
   ReminderMailUnavailableError,
@@ -545,7 +546,7 @@ describe("sendReminder", () => {
     expect(outcome.failed).toHaveLength(3);
     const [job] = await reminderJobs();
     expect(job?.lastError).toBe("ReminderMailUnavailableError");
-    await expect(sendReminder(job as Job, { db: database.db, now: NOW })).rejects.toBeInstanceOf(
+    await expect(sendReminder(job as Job, jobContext(database.db, NOW))).rejects.toBeInstanceOf(
       ReminderMailUnavailableError,
     );
   });
@@ -563,8 +564,11 @@ describe("sendReminder", () => {
 describe("the scheduled run", () => {
   test("enqueues the day's reminders before it drains, so they go out in the same run", async () => {
     const secret = "a-cron-secret-for-the-reminder-tests";
+    // The real calendar whatever the runner's environment says (CI exports
+    // TIDEFERN_FAKE_NOW): each person's day follows the injected NOW.
     const app = createApp({
       jobs: { db: database.db, handlers: jobHandlers, cronSecret: secret, now: () => NOW },
+      clock: realCalendarClock,
     });
     const response = await app.request("/api/internal/jobs/run", {
       headers: { authorization: `Bearer ${secret}` },
@@ -598,6 +602,7 @@ describe("the scheduled run", () => {
       const secret = "a-cron-secret-for-the-reminder-tests";
       const app = createApp({
         jobs: { db: database.db, handlers: jobHandlers, cronSecret: secret, now: () => NOW },
+        clock: realCalendarClock,
       });
       const response = await app.request("/api/internal/jobs/run", {
         headers: { authorization: `Bearer ${secret}` },
@@ -620,5 +625,89 @@ describe("the scheduled run", () => {
         .set({ timeZone: "America/Los_Angeles" })
         .where(eq(schema.profiles.userId, CARA));
     }
+  });
+});
+
+/**
+ * Task E11: with the calendar frozen at NOW and the real clock three days
+ * on, each person's day is still NOW's, while what is stored or compared
+ * with a stored time (the jobs' run_after, the lookback, the one-a-day
+ * rule) follows the real clock.
+ */
+describe("on a frozen calendar", () => {
+  const THREE_DAYS_ON = new Date("2026-10-09T06:00:00Z");
+  const frozenAtNow = calendarClock({ TIDEFERN_FAKE_NOW: NOW.toISOString() });
+  /** Ben is told of Dana's period start; the appointments are Anna's and Cara's. */
+  const BEN_ADDRESS = "person4@example.test";
+
+  test("finds the reminders of the frozen day and stamps the jobs with the real instant", async () => {
+    await enqueueReminders(database.db, NOW);
+    const onTheDay = payloads(await reminderJobs());
+    expect(onTheDay).toHaveLength(3);
+    await database.db.delete(schema.jobs);
+
+    const counts = await enqueueReminders(database.db, THREE_DAYS_ON, frozenAtNow);
+    const jobs = await reminderJobs();
+    expect(payloads(jobs)).toEqual(onTheDay);
+    expect(counts.jobs).toBe(3);
+    expect(jobs.every((job) => job.runAfter.getTime() === THREE_DAYS_ON.getTime())).toBe(true);
+    await database.db.delete(schema.jobs);
+
+    // On the real calendar three days on, nothing in the fixture is due.
+    expect(await enqueueReminders(database.db, THREE_DAYS_ON)).toEqual({
+      appointments: 0,
+      periodNotices: 0,
+      jobs: 0,
+    });
+  });
+
+  test("keeps one job a day per person on the real clock, whatever the calendar says", async () => {
+    expect((await enqueueReminders(database.db, THREE_DAYS_ON, frozenAtNow)).jobs).toBe(3);
+    const halfAnHourOn = new Date(THREE_DAYS_ON.getTime() + 30 * 60_000);
+    expect((await enqueueReminders(database.db, halfAnHourOn, frozenAtNow)).jobs).toBe(0);
+    expect(await reminderJobs()).toHaveLength(3);
+  });
+
+  test("sends what is still due on the drain's calendar and drops what the real one has passed", async () => {
+    await enqueueReminders(database.db, THREE_DAYS_ON, frozenAtNow);
+    const frozen = await drainDue(database.db, 25, jobHandlers, THREE_DAYS_ON, frozenAtNow);
+    expect(frozen.done).toHaveLength(3);
+    expect(mailer.messages).toHaveLength(3);
+
+    await database.db.delete(schema.jobs);
+    mailer = new CaptureMailer();
+    configureReminders({ mailer, siteUrl: SITE, template: reminderEmail });
+    await enqueueReminders(database.db, THREE_DAYS_ON, frozenAtNow);
+    const real = await drainDue(database.db, 25, jobHandlers, THREE_DAYS_ON);
+    // Every job completes; on the real calendar both appointments are behind
+    // their subjects, so only the partner notice, which names no day, is sent.
+    expect(real.done).toHaveLength(3);
+    expect(mailer.messages.map((message) => message.to)).toEqual([BEN_ADDRESS]);
+  });
+
+  test("runs the reminder step and the drain on the app's clock through the scheduled route", async () => {
+    const secret = "a-cron-secret-for-the-reminder-tests";
+    const app = createApp({
+      jobs: {
+        db: database.db,
+        handlers: jobHandlers,
+        cronSecret: secret,
+        now: () => THREE_DAYS_ON,
+      },
+      clock: frozenAtNow,
+    });
+    const response = await app.request("/api/internal/jobs/run", {
+      headers: { authorization: `Bearer ${secret}` },
+    });
+    expect(response.status).toBe(200);
+    expect(await response.json()).toMatchObject({
+      reminders: { appointments: 2, periodNotices: 1, jobs: 3 },
+      claimed: 3,
+      done: 3,
+      failed: 0,
+    });
+    expect(mailer.messages).toHaveLength(3);
+    const jobs = await reminderJobs();
+    expect(jobs.every((job) => job.runAfter.getTime() === THREE_DAYS_ON.getTime())).toBe(true);
   });
 });

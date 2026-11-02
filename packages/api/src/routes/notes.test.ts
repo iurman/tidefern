@@ -11,7 +11,6 @@ import { sessionHeaders } from "../test/auth-fake";
 import { ANNA, BEN, CARA, OWN_ORIGIN, TOKENS } from "../test/actors";
 import { ANNA_TIME_ZONE, NOTE_CHILD, NOTE_GRANTS, createNotesFixture } from "../test/notes";
 import type { NotesFixture } from "../test/notes";
-import type { NotesBindings } from "./notes";
 
 // Health words on purpose: the tests prove they reach nothing but the encrypted column.
 const PRIVATE_TEXT = "nausea after breakfast, slept badly";
@@ -46,7 +45,6 @@ const TOMBSTONE_ID = "018f5e7a-8000-7000-8000-000000000002";
 
 let fixture: NotesFixture;
 let app: ReturnType<typeof createApp>;
-let env: NotesBindings;
 const lines: string[] = [];
 const problems: string[] = [];
 
@@ -55,9 +53,9 @@ beforeAll(async () => {
   app = createApp({
     auth: fixture.auth,
     db: fixture.harness.db,
+    keys: fixture.keys,
     log: { secret: "log-secret", sink: (line) => lines.push(line) },
   });
-  env = { db: fixture.harness.db, keys: fixture.keys };
 });
 
 afterAll(async () => {
@@ -74,7 +72,7 @@ const headers = (token: Token, key?: string, extra: Record<string, string> = {})
   ...extra,
 });
 
-const request = (path: string, init: RequestInit) => app.request(`/api/v1${path}`, init, env);
+const request = (path: string, init: RequestInit) => app.request(`/api/v1${path}`, init);
 
 const post = (path: string, token: Token, key: string, body: unknown, extra = {}) =>
   request(path, {
@@ -284,15 +282,11 @@ describe("creating a note", () => {
     expect(noKey.status).toBe(400);
     expect((await problemOf(noKey)).code).toBe("validation_failed");
 
-    const anonymous = await app.request(
-      "/api/v1/notes",
-      {
-        method: "POST",
-        headers: { origin: OWN_ORIGIN, "content-type": "application/json" },
-        body: JSON.stringify({ date: "2026-10-02", body: "x" }),
-      },
-      env,
-    );
+    const anonymous = await app.request("/api/v1/notes", {
+      method: "POST",
+      headers: { origin: OWN_ORIGIN, "content-type": "application/json" },
+      body: JSON.stringify({ date: "2026-10-02", body: "x" }),
+    });
     expect(anonymous.status).toBe(401);
   });
 });

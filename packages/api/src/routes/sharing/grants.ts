@@ -19,6 +19,7 @@ import type { GrantSetting } from "@tidefern/schemas";
 import type { RequestActor } from "../../actor";
 import { requireActor, requireFreshAuth } from "../../auth";
 import type { ApiEnv } from "../../context";
+import type { AreaOptions } from "../index";
 import { audit, auditActions } from "../../middleware/audit";
 import type { AuditAction } from "../../middleware/audit";
 import { activeGrants, loadPeople, personBody, personVersion, sortedPeople } from "./people";
@@ -207,14 +208,14 @@ async function personOrRefuse(tx: Transaction, actor: RequestActor, personId: st
   return person;
 }
 
-export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>): void {
+export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>, options: AreaOptions): void {
+  const { db } = options;
   app.openapi(listPeopleRoute, (c) => {
     const actor = actorOf(c);
     const query = c.req.valid("query");
-    const deps = sharingDependencies(app);
     return answering(c, async () => {
       const cursor = decodeCursor(query.cursor);
-      const people = await withActor(actor.id, (tx) => loadPeople(tx, actor), deps.db);
+      const people = await withActor(actor.id, (tx) => loadPeople(tx, actor), db);
       const paged = page(sortedPeople(people), cursor, query.limit);
       return c.json({ items: paged.items.map(personBody), nextCursor: paged.nextCursor }, 200);
     });
@@ -274,7 +275,7 @@ export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>): void {
           }
           return personOrRefuse(tx, actor, personId);
         },
-        deps.db,
+        db,
       );
       return c.json(personBody(updated), 200);
     });
@@ -300,7 +301,7 @@ export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>): void {
             childId === undefined ? { category } : { category, childId };
           await revoke(tx, actor, existing, resourceOf(actor, setting), now);
         },
-        deps.db,
+        db,
       );
       return c.body(null, 204);
     });
@@ -335,7 +336,7 @@ export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>): void {
           }
           await endSharedMemberships(tx, actor.id, person.id, now);
         },
-        deps.db,
+        db,
       );
       return c.body(null, 204);
     });
@@ -369,7 +370,7 @@ export function registerGrantRoutes(app: OpenAPIHono<ApiEnv>): void {
           }
           return personOrRefuse(tx, actor, input.personId);
         },
-        deps.db,
+        db,
       );
       return c.json(personBody(updated), 200);
     });

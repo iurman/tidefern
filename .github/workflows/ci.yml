@@ -26,12 +26,19 @@ jobs:
     # The job name is the required status check in the main ruleset. Keep it exactly "verify".
     name: verify
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    # The seeded browser suite runs one worker (the auth limiter allows three sign-ins per ten
+    # seconds for the whole run) and grew to about 380 tests with J1 to J3; the job took 29 to
+    # 31 minutes, so 30 cancelled green runs. Lower it again if the suite is sharded.
+    timeout-minutes: 45
     services:
       postgres:
         # postgres 18.6, pinned to the digest of its multi-architecture index like the actions below
-        # (resolved from Docker Hub on 2026-10-05). The browser suite signs in against seeded users
-        # on it (architecture 15 and 16.1); unit tests keep using PGlite.
+        # (resolved from Docker Hub on 2026-10-05). ECR Public originally avoided a Docker Hub
+        # runner rate limit (run 37991468945). ECR now rejects pulls with "Data limit exceeded"
+        # (run 39844516800, both attempts); Docker Hub serves the identical digest, rechecked
+        # 2026-10-22. Use that official source without changing the database image. The
+        # browser suite signs in against seeded users on it (architecture 15 and 16.1); unit tests
+        # keep using PGlite.
         image: postgres:18.6@sha256:6737476511d43c91c7cee9aa027b5d30458b7ed0f3af663ff8715c14ce4355b6
         env:
           POSTGRES_USER: postgres
@@ -49,8 +56,9 @@ jobs:
       # anywhere outside this job: the database lives in the service container above and is gone
       # with the job, and CI never holds a real credential (architecture 16.1). Every variable here
       # is listed in turbo.json globalEnv so the build hash keys on it. The owner URL (the service's
-      # postgres superuser) is not job env: it sits on the three database steps that need it and on
-      # nothing else, so neither server below inherits it.
+      # postgres superuser) is not job env: it sits on the four database steps that need it and on
+      # the seeded server's step, for the job runner, and on nothing else, so the build, the unit
+      # tests and the database-free server never see it.
       #
       # Migration 0000 creates tidefern_app NOLOGIN; the grant-login step below gives it LOGIN with
       # this throwaway password, then next build and next start connect as it (architecture 7.2).
@@ -67,7 +75,8 @@ jobs:
       E2E_MAIL_CAPTURE: "true"
       TIDEFERN_FAKE_NOW: "2026-10-05"
       BETTER_AUTH_TELEMETRY: "0"
-      # CRON_SECRET is left unset on purpose: the job runner answers 404 without it, and a test proves that.
+      # CRON_SECRET is not job env: it sits on the seeded server's step and on the browser suite's,
+      # which calls the job runner with it. Everywhere else it is unset, and the runner answers 404.
     steps:
       - name: Check out
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -127,8 +136,8 @@ jobs:
       # dropped path) fails the pull request, because installed clients keep calling v1 for months.
       # Removing an optional response field is info level in oasdiff and passes; whether it should
       # fail is a 16.1 decision, not this step's. The base copy goes under node_modules/.cache,
-      # which no later step formats, lints or builds, inside the workspace the action's container
-      # mounts. The commit-message step above already fetched the base branch.
+      # which no later step formats, lints or builds. The commit-message step above already
+      # fetched the base branch.
       - name: Read the base branch's contract (pull requests)
         if: github.event_name == 'pull_request'
         env:
@@ -137,19 +146,30 @@ jobs:
           mkdir -p node_modules/.cache/oasdiff
           git show "origin/$BASE_REF:openapi/v1.json" > node_modules/.cache/oasdiff/base-v1.json
 
-      # review: false keeps both specs in CI (the default uploads them to oasdiff.com), and with it
-      # the action sends no telemetry and posts no comment; the empty token makes sure of the
-      # latter, so the job keeps contents: read. The result is in the step log and as annotations
-      # on the changed lines; fail-on: ERR fails the job on any error-level change.
+      # The oasdiff release binary, checked against a pinned SHA-256, rather than
+      # oasdiff/oasdiff-action, whose container is built from tufin/oasdiff on Docker Hub: anonymous
+      # pulls from shared runners met 429 Too Many Requests on three attempts in a row (run
+      # 37990905516), which failed verify without a change to the contract. The same release
+      # (1.33.0, the image the action used) and the same inputs: fail-on ERR fails the job on any
+      # error-level change except one the lead approved in openapi/BREAKING.md (err-ignore: a dated
+      # line per change, with its reason). Nothing is uploaded and no comment is posted; the result
+      # is in the step log and as annotations on the changed lines.
       - name: No breaking change to the v1 contract (pull requests)
         if: github.event_name == 'pull_request'
-        uses: oasdiff/oasdiff-action/breaking@b9325c9e0a27ab65b0da3b766522cedec6be81dc # v0.1.18
-        with:
-          base: node_modules/.cache/oasdiff/base-v1.json
-          revision: openapi/v1.json
-          fail-on: ERR
-          review: false
-          github-token: ""
+        env:
+          OASDIFF_VERSION: 1.33.0
+          # sha256 of oasdiff_1.33.0_linux_amd64.tar.gz, matching the release's checksums.txt (2026-10-09).
+          OASDIFF_SHA256: 43a4e328e2d13ba1552d760aa68d2485c75c5621f309f6ff64ae895188345247
+        run: |
+          dir="$RUNNER_TEMP/oasdiff"
+          mkdir -p "$dir"
+          archive="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          curl --fail --silent --show-error --location --retry 3 --output "$dir/$archive" \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/${archive}"
+          echo "${OASDIFF_SHA256}  $dir/$archive" | sha256sum --check --strict
+          tar -xzf "$dir/$archive" -C "$dir" oasdiff
+          "$dir/oasdiff" breaking node_modules/.cache/oasdiff/base-v1.json openapi/v1.json \
+            --fail-on ERR --err-ignore openapi/BREAKING.md --format githubactions
 
       - name: Lint
         run: pnpm lint
@@ -160,9 +180,9 @@ jobs:
       - name: Unit tests
         run: pnpm test
 
-      # The service's postgres superuser is the owner role in CI: it runs the migrations, the grant
-      # and the seed. Its URL is written on these three steps only (the same literal each time; the
-      # workflow has no way to name it once without making it job env).
+      # The service's postgres superuser is the owner role in CI: it runs the migrations, the grant,
+      # the pooled check's own rows and the seed. Its URL is written on these four steps only (the
+      # same literal each time; the workflow has no way to name it once without making it job env).
       - name: Migrate the service database as its owner
         env:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
@@ -176,6 +196,62 @@ jobs:
         env:
           DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
         run: pnpm db:grant-login
+
+      # Architecture 15's pooled check (task J9): two actors at once through PgBouncer 1.26.0 in
+      # transaction mode, as tidefern_app with NODE_ENV=production, proving each sees only its own
+      # rows and that SET LOCAL ROLE and the actor setting reset after every transaction, a failed
+      # one included. DATABASE_URL here is the pooled URL; the owner URL creates and removes the
+      # suite's own synthetic rows before the seed runs. The pooler is CloudNativePG's PgBouncer
+      # image from GitHub's registry, pinned to the digest of its multi-architecture index
+      # (resolved with skopeo on 2026-10-09), so it needs no Docker Hub pull; it runs here rather
+      # than as a service because its configuration is a file, which a service container cannot
+      # mount before checkout. It shares the runner's network, reaches the service Postgres on
+      # 127.0.0.1:5432 and logs in as tidefern_app with the same throwaway password; two server
+      # connections, so the suite's four client connections have to share them. About a second of
+      # tests plus the image pull.
+      - name: Pooled database check through PgBouncer in transaction mode
+        env:
+          DATABASE_URL: postgresql://tidefern_app:ci-only-app-password@127.0.0.1:6432/tidefern
+          DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
+        run: |
+          conf="$RUNNER_TEMP/pgbouncer"
+          mkdir -p "$conf"
+          cat > "$conf/pgbouncer.ini" <<'INI'
+          [databases]
+          tidefern = host=127.0.0.1 port=5432 dbname=tidefern
+
+          [pgbouncer]
+          listen_addr = 127.0.0.1
+          listen_port = 6432
+          unix_socket_dir =
+          auth_type = scram-sha-256
+          auth_file = /etc/pgbouncer-ci/userlist.txt
+          pool_mode = transaction
+          default_pool_size = 2
+          INI
+          echo '"tidefern_app" "ci-only-app-password"' > "$conf/userlist.txt"
+          chmod 755 "$conf"
+          chmod 644 "$conf/pgbouncer.ini" "$conf/userlist.txt"
+          docker run -d --name pgbouncer --network host -v "$conf:/etc/pgbouncer-ci:ro" \
+            ghcr.io/cloudnative-pg/pgbouncer:1.26.0@sha256:ce54f1133c509f1db8a8092c3f1c761d8c9292065ed6b6698786bb966da4dab9 \
+            /etc/pgbouncer-ci/pgbouncer.ini
+          ready=false
+          for attempt in $(seq 1 30); do
+            if pg_isready --host 127.0.0.1 --port 6432 --dbname tidefern > /dev/null 2>&1; then
+              ready=true
+              break
+            fi
+            sleep 1
+          done
+          if [ "$ready" != true ]; then
+            echo "PgBouncer did not answer on 127.0.0.1:6432; its log follows" >&2
+            docker logs pgbouncer >&2
+            exit 1
+          fi
+          docker exec pgbouncer pgbouncer --version
+          pnpm --filter @tidefern/db test:integration
+          docker logs pgbouncer 2>&1 | tail -5
+          docker rm -f pgbouncer > /dev/null
 
       # The seed runs through withSystem(), which the app role is refused for, so DATABASE_URL is the
       # owner URL on this step.
@@ -192,10 +268,20 @@ jobs:
 
       # Every variable the server needs is listed here, so what the browser suite runs against is
       # readable in one place (a step's env adds to the job's, it does not replace it; the job env
-      # carries the same values and the owner URL is on no step from here on). The server is started
-      # once in a session of its own, outside Playwright's webServer (PLAYWRIGHT_BASE_URL turns that
-      # off); the saved pid leads its process group, which is what the stop step kills, next-server
-      # child included.
+      # carries the same values). The server is started once in a session of its own, outside
+      # Playwright's webServer (PLAYWRIGHT_BASE_URL turns that off); the saved pid leads its
+      # process group, which is what the stop step kills, next-server child included.
+      #
+      # The last three give this server the job runner (architecture 10.1 and 11), so the deletion
+      # flow proves removal and not just the lock (task J3d): the owner URL, the same literal as the
+      # database steps, is the runner's connection (the host builds its one-connection owner pool
+      # only when DATABASE_URL_UNPOOLED is set); CRON_SECRET is a test-only bearer the browser suite
+      # sends to /api/internal/jobs/run; OWNER_EMAIL is a test-only inbox the closure's processor
+      # notice goes to, which the capture mailer keeps. Without them a closure past its window
+      # waits and deletes nothing. None of the three is a secret: the database dies with the job.
+      # E2E_JOBS_SCHEDULED_ONLY turns off the inline drain on this server alone (never on Vercel),
+      # so a close waits for the scheduled run: the specs see the deleting view in a stable state,
+      # and the deletion flow then runs the job itself instead of racing one already in flight.
       - name: Start the production server against the seeded database
         env:
           DATABASE_URL: ${{ env.DATABASE_URL }}
@@ -206,6 +292,10 @@ jobs:
           E2E_MAIL_CAPTURE: ${{ env.E2E_MAIL_CAPTURE }}
           TIDEFERN_FAKE_NOW: ${{ env.TIDEFERN_FAKE_NOW }}
           BETTER_AUTH_TELEMETRY: ${{ env.BETTER_AUTH_TELEMETRY }}
+          DATABASE_URL_UNPOOLED: postgresql://postgres:ci-only-postgres-password@127.0.0.1:5432/tidefern
+          CRON_SECRET: ci-only-cron-secret-0123456789abcdef-not-real
+          OWNER_EMAIL: owner@example.test
+          E2E_JOBS_SCHEDULED_ONLY: "true"
         run: |
           cd apps/web
           setsid nohup node_modules/.bin/next start --port 3000 --hostname 127.0.0.1 > "$RUNNER_TEMP/next-seeded.log" 2>&1 &
@@ -221,10 +311,24 @@ jobs:
           cat "$RUNNER_TEMP/next-seeded.log"
           exit 1
 
+      # CRON_SECRET is the server step's literal: the deletion flow runs the due jobs with it
+      # (apps/web/tests/e2e/jobs.ts).
       - name: Browser tests against the seeded production server
         env:
           PLAYWRIGHT_BASE_URL: http://127.0.0.1:3000
+          CRON_SECRET: ci-only-cron-secret-0123456789abcdef-not-real
         run: pnpm browser:isolated pnpm test:e2e
+
+      # The byte-budget gate of docs/design/PERFORMANCE.md: each key route loaded once in a fresh
+      # Chromium context with Lighthouse's mobile screen, its compressed script transfer and its
+      # total transfer summed from the network events, and the run fails on any route over its
+      # ceiling in apps/web/scripts/perf/budgets.json. Bytes only, never timings, so it does not
+      # flap; it uses the isolated browser runner and the server the suite ran against. Like
+      # the smoke subset below it is an independent assertion, so it runs even when the suite
+      # failed (the job still fails); only a cancellation skips it.
+      - name: Byte budgets for the key routes against the seeded server
+        if: ${{ !cancelled() }}
+        run: pnpm browser:isolated pnpm --filter web perf:bytes http://127.0.0.1:3000
 
       # The smoke subset also runs against production deployments, which have no seeded users and
       # no test database, so it must pass against a server that has no database at all. This second

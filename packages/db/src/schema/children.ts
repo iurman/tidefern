@@ -26,6 +26,31 @@ export const childEventSideValues = ["left", "right", "both"] as const;
 export const childEventSideEnum = pgEnum("child_event_side", childEventSideValues);
 
 /**
+ * How a feed was given (task E12): the "breast, bottle, solids" chips of
+ * the feed log. Closed and nullable, since feeds logged before E12 have
+ * none, and only a feed may carry one (the
+ * `child_events_feed_method_is_for_feed` check). Mirrors
+ * `ChildEventFeedMethod` in packages/schemas.
+ */
+export const childEventFeedMethodValues = ["breast", "bottle", "solids"] as const;
+export const childEventFeedMethodEnum = pgEnum(
+  "child_event_feed_method",
+  childEventFeedMethodValues,
+);
+
+/**
+ * What a diaper held (task E12), in the words of the research record's
+ * diaper chips: `mixed` is wet and dirty at once. Closed and nullable, and
+ * only a diaper may carry it (the `child_events_diaper_contents_is_for_diaper`
+ * check). Mirrors `ChildEventDiaperContents` in packages/schemas.
+ */
+export const childEventDiaperContentsValues = ["wet", "dirty", "mixed"] as const;
+export const childEventDiaperContentsEnum = pgEnum(
+  "child_event_diaper_contents",
+  childEventDiaperContentsValues,
+);
+
+/**
  * A child belongs to a household and is co-owned by its guardians
  * (architecture record 7.4 and 8.1); the child is the subject of every row
  * about it, and `subject_keys` holds its own wrapped key. `date_of_birth` is
@@ -77,8 +102,9 @@ export const childGuardians = pgTable(
  * a calendar fact; a feed or a sleep also carries instants, a sleep as a
  * span. `milestone_id` is core's checklist item key (`<months>m-<domain>-<n>`)
  * and is set exactly for milestones. `quantity_ml` is the SI volume of a
- * feed and `side` the breast it was given from, set only on a feed. Any
- * free text goes in `note`, encrypted under the child's DEK with
+ * feed, `side` the breast it was given from and `feed_method` how it was
+ * given, each set only on a feed; `diaper_contents` is set only on a
+ * diaper. Any free text goes in `note`, encrypted under the child's DEK with
  * the sibling `kek_version`. The author may be any guardian or a partner
  * with a `contribute` grant for this child.
  */
@@ -97,6 +123,8 @@ export const childEvents = pgTable(
     milestoneId: text("milestone_id"),
     quantityMl: integer("quantity_ml"),
     side: childEventSideEnum("side"),
+    feedMethod: childEventFeedMethodEnum("feed_method"),
+    diaperContents: childEventDiaperContentsEnum("diaper_contents"),
     note: bytea("note"),
     kekVersion: text("kek_version"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -119,6 +147,14 @@ export const childEvents = pgTable(
       sql`${table.quantityMl} is null or ${table.quantityMl} > 0`,
     ),
     check("child_events_side_is_for_feed", sql`${table.side} is null or ${table.kind} = 'feed'`),
+    check(
+      "child_events_feed_method_is_for_feed",
+      sql`${table.feedMethod} is null or ${table.kind} = 'feed'`,
+    ),
+    check(
+      "child_events_diaper_contents_is_for_diaper",
+      sql`${table.diaperContents} is null or ${table.kind} = 'diaper'`,
+    ),
     check(
       "child_events_note_has_kek_version",
       sql`(${table.note} is null) = (${table.kekVersion} is null)`,

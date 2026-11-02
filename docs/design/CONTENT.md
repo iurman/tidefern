@@ -38,7 +38,7 @@ Titles never carry a stage, a date, a child's name or any health word.
 | Failure | Say what to do next, never only that something failed | "That email is already in use. Sign in instead." / "We could not save this day. Try again." / "The invitation has expired. Send a new one." |
 | Empty | Say what would be here, why it is not, and the one action | See the table below |
 | Success | Short, with the undo where one exists | "Saved for Sunday, Oct 5. Undo" / "Alex can now see your cycle status." |
-| Destructive | Name the consequence and the undo window | "Closing your account locks it now and deletes it in 7 days. Signing in again before then cancels this." |
+| Destructive | Name the consequence and the undo window | "Closing your account locks it now and deletes it in 7 days. Until then, you can sign in and undo it." |
 
 Page titles in Title Case, everything else in sentence case. Second person,
 active voice, numerals for numbers. No em dashes anywhere. Predictions use
@@ -87,6 +87,53 @@ estimate from your logged dates. Not a form of contraception.", so no new
 wording enters; the compositions in `DESIGN.md` show it. The full footer
 still closes the page.
 
+## Context ranges on `/family` (proposed, `[OWNER]`)
+
+Task F6. `infantContext(kind, dateOfBirth, today)` in `packages/core`
+returns the published range for a child's age, its band and its sources;
+`packages/core/data/SOURCES.md` quotes the sentence behind each figure. A
+line that states a range names a health norm, so every line below is a
+proposal: `[OWNER]` approves it, then it becomes a row in the architecture
+13.10 table before it ships (`docs/CLAIMS.md` sections 1.4 and 4). Until
+then the UI shows a plain placeholder marked `[OWNER]` where the line goes.
+The wording follows the sources: AAP's "should have" becomes "expected",
+AASM's recommendations become "recommended", and each source's "at least",
+its 24-hour basis, AASM's "on a regular basis" (usual sleep, not one day's)
+and whether naps count are kept as the source has them.
+
+| Range id | Proposed line `[OWNER]` | Source line `[OWNER]`, linking to the source's `url` |
+| --- | --- | --- |
+| `feed-newborn` | "Expected for a newborn: at least 8 to 12 feeds every 24 hours." | "Source: American Academy of Pediatrics" |
+| `wet-diaper-first-days` | "Expected in the first few days after birth: 2 to 3 wet diapers a day." | "Source: American Academy of Pediatrics" |
+| `wet-diaper-after-first-days` | "Expected after the first 4 to 5 days: at least 5 to 6 wet diapers a day." | "Source: American Academy of Pediatrics" |
+| `sleep-4-to-12-months` | "Recommended at 4 to 12 months: 12 to 16 hours of sleep every 24 hours on a regular basis, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-1-to-2-years` | "Recommended at 1 to 2 years: 11 to 14 hours of sleep every 24 hours on a regular basis, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-3-to-5-years` | "Recommended at 3 to 5 years: 10 to 13 hours of sleep every 24 hours on a regular basis, naps included." | "Source: American Academy of Sleep Medicine" |
+| `sleep-6-to-12-years` | "Recommended at 6 to 12 years: 9 to 12 hours of sleep every 24 hours on a regular basis." | "Source: American Academy of Sleep Medicine" |
+| `sleep-13-to-18-years` | "Recommended at 13 to 18 years: 8 to 10 hours of sleep every 24 hours on a regular basis." | "Source: American Academy of Sleep Medicine" |
+
+Once on the page, under the cards `[OWNER]`: "These ranges come from the
+American Academy of Pediatrics and the American Academy of Sleep Medicine.
+Tidefern is not affiliated with either, and neither has reviewed Tidefern."
+
+Rules for every range line (the first two from architecture 8.4, the rest
+from the sources and the decisions `SOURCES.md` records):
+
+- It sits beside today's count as context. Nothing about the card changes
+  with where the count falls: no color, icon, badge, sound or haptic, and
+  no "too few", "too many", "low", "high", "normal", "on track" or
+  "behind". A count outside a range never brings up the pointing-to-care
+  sentence.
+- No line where the function returns nothing: no sleep line before 4
+  months, no feed or wet diaper line after the first month.
+- The figures are per 24 hours, and the sleep figures are for sleep on a
+  regular basis, not one day's; today's count is the day so far, so the
+  line states the range and never compares the two.
+- Feeds count breast and bottle feeds; solids are not part of the figure.
+  Wet diapers count diapers logged as wet or mixed.
+- The source line names the publisher and links to its page, never with a
+  logo.
+
 ## Owner inputs still missing
 
 - `[OWNER]` the inbox for privacy and health data requests (every policy
@@ -104,3 +151,593 @@ still closes the page.
   disputes), after attorney review; the page says it is missing.
 - `[OWNER]` the contact for accessibility reports on `/accessibility`, if it
   differs from the privacy inbox.
+- `[OWNER]` the version label of the terms the onboarding consent records
+  beside the consent (`TERMS_VERSION` in `packages/schemas/src/profile.ts`,
+  `2026-10` until the terms text is approved); it changes whenever the terms
+  text does.
+
+One subsection per page route below, so each route's builder adds its own
+lines without touching another's.
+
+### `/welcome` (H1)
+
+- `[OWNER]` every line `/welcome` shows beyond the title, Continue and
+  Finish, the step names and the lines DESIGN.md 3.2, core's questions and
+  the shared components already hold: the drafts in
+  `apps/web/src/components/pages/welcome/copy.ts`, each marked there. They
+  are the page description, the memory line ("Nothing is saved until you
+  agree to the terms..."), the zone suggestion, the stage question and the
+  four card lines, the date help, the flow note and every date error, the
+  dating method question and its four labels, the scan and transfer field
+  labels, the baby's name and its help, the guardian box label, the consent
+  and "Before you start" headings, the line for the path that collects
+  nothing, the terms label and help, the pending and failure line of each
+  write, the "saved so far" and "add it later" lines, and the passkey step.
+- `[OWNER]` which categories the onboarding consent lists per stage. H1's
+  ruling: cycle and postpartum list Cycle history, Symptoms and Private
+  notes; pregnancy lists Pregnancy overview, Symptoms and Private notes;
+  status cards and photos are asked when she turns them on; "here for
+  someone else" records no consent at all, because nothing about her own
+  body is collected (the seed gives Theo and Pia none either), and she
+  still accepts the terms and attests her age on that step, named "Terms".
+  Her acceptance is not recorded yet: the terms version reaches the server
+  only inside `POST /v1/me/consents`, and `PUT /v1/me/profile` has no terms
+  field, so the other three stages store the version they accepted and this
+  one stores nothing. Either an API field that records the terms version
+  without a health consent, or a ruling that this path records a minimal
+  consent, closes the gap.
+- `[OWNER]` "weeks and days as of a date" is not offered as a dating
+  method: no method stores it honestly. The transfer wording waits on the
+  clinician review with the other transfer copy.
+- `[OWNER]` the plausible-date windows the page holds dates to: a last
+  period, scan or transfer within the last 42 weeks; a due date given by
+  hand from 2 weeks past to 40 weeks ahead; nothing that already happened
+  after today.
+- `[OWNER]` whether passkeys are offered before the production domain is
+  live (architecture 6.1): the step offers one wherever the browser has
+  WebAuthn, and no Settings page adds one later yet, so "Not now" has no
+  way back.
+- `[OWNER]` "You can add your baby later from Family." names `/family`,
+  where this file puts adding a child, but the shell shows Family only once
+  a child exists, so a postpartum newcomer who skipped a failed child write
+  has no Family entry to follow. The line stays until the shell shows
+  Family to a postpartum profile without a child, or the owner names
+  another place.
+
+### `/today` (H2)
+
+- `[OWNER]` the day-logging strings Today's open card shares with the day
+  sheet (tasks G9 and G9b): the list under `/calendar` and `/log/[date]`
+  below is the one inventory for both routes.
+- `[OWNER]` the explanation under "How this is estimated" (`RESEARCH.md`
+  decision 6). The page shows the placeholder "the explanation of the
+  estimate". The text must state these numbers, which `copy.test.ts` ties
+  to `packages/core`: only cycles of 21 to 45 days count, ovulation sits
+  14 days before the next period as a band of plus or minus 2 days, and
+  the range is plus or minus 4 days for a first guess or one cycle, 3
+  after two, 2 after three or more, 5 when cycles vary.
+- `[OWNER]` the postpartum line that cycles often return later while
+  feeding (architecture 8.4, after ACOG). The page shows the placeholder
+  "the line about cycles while feeding".
+- `[OWNER]` whether the postpartum quiet card keeps "When you are ready"
+  (the after-ending row above, which the page uses for every ending, as
+  rule 5 of 8.4 reads) or takes `/journey`'s "Predictions are paused after
+  birth".
+- `[OWNER]` the contraception line on a partner's status card reads "your
+  logged dates" (13.10 word for word); whether a partner's view should say
+  "her logged dates" instead.
+- `[OWNER]` whether summaries of what others share (Mira holds Lena's
+  pregnancy overview) also show on Today outside the `none` stage; this
+  build shows them only there.
+- `[OWNER]` approve the wording the page uses until then:
+  - beside the cycle day numeral: "day of your cycle" (the 3.3 sketch);
+  - read failures: "We could not load your cycle just now. Reload the page
+    to try again.", and the same sentence for "this week", "your children",
+    "who you share with", "what [name] shares" and "the children you see";
+  - the open card below 1024 px: "Nothing logged for today yet." or
+    "Logged for today: medium flow, cramps, steady mood, a private note.",
+    where the notes read "a private note" ("2 private notes"), "a shared
+    note" ("2 shared notes") and "a note from someone you share with" ("2
+    notes from people you share with"), with the button "Log today";
+  - the partner card: "What [name] can see right now" ("What this person
+    can see right now" without a name), a child grant as "Everything logged
+    for [child]: feeds, sleep, growth, milestones and photos.", a child
+    guarded together as "As a guardian of [child], everything logged for
+    [child].", an overview after her pregnancy ended as "Weekly updates are
+    paused. No week, due date or dates show.", and "Change sharing";
+  - This week: "Period logged [days].", "[days] are the days pregnancy is
+    most likely." followed by the contraception line (the fertile days of
+    the 13.10 ovulation template), and "No period days logged or estimated
+    this week."; when the next period's range touches the week, the card
+    repeats the hero's 13.10 sentence for the prediction's basis (estimate
+    or first guess) unchanged, never a wording of its own;
+  - beside the ring: "Period logged [days].", CycleRing's own caption
+    sentence, which this composition hides;
+  - the deviation nudge's link to the calendar: "Review your cycles in the
+    calendar";
+  - the `none` stage: "Cycle day [n]", "Period day [n]" (8.2's "Period day
+    2"), "In the estimated fertile window today." followed by the
+    contraception line, "Nothing to show for today yet.", "Week [n] and [d]
+    days", "Due [date]", "Weekly updates are paused.", "Someone who shares
+    with you", "We could not load this person's name just now. Reload the
+    page to try again.", "Open Family", and the empty state "Nothing shared with you
+    yet" / "When someone shares a cycle, a pregnancy or a child with you, it
+    shows here." with no action.
+
+### `/calendar` and `/log/[date]` (H3)
+
+The day sheet's strings (tasks G9 and G9b) are in the UI as proposed until
+approved, from `components/ui/day-sheet.tsx` and
+`components/day-log/copy.ts`; Today's open card uses the same ones. The
+saved line follows the success example above ("Saved for Sunday, Oct 5.")
+and "We could not save this day. Try again." is the failure example, so
+neither is repeated below.
+
+- `[OWNER]` the Period switch's help line: "Logs a period day at Medium.
+  Change the flow below." (G9b; it replaces G9's "One press logs a period
+  day and picks Medium below; change it before you save. The same press
+  takes it back.").
+- `[OWNER]` the way back to no mood: a quiet "Clear" beside the mood
+  selector while a mood is chosen, named "Clear mood" for assistive
+  technology (G9b).
+- `[OWNER]` the notes on the day: "Notes on this day", "Shared with people
+  who can see your symptoms", "Shared with people who can see your
+  pregnancy overview", "Added by someone you share with."
+- `[OWNER]` sharing a note: "Share this note with...", "Share this note?",
+  "It moves out of your private notes and is filed with your symptoms, so
+  the people who can see your symptoms can read it. A shared note cannot be
+  made private again, only deleted." (with "your pregnancy overview" in
+  both places in pregnancy), "Share note", "Keep it private", "Sharing",
+  "Save the note first, then share it.", "Note shared."
+- `[OWNER]` deleting a shared note: "Delete this note", "Delete this
+  note?", "It is removed for you and for everyone who can read it, and it
+  cannot be brought back.", "Delete note", "Keep it", "Deleting", "Note
+  deleted."
+- `[OWNER]` undoing a save: "Changes undone for Sunday, Oct 5.", "We could
+  not undo every change. Check this day and change it back.", "Undoing".
+- `[OWNER]` the failures: "We could not load this day. Try again.", "Your
+  session has ended. Sign in again, then come back to this day.", "This day
+  was changed somewhere else. Try again to save your version.", "We could
+  not save your note. Try again.", "This note was changed somewhere else.
+  Try again to save your version.", "We could not share this note. Try
+  again.", "This note changed somewhere else. Check it, then share it
+  again.", "This note was already shared somewhere else.", "This note was
+  deleted somewhere else.", "We could not delete this note. Try again."
+
+The titles, both empty states and the postpartum card are the rows
+above, word for word; the prediction sentences are architecture 13.10's
+and the day sheet's are G9's. The calendar adds these, each proposed for
+the owner to confirm or rewrite:
+
+- `[OWNER]` Meta descriptions, with no date and no health word: `/calendar`
+  "Your days, month by month."; `/log/[date]` "One day in your calendar."
+- `[OWNER]` The calendar's failed read, under the shell's own notice: "We
+  could not load your calendar. Try again." with a Try again link that
+  reads the page again. `/log/[date]` uses the day sheet's "We could not
+  load this day. Try again."
+- `[OWNER]` A day after today pressed in the month grid opens no sheet (a
+  day that has not happened has nothing to log, G9's ruling) and says "You
+  can log a day once it has come." A `/log/` address for such a day, or for
+  the `none` stage, is the not-found page inside the shell.
+- `[OWNER]` The postpartum calendar's line that cycles often return later
+  while feeding (architecture 8.4). The page shows a marked placeholder in
+  its place until the owner writes it; the child's age above the card is
+  `formatChildAge`'s wording after the name ("Ilo, 6 weeks").
+- `[OWNER]` During a pregnancy the API offers no prediction, so the calendar
+  shows the logged days with no prediction sentence and no footer. A line
+  saying why is the owner's to write, if one is wanted.
+- `[OWNER]` The words each day adds to its name for screen readers: "period
+  logged", "period expected", "ovulation estimated", and on every fertile
+  day "fertile window estimated. An estimate from your logged dates. Not a
+  form of contraception." A list row and a logged day's name say what was
+  logged in the API's own labels ("Heavy flow, cramps, fatigue, low mood,
+  note"; "No flow" for the flow None; "Spotting").
+- `[OWNER]` Interface labels: "Calendar view" (the hidden name of the Month
+  and List switch), "This week", "Previous month", "Next month", "Today",
+  and the list's name, "Days logged in October 2026".
+
+### `/journey` (H4)
+
+The route uses the rows above word for word (the title, "No pregnancy
+recorded" without its action, "Predictions are paused after birth", and
+"When you are ready" after a loss or another ending), DESIGN.md 3.5 and
+5.3 for its labels, and task C4's fresh sign-in sentence. Every other
+string is a draft in `apps/web/src/components/pages/journey/copy.ts`
+waiting for review, one line each:
+
+- `[OWNER]` the one resources link the ending dialog offers once
+  (architecture 8.4, DESIGN.md 5.3): organization, address and link text.
+  The dialog shows `[OWNER]` in its place until then.
+- `[OWNER]` review: metadata description "What is coming and what has
+  happened, week by week."
+- `[OWNER]` review: the week list: "Week by week", the tide marker's "This
+  week", "Earlier weeks" with "1 entry" or "N entries", "Week N" with its
+  range, the empty line "Nothing is added for the weeks ahead yet.
+  Appointments and milestones show here under their week.", and "Before
+  this pregnancy began", the heading inside "Earlier weeks" for an entry
+  dated before day 0, which no week's range contains.
+- `[OWNER]` review: a row's line under its title: "Appointment" or
+  "Milestone", "Appointment, added by Mira", "Added by you".
+- `[OWNER]` review: "Due date history", "Only you can see this list.",
+  "From Feb 15, 2027 to Feb 7, 2027" over the dating method, and "The due
+  date has not changed since it was set. If it changes, the earlier date
+  stays listed here."
+- `[OWNER]` review: the event form: "Edit the appointment" or "Edit the
+  milestone", the fields "Kind", "Date" and "Details" with "Optional, up to
+  500 characters.", "Save" and "Saving", the row's "Edit", "Delete this
+  appointment", its confirmation "Delete this appointment?" with "It is
+  gone for you and for everyone who can see your pregnancy. This cannot be
+  undone.", "Delete", "Deleting" and "Keep it", and the outcomes "Saved for
+  Nov 1." and "Deleted."
+- `[OWNER]` review: the event form's failures: "Enter the date as month, day
+  and year.", "That date does not exist. Check the day and the month.",
+  "Keep the details to 500 characters or fewer.", "That day is before this
+  pregnancy began. Check the date." (the ending dialog's sentence, reused for
+  a date before day 0), "Choose appointment or milestone.", "This changed since you opened it. Close it and open it again
+  to see the latest.", "Updates to this pregnancy are paused, so this was not
+  saved." (a grantee's; never "ended"), "This is no longer here. Reload the
+  page to see the latest.", "Too many changes in a row. Wait a minute and try
+  again.", "We could not reach Tidefern. Check your connection and try
+  again.", "We could not save this. Try again." and "We could not delete
+  this. Try again."
+- `[OWNER]` review: the ending dialog: "The day it ended", "What happened"
+  with "Birth", "Loss" and "Other", "Only you can see this. Nobody you share
+  with ever does.", after a loss "The word you want Tidefern to use" with
+  "Pregnancy" and "Baby", "Mira will see it as paused, with no week or dates.
+  Tidefern does not notify anyone." (or only "Tidefern does not notify
+  anyone." when she shares it with nobody, and "Anyone you share it with will
+  see it as paused, with no week or dates. Tidefern does not notify anyone."
+  when the names could not be read), the lead-in to the resources
+  link ("Support after a pregnancy loss" or "Support after losing a baby"
+  after a loss, in her word, else "Support, if you want it"), and the
+  confirm "Record the ending".
+- `[OWNER]` review: the ending dialog's failures: "Enter the day it ended as
+  month, day and year.", "That day has not happened yet. Enter today or an
+  earlier day.", "That day is before this pregnancy began. Check the date.",
+  "Choose what happened.", "This pregnancy is already marked as ended.
+  Reload the page to see it.", "We could not find this pregnancy. Reload the
+  page to see the latest.", "Too many attempts in a row. Wait a minute and
+  try again.", and the offline and generic lines above.
+- `[OWNER]` review: once a period has been logged after an ending, "No
+  pregnancy in progress" with "Weeks, appointments and milestones show here
+  while a pregnancy is in progress." (no action).
+- `[OWNER]` review: the `none` stage's empty state, which asks no body
+  question: "Nothing shared with you yet" with "When someone shares their
+  pregnancy with you, it shows here week by week."
+- `[OWNER]` review: a shared pregnancy's heading "Lena's pregnancy" (or "A
+  pregnancy shared with you" without a name), "Nothing to show here right
+  now." and "We could not load this pregnancy just now. Reload the page to
+  try again."
+- `[OWNER]` review: the read failures: "We could not load your pregnancy
+  just now.", "We could not load the appointments and milestones just
+  now.", "We could not load the due date history just now." and "We could
+  not load your children just now.", each followed by "Reload the page to
+  try again."
+
+### `/family` (H5)
+
+- `[OWNER]` attorney review of the guardian's consent on a child's behalf,
+  the draft text the add-a-child form shows in full before its box
+  (`CHILD_CONSENT_DISCLOSURES`, version 2026-10, in
+  `packages/schemas/src/profile.ts`), with the other consent texts (Phase 2
+  gate). With it, the box's label and the line under it: "I agree to this on
+  the child's behalf." and "Consent text version 2026-10."
+- `[OWNER]` approval of the range lines, source lines and attribution in
+  "Context ranges on `/family`", and the attorney's answer on quoting the
+  AAP and AASM (`docs/CLAIMS.md` section 2).
+- `[OWNER]` three lines the screens show as marked placeholders until the
+  owner words them, because each says what a grant shows or what a health
+  record needs: the card of a child whose grant shows the name and age only
+  (no seeded case; a `summary` child grant); the line under Growth when the
+  child's sex is not set, which also needs a place to set it (no edit screen
+  exists yet); and the range context lines, which wait on the approval of
+  "Context ranges on `/family`" and show meanwhile as "[OWNER] range line
+  feed-newborn, with its source line (American Academy of Pediatrics)" beside
+  the count they are context for, with one "[OWNER] attribution under the
+  cards for the published ranges" below the cards.
+- `[OWNER]` the growth attribution as the Growth tab shows it:
+  `packages/core/data/SOURCES.md` "Attribution", the CDC sentence word for
+  word, and the WHO sentence with the repository's "the files under `who/`"
+  read as "the tables Tidefern uses", the source URL as a link.
+- The timeline's empty state, for the empty-state table once approved:
+  "Nothing logged yet" / "Feeds, sleep, diapers and milestones logged for
+  [name] appear here, newest first." / "Log on the Family page" (to
+  `/family`; none for someone who cannot log).
+- The interface lines below follow the voice table and live in
+  `apps/web/src/components/pages/family/copy.ts`, where the owner confirms
+  or replaces them in one place:
+  - Card: "Last feed", "Last sleep", "Last diaper", "Sleep", "None logged
+    yet", "Today: 3", "Today: 4 h 30 min", "Today: 5 (3 wet, 2 dirty)" (each diaper counted
+    once by what it held: "Today: 2 (1 wet, 1 wet and dirty)"),
+    "Ended 2 h ago", "Asleep since 2:15 PM", "Guardians: you and Lena",
+    "Guardian: you", "another guardian", "Timeline, growth and milestones",
+    "We could not load today for this child. Reload the page to try
+    again.", "We could not load your family just now. Reload the page to
+    try again."
+  - Quick log: "Feed", "Sleep", "End sleep", "Diaper"; the sheet titles
+    "Log a feed for Ilo", "Log a sleep for Ilo", "End Ilo's sleep", "Log a
+    diaper for Ilo"; "Feed" with "Breast", "Bottle", "Solids"; "Side" with
+    "Left", "Right", "Both"; "Timer", "Start it when the feed starts;
+    stopping it saves the feed with both times.", "Start timer", "Stop and
+    save", "Cancel timer", "Feed timer running:", "Feed timer stopped at";
+    "Amount", "Optional.", "Enter up to 2000 ml." ("67 fl oz"); "Contents"
+    with "Wet", "Dirty", "Wet and dirty"; "The sleep starts now. End it
+    here when Ilo wakes.", "Asleep since 2:15 PM.", "Start sleep",
+    "Starting", "End sleep", "Ending"; "Save", "Saving"; "Choose breast,
+    bottle or solids."; "Feed saved.", "Diaper saved.", "Sleep started.",
+    "Sleep ended.", "Undo", "Undoing", "That entry was removed.", "We could
+    not undo this. Try again."; "We could not save this feed. Try again."
+    (diaper the same), "We could not start the sleep. Try again.", "We could
+    not end the sleep. Try again.", "This sleep changed somewhere else.
+    Reload the page to see it."
+  - Shared failures: "You are offline. Connect, then try again." (the
+    offline line architecture 12.2 asks for), "Your session has ended. Sign
+    in again, then come back.", "This child is no longer here for you.
+    Reload the page.", "Check the fields above, then try again."
+  - Add a child: "Name" with "What the family calls the child.", "Date of
+    birth", "Sex" with "Not set", "Female", "Male" and "Optional. The growth
+    chart's percentile band needs it.", "Consent on the child's behalf",
+    "Add the child", "Adding", "Enter the child's name.", "Use 80
+    characters or fewer.", "Enter the date of birth.", "That date is after
+    today. Check the date.", "Tick the box to add the child.", "We could
+    not add the child. Try again.", "Ada was added."
+  - Child page: "Family" (the way back), "Timeline", "Growth",
+    "Milestones", "We could not load this child just now. Reload the page
+    to try again." and one such line per tab; "Show older entries",
+    "Loading", "We could not load older entries. Try again."; the event
+    titles "Breast feed, left side", "Bottle feed, 90 ml", "Solids",
+    "Feed", "Sleep, 6 h", "Sleep, going on now", "Diaper, wet and dirty",
+    "Milestone: [CDC's item]", with "2:15 PM", "11:00 PM to 6:00 AM",
+    "Since 2:15 PM" and "Note: [the note]".
+  - Growth: "Weight", "Length", "Head circumference"; "kg" and "lb", "cm"
+    and "in"; "Add a measurement", "Add a measurement for Ilo", "Date",
+    "Units" with "kg and cm" and "lb and in", "Fill in what you measured;
+    one is enough.", "Enter at least one measurement.", "Enter the date of
+    the measurement.", "That date is after today. Check the date.", "That
+    date is before Ilo was born. Check the date.", "Check this value, then
+    try again.", "We could not save this measurement. Try again.",
+    "Measurement added."
+  - Milestones: "Checklist for 2 months", the domains "Social and
+    emotional", "Language and communication", "Cognitive", "Movement and
+    physical development" (CDC's four headings), "Marked on Oct 1, 2026",
+    "Saving", "We could not save this. Try again."
+
+### `/sharing` (H6)
+
+The descriptions above are also the catalog `SHARING_DESCRIPTIONS` in
+`packages/schemas/src/sharing.ts` (version 2026-10, which a grant records
+as its `description_version`); a web test compares the two word for word,
+so a change to either table is a new catalog version. A child's row reads
+"Everything logged for [child]: feeds, sleep, growth, milestones and
+photos.", the "A child" row with the name in it. Every other string the
+route shows lives in `apps/web/src/components/pages/sharing/copy.ts`,
+written to the voice table above; the lines below are drafts until the
+owner approves them there.
+
+- `[OWNER]` The metadata description: "Choose who sees what in Tidefern,
+  one category at a time."
+- `[OWNER]` The level words, shown as "Level: summary" on a category that
+  is on, in the confirm step and in what someone shares with you: summary
+  "summary", read "read", contribute "read and add". Turning a category on
+  grants "read", except cycle status, which is a summary by nature; the
+  confirm step names that level and offers no choice yet.
+- `[OWNER]` Whether Pregnancy photos shows a switch in Phase 1. It does
+  now, with this table's "(Phase 2)".
+- `[OWNER]` Who a person is: "household owner", "partner", "household
+  guardian", "outside your household", "co-guardian of Ilo and Sol", and
+  "Someone" for a person with no name yet.
+- `[OWNER]` The confirm step: "Share your cycle status with Alex?", the
+  category's description, the level, "Share with Alex", "Saving",
+  "Cancel". The outcome of turning one off: "Alex can no longer see your
+  cycle status."
+- `[OWNER]` The notify switch: "Share your cycle status or cycle history
+  with Alex first." while it is held back, "No message goes out until you
+  share your cycle status or cycle history with Alex." while it is on with
+  neither shared, "Tidefern will tell Alex when your period starts." and
+  "Tidefern will no longer tell Alex when your period starts."
+- `[OWNER]` What someone shares with you: "Alex shares with you", "Only
+  Alex can change this.", the "Shared with you" heading and "Only the
+  person who shares it with you can change it."
+- `[OWNER]` Removing a person, by role: "Alex leaves your household and
+  loses access to everything you share, right now. What Alex added to your
+  record stays with you." (Alex is in your household); "You leave Alex's
+  household, and Alex loses access to everything you share, right now.
+  What Alex shares with you stays until Alex turns it off." (Alex owns it);
+  otherwise the component's own sentence, "Alex loses access to everything
+  you share, right now. What Alex added to your record stays with you."
+  Outcomes: "Alex no longer sees
+  anything you share." and "You left Alex's household. Alex no longer sees
+  anything you share." The co-guardian refusal, for one child: "Alex also guards
+  Ilo, and removing Alex would leave Ilo without a second guardian. Change
+  who guards Ilo in Family first, then remove Alex."; for several: "Alex
+  also guards Ilo and Sol, and removing Alex would leave at least one of
+  them without a second guardian. Change who guards them in Family first,
+  then remove Alex." with "Go to Family".
+- `[OWNER]` The invite form: "Invite a partner", "Their email" with "They
+  get an email asking them to sign in to Tidefern. Nothing is shared until
+  you turn a category on.", "Invite them as" (Partner, Guardian), "Send the
+  invitation", "Invitation sent to jo@example.com.", and the refusals
+  "Enter their email address, like name@example.com.", "An invitation to
+  this address is already waiting. Withdraw it to send a new one.", "Only
+  the person who started your household can invite people into it. Ask
+  them to send the invitation.", "Tidefern cannot send email right now, so
+  nothing was sent. Try again later." A member of a household someone else
+  owns sees, in place of the form, "Only Alex can invite people into your
+  household. Ask Alex to send the invitation." (or the nameless sentence
+  above when the owner has no name yet).
+- `[OWNER]` Withdrawing: "The invitation to jo@example.com is withdrawn.",
+  "This invitation was already closed, so there is nothing to withdraw.
+  The page now shows the latest." (accepted, withdrawn elsewhere or
+  expired; the API does not say which) and "We could not withdraw the
+  invitation. Try again."
+- `[OWNER]` The acceptance panel: "An invitation for you", "Someone you
+  know invited you to share with them on Tidefern. Accepting adds you to
+  their household. Nothing is shared either way until someone turns a
+  category on.", "Accept the invitation", "Accepting the invitation", "You
+  joined Alex's household." ("You joined the household." when the owner's
+  name is not known), the household choice ("You already belong to
+  a household. Accepting moves you into the new one and out of the one you
+  are in now.", "Move to the new household", "Stay where I am"), "You
+  stayed in your household. The invitation stays open until it expires, if
+  you change your mind.", the owner who must hand over ("You own a
+  household that other people still belong to, so you cannot move out of
+  it yet. You can stay where you are."), one sentence for an invitation
+  that cannot be used whatever the reason ("This invitation cannot be
+  used. It may have expired or been withdrawn, or it was sent to another
+  email address. Ask for a new one, and sign in with the address it was
+  sent to."), "This invitation link is not complete. Open the link in the
+  email again." and "We could not accept the invitation. Try again."
+- `[OWNER]` The next steps after a refusal: "For safety, turning on a
+  category needs a sign-in from the last ten minutes. Sign in again, then
+  come back here.", the same for sending an invitation ("For safety,
+  sending an invitation needs a sign-in from the last ten minutes. Sign in
+  again, then come back here."), "This changed
+  somewhere else, and the page now shows the latest. Try again.", "Too
+  many changes in a row. Wait a minute and try again.", "We could not
+  load who you share with just now. Reload the page to try again.", and,
+  while the acceptance panel holds an invitation a reload would lose, "We
+  could not load who you share with just now. Accept the invitation above
+  first, then reload the page."
+
+### `/settings` (H7)
+
+- The destructive line above is corrected (task H7): the undo is an explicit
+  action. Closing locks the account; until the window ends she signs in,
+  lands on the locked view at `/closing` and chooses Undo there. Signing in
+  alone cancels nothing. The `/account/delete` paragraph and the
+  `/design/foundations` example now carry the corrected line (task J3e);
+  architecture 7.3 still says signing in cancels, and is outside the
+  routes' files.
+- `[OWNER]` the lock-screen preview wording for the gentle and detailed
+  notification levels. Only the generic line exists ("You have a reminder in
+  Tidefern.", the reminder email's own), so Settings shows the other two as
+  marked placeholders. AGENTS.md keeps health facts out of notification text
+  at every level; the wording has to fit that rule.
+- `[OWNER]` whether the profile gains pronouns (DESIGN.md 3.8 draws "name,
+  pronouns, stage"; the profile has no such field) and whether week start
+  shows in Settings (it is kept and resent on every save, not shown).
+- For review: the rest of the copy on `/settings`, its group screens and
+  `/closing` is written to the voice table above and kept in one module,
+  `apps/web/src/components/pages/settings/copy.ts`: the route descriptions,
+  the help line under each group, the stage names, the pending, failure and
+  success lines, the fresh sign-in sentences, the close and withdraw
+  dialogs, the empty consent record ("No consent recorded") and the locked
+  view's lines.
+
+### `/activity` (H8)
+
+- `[OWNER]` approval of the activity wording below, written to the voice
+  table for task H8 (`apps/web/src/app/(app)/activity/copy.ts`): the row
+  sentences, the two fallbacks, the meta description, and the pending and
+  failure lines.
+
+A row says what happened, who did it and the day it happened in the
+profile's zone. It may name a category by its label from the sharing
+descriptions, in lower case, and never says what was viewed, written or
+logged. An action without a line here reads "Other activity on your
+account", never its code.
+
+| Action | What happened |
+| --- | --- |
+| `session.sign_in` | Signed in |
+| `session.revoke` | Signed out elsewhere |
+| `grant.create` | Started sharing [place] |
+| `grant.update` | Changed sharing for [place] |
+| `grant.revoke`, her own sharing | Stopped sharing [place] |
+| `grant.revoke`, a grantee's access ending | Ended access to [place] |
+| `partner.read` | Viewed [place] |
+| `partner.write` | Contributed to [place] |
+| `note.share` | Shared a note with people who can see [place] |
+| `invitation.create` | Sent an invitation |
+| `invitation.withdraw` | Withdrew an invitation |
+| `invitation.accept` | Accepted an invitation |
+| `export.create` | Requested a copy of your data |
+| `account.close` | Asked to close your account |
+| `account.close.undo` | Cancelled closing your account |
+
+One `session.revoke` row stands for one device signed out or for every
+other device at once, and the log keeps no count, so its line names none.
+
+[place] is "your symptoms" for her own records, "Noor's symptoms" for a
+person the page can name, and "the symptoms someone shared with you" for
+one it cannot. A child is "Sol's records" only for a guardian, and "a
+child's records" for anyone else. Who did it reads "by you", "by Theo",
+or "by someone you shared with" for a person no longer listed (a removed
+partner) or without a name.
+
+Meta description: "Sign-ins, devices and sharing changes on your Tidefern
+account." Load more: pending "Loading" (no wider than the button's own
+label), a failed page "We could not load more activity. Try again.", no
+answer at all "We could not reach Tidefern. Check your connection and try
+again.", and a failed first page "We could not load your activity just
+now. Reload the page to try again."
+
+### Public header (J3b)
+
+- "Sign in" is the header link the `/` row above names; it shows on every
+  public page for every visitor, signed in or not, because neither this
+  file nor DESIGN.md gives a signed-in visitor anything else. Next to it in
+  the bar: "Design system".
+- `[OWNER]` "Menu", proposed: the label of the disclosure button that holds
+  those two links below 601 px (`apps/web/src/components/public-nav.tsx`).
+- After sign-in a visitor returns to the page they asked for; the address
+  carries only that page's path (`/sign-in?next=%2Fsettings`), never a
+  query or anything they typed.
+
+### Copy review (J3e)
+
+Review loop 1 read every route in each seeded state; the findings and their
+evidence are rows under "Copy" in `QA.md`. The strings it changed, each in
+the code and here together:
+
+- `/account/delete` and the `/design/foundations` destructive example:
+  "Closing your account locks it now and deletes it in 7 days. Until then,
+  you can sign in and undo it." (the voice table's line; it replaces
+  "Signing in again before then cancels this.").
+- The home page's Childhood line: "Feeds, sleep, growth and firsts, seen by
+  every guardian and by no one else until you share them." (it replaces
+  "shared with every guardian and nobody else", which a child grant to
+  someone outside the guardians, the seed's Pia, makes untrue). The claims
+  register row in `docs/CLAIMS.md` section 3.1 changes with it.
+- `/accessibility`, Known gaps: the narrow header's missing menu is gone
+  (task J3b built it), and the manual passes line reads "Manual keyboard and
+  screen reader passes have not been recorded yet. The automated checks
+  catch many problems but not every one."
+- `/design`: "This reference is generated from the same source the product
+  uses. The seven chapters below render the real tokens and components, and
+  the files here are the live exports." (all seven chapters are published).
+- `/design/color`, theme behavior: "Choosing Follow system under Theme in
+  Settings, or clearing this site's data in the browser, removes the key and
+  returns to following the system".
+- `/reset`: "Enter your email and we will send you a link to choose a new
+  password."
+- `/settings/sound`, quiet hours: "Times follow this device's clock." (it
+  replaces "... until your profile carries a time zone", shown to people
+  whose profile already has one).
+
+Lines that need the owner, each shown as it is until then:
+
+- `[OWNER]` The pointing-to-care sentence under a child's growth chart is
+  architecture 13.10's "This is worth mentioning to your doctor or
+  midwife." word for word; for a child the clinician is a pediatrician, and
+  a different sentence needs a new 13.10 row.
+- `[OWNER]` The month calendar's empty state for the `none` stage (Theo):
+  "Nothing logged this month" / "Days you log show here with their flow and
+  symptoms." invites logging that stage cannot do; a line for someone who
+  only sees what others share, or no calendar for that stage, is the
+  owner's call.
+- `[OWNER]` The processor lines on the consent record come from the API's
+  `PROCESSORS` (`packages/api/src/routes/profile.ts`) and carry internal
+  words ("the allowlisted request logs", "CI logs", "in Phase 1"); they
+  belong with the attorney's review of the consent text.
+- `[OWNER]` The postpartum feeding line has two placeholders for one
+  sentence: Today's "the line about cycles while feeding" and the calendar's
+  "The line that cycles often return later while feeding."; one owner line
+  replaces both.
+- `/verify` is titled "Verify your email" while its heading says "Confirm
+  your email"; `auth.spec.ts` pins the title, so it stays until the owner
+  picks one word.
+- The 404 pages keep the home page's title and description: Next takes a
+  not-found page's metadata only from `global-not-found`, a structural
+  change left as a follow-up.
+

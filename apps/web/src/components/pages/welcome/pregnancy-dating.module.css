@@ -1,0 +1,36 @@
+.fields {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+/* The two numbers a scan measures, under one legend. */
+.age {
+  display: grid;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.legend {
+  padding: 0;
+  margin-bottom: var(--space-2);
+  font-weight: var(--weight-sans-strong);
+  line-height: 1.4;
+}
+
+/* Weeks and days side by side: two short numbers belong on one line, even at 320 px. */
+.pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: start;
+  gap: var(--space-4);
+  max-width: 24rem;
+}
+
+.number {
+  max-width: 7rem;
+  font-variant-numeric: tabular-nums;
+}

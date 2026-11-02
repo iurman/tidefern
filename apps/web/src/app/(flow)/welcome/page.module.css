@@ -1,0 +1,30 @@
+/* The page's one H1 names it quietly, as an eyebrow, so the step's own question (an H2) is what the
+   eye lands on; DESIGN.md 3.2 draws the steps and nothing above them. */
+.page {
+  display: grid;
+  gap: var(--space-6);
+  min-width: 0;
+}
+
+.heading {
+  margin: 0;
+  font-family: var(--font-figtree), Arial, sans-serif;
+  font-size: var(--type-small);
+  font-weight: var(--weight-sans-strong);
+  letter-spacing: var(--tracking-eyebrow);
+  line-height: 1.4;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.lede {
+  margin: 0;
+  max-width: 40ch;
+  font-size: var(--type-intro);
+  line-height: 1.5;
+  color: var(--muted);
+}
+
+.tide {
+  max-width: 160px;
+}

@@ -13,12 +13,14 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "generate": "drizzle-kit generate",
     "migrate": "tsx scripts/migrate.ts",
     "seed": "tsx scripts/seed.ts",
     "grant-login": "tsx scripts/grant-login.ts"
   },
   "dependencies": {
+    "@tidefern/core": "workspace:*",
     "@tidefern/schemas": "workspace:*",
     "@vercel/functions": "3.9.11",
     "drizzle-orm": "0.45.3",

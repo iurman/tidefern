@@ -72,7 +72,7 @@ export const authCopy = {
     title: "Reset your password",
     description: "Request a link to choose a new password.",
     heading: "Reset your password",
-    lede: "Enter your email and we send a link to choose a new password.",
+    lede: "Enter your email and we will send you a link to choose a new password.",
     email: { label: "Email" },
     submit: "Send the link",
     pending: "Sending the link",
@@ -93,11 +93,6 @@ export const authCopy = {
     done: "Your password is set. Sign in with it.",
     signIn: "Sign in",
     requestAgain: "Request a new link",
-  },
-  today: {
-    title: "Today",
-    description: "Your home screen.",
-    signOut: "Sign out",
   },
 } as const;
 
@@ -172,6 +167,6 @@ export function describeAuthFailure(
 }
 
 /** Strips spaces from a code someone pasted from an authenticator app or a saved backup list. */
-export function normaliseCode(code: string): string {
+export function normalizeCode(code: string): string {
   return code.replace(/\s+/g, "");
 }
