@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { execFileSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import { fileURLToPath, URL } from "node:url";
 import {
   assertChromiumVersion,
@@ -183,6 +183,10 @@ test("tracked browser entrypoints cannot bypass the shared launch guard", () => 
     )
       continue;
     const text = readFileSync(join(root, file), "utf8");
+    for (const match of text.matchAll(/from\s+["']([^"']*browser-safety\.cjs)["']/g)) {
+      const target = new URL(match[1], `file://${join(root, file)}`);
+      if (!existsSync(target)) failures.push(`${file}: missing browser safety import ${match[1]}`);
+    }
     if (/\bchromium\s*\.\s*(launch|launchPersistentContext|launchServer)\s*\(/.test(text))
       failures.push(`${file}: unguarded Chromium launch`);
     if (/--no-sandbox\b/.test(text)) failures.push(`${file}: sandbox disabled`);

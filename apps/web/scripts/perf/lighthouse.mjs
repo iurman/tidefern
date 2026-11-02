@@ -22,7 +22,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeMedianRun, filterToValidRuns } from "lighthouse/core/lib/median-run.js";
 import { signIn } from "./cast.mjs";
-import { assertChromiumVersion } from "../../../../../tools/browser-safety/browser-safety.cjs";
+import { assertChromiumVersion } from "../../../../tools/browser-safety/browser-safety.cjs";
 import {
   budgets,
   finalPath,

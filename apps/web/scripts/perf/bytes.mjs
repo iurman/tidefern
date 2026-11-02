@@ -22,7 +22,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
-import { launchChromium } from "../../../../../tools/browser-safety/browser-safety.cjs";
+import { launchChromium } from "../../../../tools/browser-safety/browser-safety.cjs";
 import { signIn } from "./cast.mjs";
 import { formatBytesTable, label, overCeilings, readBudgets, tally } from "./bytes-model.mjs";
 
