@@ -374,6 +374,18 @@ function describeFocus(page: Page): Promise<Focused | null> {
   });
 }
 
+async function resetFocusOrigin(page: Page) {
+  await page.evaluate(() => {
+    window.scrollTo(0, 0);
+    // Reset Chromium's sequential navigation origin after the preceding route's focus walk.
+    const previous = document.body.getAttribute("tabindex");
+    document.body.setAttribute("tabindex", "-1");
+    document.body.focus({ preventScroll: true });
+    if (previous === null) document.body.removeAttribute("tabindex");
+    else document.body.setAttribute("tabindex", previous);
+  });
+}
+
 /**
  * The keyboard path for the route on screen; failures are soft and name the
  * route. `full` walks every focusable element of the page forward with Tab
@@ -385,15 +397,7 @@ function describeFocus(page: Page): Promise<Focused | null> {
 async function keyboardPath(page: Page, label: string, mode: "full" | "frame") {
   const frame = await markFrame(page);
   await recordRestingRings(page);
-  await page.evaluate(() => {
-    window.scrollTo(0, 0);
-    // Reset Chromium's sequential navigation origin after the preceding route's focus walk.
-    const previous = document.body.getAttribute("tabindex");
-    document.body.setAttribute("tabindex", "-1");
-    document.body.focus({ preventScroll: true });
-    if (previous === null) document.body.removeAttribute("tabindex");
-    else document.body.setAttribute("tabindex", previous);
-  });
+  await resetFocusOrigin(page);
   await page.keyboard.press("Tab");
   const first = await describeFocus(page);
   expect.soft(first?.skip, `${label}: Tab from the top reaches the skip link first`).toBe(true);
@@ -555,6 +559,8 @@ async function sweepRoute(
       document.documentElement.dataset.theme = value;
       window.scrollTo(0, 0);
     }, theme);
+    // The preceding theme's axe run can leave the skip link focused over the header.
+    await resetFocusOrigin(page);
     // Only violations are read, so axe skips collecting every passing node. `options` replaces
     // the whole options object, so it comes before `withTags`, which adds the tag set to it.
     const results = await new AxeBuilder({ page })
