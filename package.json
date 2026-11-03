@@ -7,6 +7,8 @@
     "node": "24.x"
   },
   "scripts": {
+    "browser:isolated": "node tools/browser-safety/run.mjs --",
+    "browser:check": "node --test tools/browser-safety/browser-safety.checks.mjs",
     "dev": "turbo run dev --filter=web",
     "build": "turbo run build",
     "lint": "turbo run lint",

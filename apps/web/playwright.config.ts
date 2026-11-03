@@ -1,4 +1,5 @@
-import { defineConfig } from "@playwright/test";
+import { chromiumTestOptions } from "./../../tools/browser-safety/browser-safety.cjs";
+import { chromium, defineConfig } from "@playwright/test";
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? "http://127.0.0.1:3000";
 const external = Boolean(process.env.PLAYWRIGHT_BASE_URL);
@@ -28,9 +29,9 @@ export default defineConfig({
         }
       : {},
     // Optional: point at an already installed Chromium instead of downloading one.
-    launchOptions: {
+    ...chromiumTestOptions(chromium, {
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
-    },
+    }),
   },
   // Local and CI runs test the production build. Set PLAYWRIGHT_BASE_URL to test a deployment instead.
   webServer: external

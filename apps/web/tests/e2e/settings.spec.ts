@@ -1,4 +1,3 @@
-import { readFile } from "node:fs/promises";
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { expectNoAxeViolations, type Theme } from "./axe";
@@ -417,7 +416,11 @@ test("export downloads the whole file after a fresh sign-in, and says each other
   await button.click();
   const file = await download;
   expect(file.suggestedFilename()).toBe("tidefern-export.ndjson");
-  const lines = (await readFile(await file.path(), "utf8")).trim().split("\n");
+  const stream = await file.createReadStream();
+  if (!stream) throw new Error("Export download did not produce a readable stream");
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) chunks.push(Buffer.from(chunk));
+  const lines = Buffer.concat(chunks).toString("utf8").trim().split("\n");
   expect(JSON.parse(lines[0] ?? "{}")).toMatchObject({ kind: "export", format: 1 });
   const end = JSON.parse(lines.at(-1) ?? "{}") as { kind: string; records: number };
   expect(end).toEqual({ kind: "end", records: lines.length - 2 });

@@ -22,6 +22,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "@playwright/test";
+import { launchChromium } from "../../../../tools/browser-safety/browser-safety.cjs";
 import { signIn } from "./cast.mjs";
 import { formatBytesTable, label, overCeilings, readBudgets, tally } from "./bytes-model.mjs";
 
@@ -130,8 +131,8 @@ for (const { persona } of signedIn) {
   if (!cookies.has(persona)) cookies.set(persona, await signIn(origin, persona));
 }
 
-const browser = await chromium.launch({
-  channel: "chromium",
+const browser = await launchChromium(chromium, {
+  allowedPorts: [Number(new URL(origin).port || (origin.startsWith("https:") ? 443 : 80))],
   executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
 });
 const rows = [];

@@ -1,4 +1,4 @@
-import { render, screen, within } from "@testing-library/react";
+import { act, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { ILO_ID, event } from "./fixtures";
@@ -86,7 +86,9 @@ describe("QuickLog", () => {
     await user.click(screen.getByRole("button", { name: "Diaper for Ilo" }));
     await user.click(screen.getByRole("button", { name: "Save" }));
     expect(await screen.findByRole("button", { name: "Undo" })).toBeInTheDocument();
-    vi.advanceTimersByTime(UNDO_WINDOW_MS + 10);
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(UNDO_WINDOW_MS + 10);
+    });
     await vi.waitFor(() => expect(screen.queryByRole("button", { name: "Undo" })).toBeNull());
     expect(screen.getByText("Diaper saved.")).toBeInTheDocument();
     unmount();

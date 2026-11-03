@@ -22,6 +22,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { computeMedianRun, filterToValidRuns } from "lighthouse/core/lib/median-run.js";
 import { signIn } from "./cast.mjs";
+import { assertChromiumVersion } from "../../../../tools/browser-safety/browser-safety.cjs";
 import {
   budgets,
   finalPath,
@@ -80,6 +81,7 @@ const chromePath =
   process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH ||
   require("@playwright/test").chromium.executablePath();
 const chromeVersion = execFileSync(chromePath, ["--version"], { encoding: "utf8" }).trim();
+assertChromiumVersion(chromeVersion);
 const lighthouseCli = require.resolve("lighthouse/cli/index.js");
 const machine = {
   cpu: os.cpus()[0]?.model ?? "unknown",

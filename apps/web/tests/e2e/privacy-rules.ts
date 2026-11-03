@@ -179,7 +179,15 @@ export function urlProblems(url: string, { checkPath }: { checkPath: boolean }):
   if (checkPath && HEALTH_WORDS.test(decodeURIComponent(parsed.pathname)))
     problems.push(`the path ${parsed.pathname} names a health fact`);
   for (const [name, value] of parsed.searchParams) {
-    if (!NEUTRAL_QUERY.has(name)) problems.push(`query parameter "${name}" on ${parsed.pathname}`);
+    // Full Chromium requests Next's fingerprinted icons; the empty cache key is build metadata.
+    const iconFingerprint =
+      value === "" &&
+      !HEALTH_WORDS.test(name) &&
+      ((parsed.pathname === "/icon.svg" && /^icon\.[a-z0-9_-]+\.svg$/.test(name)) ||
+        (parsed.pathname === "/favicon.ico" && /^favicon\.[a-z0-9_-]+\.ico$/.test(name)) ||
+        (parsed.pathname === "/apple-icon.png" && /^apple-icon\.[a-z0-9_-]+\.png$/.test(name)));
+    if (!NEUTRAL_QUERY.has(name) && !iconFingerprint)
+      problems.push(`query parameter "${name}" on ${parsed.pathname}`);
     if (HEALTH_WORDS.test(value)) problems.push(`query value of "${name}" names a health fact`);
   }
   return problems;

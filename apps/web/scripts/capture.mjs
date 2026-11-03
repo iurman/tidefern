@@ -1,3 +1,4 @@
+import { launchChromium } from "./../../../tools/browser-safety/browser-safety.cjs";
 import { mkdir } from "node:fs/promises";
 import { chromium } from "@playwright/test";
 
@@ -19,7 +20,7 @@ const viewports = [
 ];
 const themes = ["light", "dark"];
 
-const browser = await chromium.launch({
+const browser = await launchChromium(chromium, {
   executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH || undefined,
 });
 for (const route of routes) {

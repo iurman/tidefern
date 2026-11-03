@@ -1975,3 +1975,14 @@ Updated Next.js to 16.4.2 and React to 19.3.1. Patched compatible dependencies a
 Updated `.nvmrc` from 24.21.0 to the official 24.22.1 security release dated October 20. The existing application checks in this upgrade batch passed under Node 24.22.1. This pins local development to the patched runtime; Vercel continues managing the production Node 24 line. No application source or dependencies changed in this follow-up.
 
 CI initially failed before application setup because ECR Public rejected the pinned PostgreSQL image with `Data limit exceeded`, including a retry. Verified Docker Hub serves the identical SHA-256 manifest and switched only the image registry source. The database version, digest and verification gate stay fixed.
+
+
+## Local browser safety, November 2, 2026
+
+Added a guarded Chromium launch path and a temporary browser container without
+repository, home, credential, profile or container-socket mounts. The real local
+smoke passed with Chromium 156.0.8078.73 and active namespace and Seccomp-BPF
+sandboxes, local HTTP, interaction, screenshots, port restrictions and locked
+launch options. Seven guard checks passed. The source-linked runbook and final
+evidence are in `tools/browser-safety/`. Application deployment is outside this
+change. Full application QA is separate from these tooling checks.
